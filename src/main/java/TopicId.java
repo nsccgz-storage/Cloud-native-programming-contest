@@ -1,17 +1,20 @@
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+
 import com.intel.pmem.llpl.TransactionalHeap;
 import com.intel.pmem.llpl.TransactionalMemoryBlock;
 
 public class TopicId {
 
+    int topicNum = 100;
+    int topicNameSize = 512;
+    int queueIdNum = 10000;
+
     long metaDataHandle; // int + long
     TransactionalMemoryBlock topicIdArray;
     int currentNum;
     TransactionalHeap heap;
-
-    int topicNum = 100;
-    int topicNameSize = 512;
-    int queueIdNum = 10000;
 
     public TopicId(TransactionalHeap heap, long metaDataHandle){
         this.metaDataHandle = metaDataHandle;
@@ -91,7 +94,7 @@ public class TopicId {
         return "topic_num: " + currentNum;
     }
 
-    public ByteBuffer getRange(String topicName, String queueId, Long offset, int fetchNum){
+    public Map<Integer, ByteBuffer> getRange(String topicName, String queueId, Long offset, int fetchNum){
         int place = find(topicName);
         if(place == -1) return null;
         QueueId queue = new QueueId(heap, topicIdArray.getLong(place + topicNameSize));
@@ -105,8 +108,9 @@ public class TopicId {
             - name : byte[]
     */
     private class QueueId{
-        TransactionalMemoryBlock queueIdArray; 
         int queueIdSize = 128; // pre set
+
+        TransactionalMemoryBlock queueIdArray; 
         int currentNum = 0;
         Long metaDataHandle;
         TransactionalHeap heap;
@@ -144,10 +148,6 @@ public class TopicId {
                     help[i] = ' ';
                 }
                 tmp.append(help);
-                
-                //System.out.println("165@ " + tmp.toString().length());
-                //System.out.println("165@ " + tmp.toString());
-
                 queueIdArray.copyFromArray(queueId.getBytes(), 0, currentNum *(queueIdSize + Long.BYTES) + Long.BYTES, queueId.length()); //这里可以会有 bug
                 Data helpData = new Data(heap);
                 helpData.put(data);
@@ -168,30 +168,18 @@ public class TopicId {
             int offset = 0;
             for(int i=0; i<currentNum; ++i){
                 byte[] tmp = new byte[queueIdSize];
-                
                 queueIdArray.copyToArray(offset + Long.BYTES, tmp, 0, queueIdSize);
-
-
                 String name = new String(tmp).trim();
-
-                //System.out.println("172@ " + name);
-                //System.out.println("173@ " + queueId);
-
                 if(name.equals(queueId)) return offset;
                 offset += queueIdSize + Long.BYTES;
             }
             return -1;
         }
-        public ByteBuffer getRange(String queueId, Long offset, int fetchNum){
+        public Map<Integer, ByteBuffer> getRange(String queueId, Long offset, int fetchNum){
             int  place = find(queueId);
-            
-            //System.out.println("178@: " + place);
-
             if(place == -1) return null;
             Long dataHandle = queueIdArray.getLong(place);
             Data helpData = new Data(heap, dataHandle);
-
-            //System.out.println("152_topicId");
 
             return helpData.getRange(offset, fetchNum);
         }
@@ -231,7 +219,7 @@ public class TopicId {
             TransactionalMemoryBlock memoryBlock = heap.allocateMemoryBlock(data.array().length + Long.BYTES);
             memoryBlock.setLong(0, -1L);
             memoryBlock.copyFromArray(data.array(), 0, Long.BYTES, data.array().length);
-            if(tail == -1){
+            if(tail == -1L){
                 tail = memoryBlock.handle(); 
                 head = tail;
                 TransactionalMemoryBlock metaData = heap.memoryBlockFromHandle(metaDataHandle);
@@ -252,22 +240,26 @@ public class TopicId {
             return this.metaDataHandle;
         }
         
-        public ByteBuffer getRange(Long offset, int fetchNum){
-            fetchNum = 1; // just for test
+        public Map<Integer, ByteBuffer>  getRange(Long offset, int fetchNum){
+            //fetchNum = 1; // just for test
             Long startHandle = head;
-            for(int i=0;i<offset && i<currentNum; ++i){
+            Map<Integer, ByteBuffer> res = new HashMap<>();
+            for(int i=0;i<offset && startHandle != -1L; ++i){
                 TransactionalMemoryBlock block =  heap.memoryBlockFromHandle(startHandle);
                 startHandle = block.getLong(0);
             }
-            byte[] tmp = new byte[10000];
-            for(int i=0; i<fetchNum && i+offset < currentNum; ++i){
+            
+            for(int i=0; i<fetchNum && startHandle != -1L; ++i){
                 TransactionalMemoryBlock block =  heap.memoryBlockFromHandle(startHandle);
                  // 10000 is just for test;
                 Long length = block.size() - Long.BYTES;
+                byte[] tmp = new byte[length.intValue()];
                 block.copyToArray(Long.BYTES, tmp, 0,  length.intValue());
+                res.put(i, ByteBuffer.wrap(tmp));
+
+                startHandle = block.getLong(0);
             }
-            //System.out.println("221_topicId");
-            return ByteBuffer.wrap(tmp);
+            return res;
         }
     }
 }

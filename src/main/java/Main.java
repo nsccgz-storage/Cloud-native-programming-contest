@@ -1,4 +1,5 @@
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 import com.intel.pmem.llpl.TransactionalHeap;
 
@@ -22,11 +23,12 @@ public class Main {
             queueMessage.setTopic("wyk", "1002", data);
             
             System.out.println(queueMessage);
-
-            byte[] tmpRes = queueMessage.getRange("wyk", "1002", 0L, 1).array();
-            String res = new String(tmpRes);
-
-            System.out.println(res);
+            Map<Integer, ByteBuffer> tmpRes = queueMessage.getRange("wyk", "1002", 0L, 9);
+            
+            for(Map.Entry<Integer, ByteBuffer> entry: tmpRes.entrySet()){
+                String t = new String(entry.getValue().array());
+                System.out.println("key: "+ entry.getKey() + " value: " + t);
+            }
         }
         
 

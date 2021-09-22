@@ -1,5 +1,3 @@
-import com.intel.pmem.llpl.TransactionalHeap;
-
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
