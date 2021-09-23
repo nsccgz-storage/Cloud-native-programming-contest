@@ -41,12 +41,12 @@ public class TopicId {
         return this.metaDataHandle;
     }
 
-    public void setTopic(String topicName, String queueId, ByteBuffer data){ // 需要考虑初始化的情况
+    public long setTopic(String topicName, int queueId, ByteBuffer data){ // 需要考虑初始化的情况
         int offset = find(topicName);
-
+        long resOffset;
         if(offset == -1){ // add new one topic
             StringBuilder tmp = new StringBuilder(topicName);
-            char[] help = new char[topicNameSize-queueId.length() + 1];
+            char[] help = new char[topicNameSize-topicName.length() + 1];
             for(int i=0;i<help.length; ++i){
                 help[i] = ' ';
             }
@@ -54,7 +54,7 @@ public class TopicId {
             
             topicIdArray.copyFromArray(tmp.toString().getBytes(), 0, currentNum*(topicNameSize + Long.BYTES), topicNameSize);
             QueueId queue = new QueueId(heap, queueIdNum);
-            queue.put(queueId, data);
+            resOffset = queue.put(queueId, data);
             topicIdArray.setLong(currentNum*(topicNameSize + Long.BYTES) + topicNameSize, queue.getHandle());
             
             currentNum++;
@@ -67,9 +67,10 @@ public class TopicId {
             
         }else{ // add to a topic queue which exsits;
             QueueId queue = new QueueId(heap, topicIdArray.getLong(offset + topicNameSize));
-            queue.put(queueId, data);
+            resOffset = queue.put(queueId, data);
             topicIdArray.setLong(offset+topicNameSize, queue.getHandle());
         }
+        return resOffset;
     }
 
     // return offset 
@@ -94,7 +95,7 @@ public class TopicId {
         return "topic_num: " + currentNum;
     }
 
-    public Map<Integer, ByteBuffer> getRange(String topicName, String queueId, Long offset, int fetchNum){
+    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
         int place = find(topicName);
         if(place == -1) return null;
         QueueId queue = new QueueId(heap, topicIdArray.getLong(place + topicNameSize));
@@ -105,10 +106,10 @@ public class TopicId {
     /*
         storage layout:
             - handle : long
-            - name : byte[]
+            - name : int
     */
     private class QueueId{
-        int queueIdSize = 128; // pre set
+        //int queueIdSize = 128; // pre set
 
         TransactionalMemoryBlock queueIdArray; 
         int currentNum = 0;
@@ -119,7 +120,7 @@ public class TopicId {
             this.heap = heap;
             TransactionalMemoryBlock metaDataBlock =  heap.allocateMemoryBlock(Integer.BYTES + Long.BYTES);
             this.metaDataHandle = metaDataBlock.handle();
-            queueIdArray = heap.allocateMemoryBlock(nums * (queueIdSize + Long.BYTES));
+            queueIdArray = heap.allocateMemoryBlock(nums * (Integer.BYTES + Long.BYTES));
             currentNum = 0;
 
             metaDataBlock.setInt(0,currentNum); // currentNum;
@@ -139,19 +140,14 @@ public class TopicId {
             return metaDataHandle;
         }
 
-        void put(String queueId, ByteBuffer data){
+        long put(int queueId, ByteBuffer data){
             int offset = find(queueId);
+            long resOffset;
             if(offset == -1){ // add new one
-                StringBuilder tmp = new StringBuilder(queueId);
-                char[] help = new char[queueIdSize-queueId.length()+2];
-                for(int i=0;i<help.length; ++i){
-                    help[i] = ' ';
-                }
-                tmp.append(help);
-                queueIdArray.copyFromArray(queueId.getBytes(), 0, currentNum *(queueIdSize + Long.BYTES) + Long.BYTES, queueId.length()); //这里可以会有 bug
+                queueIdArray.setInt(currentNum *(Integer.BYTES + Long.BYTES) + Long.BYTES, queueId);
                 Data helpData = new Data(heap);
-                helpData.put(data);
-                queueIdArray.setLong(currentNum *(queueIdSize + Long.BYTES), helpData.getHandle());
+                resOffset = helpData.put(data);
+                queueIdArray.setLong(currentNum *(Integer.BYTES + Long.BYTES), helpData.getHandle());
                 currentNum++;
 
                 TransactionalMemoryBlock metaDataBlock = heap.memoryBlockFromHandle(metaDataHandle);
@@ -160,22 +156,21 @@ public class TopicId {
             }else{ // 
                 Long dataHandle = queueIdArray.getLong(offset);
                 Data helpData = new Data(heap, dataHandle);
-                helpData.put(data);
+                resOffset = helpData.put(data);
             }
+            return resOffset;
         }
 
-        int find(String queueId){
+        int find(int queueId){
             int offset = 0;
             for(int i=0; i<currentNum; ++i){
-                byte[] tmp = new byte[queueIdSize];
-                queueIdArray.copyToArray(offset + Long.BYTES, tmp, 0, queueIdSize);
-                String name = new String(tmp).trim();
-                if(name.equals(queueId)) return offset;
-                offset += queueIdSize + Long.BYTES;
+                int id = queueIdArray.getInt(offset + Long.BYTES);
+                if(id == queueId) return offset;
+                offset += Integer.BYTES + Long.BYTES;
             }
             return -1;
         }
-        public Map<Integer, ByteBuffer> getRange(String queueId, Long offset, int fetchNum){
+        public Map<Integer, ByteBuffer> getRange(int queueId, Long offset, int fetchNum){
             int  place = find(queueId);
             if(place == -1) return null;
             Long dataHandle = queueIdArray.getLong(place);
@@ -194,6 +189,7 @@ public class TopicId {
         // head 和 tail 要考虑持久化
         Long head;  
         Long tail;
+        Long totalNum;
         TransactionalHeap heap;
         Long metaDataHandle;
 
@@ -202,19 +198,22 @@ public class TopicId {
             TransactionalMemoryBlock metaData = heap.memoryBlockFromHandle(metaDataHandle);
             this.head = metaData.getLong(0);
             this.tail = metaData.getLong(Long.BYTES);
+            this.totalNum = metaData.getLong(Long.BYTES + Long.BYTES);
             this.metaDataHandle = metaDataHandle;
         }
         public Data(TransactionalHeap heap){
             this.heap = heap;
-            TransactionalMemoryBlock metaData = heap.allocateMemoryBlock(Long.BYTES + Long.BYTES);
+            TransactionalMemoryBlock metaData = heap.allocateMemoryBlock(Long.BYTES + Long.BYTES + Long.BYTES);
             metaData.setLong(0, -1L);
             metaData.setLong(Long.BYTES, -1);
+            metaData.setLong(Long.BYTES + Long.BYTES, 0L);
             this.head = -1L;
             this.tail = -1L;
+            this.totalNum = 0L;
             this.metaDataHandle = metaData.handle();
 
         }
-        public void put(ByteBuffer data){
+        public long put(ByteBuffer data){
             // 在链表表尾插入
             TransactionalMemoryBlock memoryBlock = heap.allocateMemoryBlock(data.array().length + Long.BYTES);
             memoryBlock.setLong(0, -1L);
@@ -225,6 +224,8 @@ public class TopicId {
                 TransactionalMemoryBlock metaData = heap.memoryBlockFromHandle(metaDataHandle);
                 metaData.setLong(0, head);
                 metaData.setLong(Long.BYTES, tail);
+                this.totalNum++;
+                metaData.setLong(Long.BYTES + Long.BYTES, this.totalNum);
                 //System.out.println("192_topicId");
             }else{
                 TransactionalMemoryBlock tmp = heap.memoryBlockFromHandle(tail);
@@ -232,8 +233,11 @@ public class TopicId {
                 tail = memoryBlock.handle();
                 TransactionalMemoryBlock metaData = heap.memoryBlockFromHandle(metaDataHandle);
                 metaData.setLong(Long.BYTES, tail);
+                this.totalNum++;
+                metaData.setLong(Long.BYTES + Long.BYTES, this.totalNum);
                 //System.out.println("199_topicId");
             }     
+            return this.totalNum;
         }
 
         public Long getHandle(){

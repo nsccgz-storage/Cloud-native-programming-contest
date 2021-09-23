@@ -1,7 +1,6 @@
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import com.intel.pmem.llpl.TransactionalHeap;
 
 
 /**
@@ -10,17 +9,32 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class DefaultMessageQueueImpl extends MessageQueue {
     // Initialization
-    public DefaultMessageQueueImpl(){
+
+    private TopicId queueMessage;
+
+    public DefaultMessageQueueImpl(String path){
+
+        // String pmemPath = path;
+        String pmemPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/messageQueue";
+        
+        boolean initialized  = TransactionalHeap.exists(pmemPath);
+        TransactionalHeap heap = initialized ? TransactionalHeap.openHeap(pmemPath) : TransactionalHeap.createHeap(pmemPath, 100_000_000);
+        if(!initialized){
+            queueMessage = new TopicId(heap);
+            heap.setRoot(queueMessage.getHandle());
+        }else{
+            Long metaHandle = heap.getRoot();
+            queueMessage = new TopicId(heap, metaHandle);
+        }
+
     }
-
-
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
-        return 0L;
+        return queueMessage.setTopic(topic, queueId, data);
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        return null;
+        return queueMessage.getRange(topic, queueId, offset, fetchNum);
     }
 }
