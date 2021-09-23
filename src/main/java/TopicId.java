@@ -41,12 +41,12 @@ public class TopicId {
         return this.metaDataHandle;
     }
 
-    public long setTopic(String topicName, String queueId, ByteBuffer data){ // 需要考虑初始化的情况
+    public long setTopic(String topicName, int queueId, ByteBuffer data){ // 需要考虑初始化的情况
         int offset = find(topicName);
         long resOffset;
         if(offset == -1){ // add new one topic
             StringBuilder tmp = new StringBuilder(topicName);
-            char[] help = new char[topicNameSize-queueId.length() + 1];
+            char[] help = new char[topicNameSize-topicName.length() + 1];
             for(int i=0;i<help.length; ++i){
                 help[i] = ' ';
             }
@@ -95,7 +95,7 @@ public class TopicId {
         return "topic_num: " + currentNum;
     }
 
-    public Map<Integer, ByteBuffer> getRange(String topicName, String queueId, Long offset, int fetchNum){
+    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
         int place = find(topicName);
         if(place == -1) return null;
         QueueId queue = new QueueId(heap, topicIdArray.getLong(place + topicNameSize));
@@ -106,10 +106,10 @@ public class TopicId {
     /*
         storage layout:
             - handle : long
-            - name : byte[]
+            - name : int
     */
     private class QueueId{
-        int queueIdSize = 128; // pre set
+        //int queueIdSize = 128; // pre set
 
         TransactionalMemoryBlock queueIdArray; 
         int currentNum = 0;
@@ -120,7 +120,7 @@ public class TopicId {
             this.heap = heap;
             TransactionalMemoryBlock metaDataBlock =  heap.allocateMemoryBlock(Integer.BYTES + Long.BYTES);
             this.metaDataHandle = metaDataBlock.handle();
-            queueIdArray = heap.allocateMemoryBlock(nums * (queueIdSize + Long.BYTES));
+            queueIdArray = heap.allocateMemoryBlock(nums * (Integer.BYTES + Long.BYTES));
             currentNum = 0;
 
             metaDataBlock.setInt(0,currentNum); // currentNum;
@@ -140,20 +140,14 @@ public class TopicId {
             return metaDataHandle;
         }
 
-        long put(String queueId, ByteBuffer data){
+        long put(int queueId, ByteBuffer data){
             int offset = find(queueId);
             long resOffset;
             if(offset == -1){ // add new one
-                StringBuilder tmp = new StringBuilder(queueId);
-                char[] help = new char[queueIdSize-queueId.length()+2];
-                for(int i=0;i<help.length; ++i){
-                    help[i] = ' ';
-                }
-                tmp.append(help);
-                queueIdArray.copyFromArray(queueId.getBytes(), 0, currentNum *(queueIdSize + Long.BYTES) + Long.BYTES, queueId.length()); //这里可以会有 bug
+                queueIdArray.setInt(currentNum *(Integer.BYTES + Long.BYTES) + Long.BYTES, queueId);
                 Data helpData = new Data(heap);
                 resOffset = helpData.put(data);
-                queueIdArray.setLong(currentNum *(queueIdSize + Long.BYTES), helpData.getHandle());
+                queueIdArray.setLong(currentNum *(Integer.BYTES + Long.BYTES), helpData.getHandle());
                 currentNum++;
 
                 TransactionalMemoryBlock metaDataBlock = heap.memoryBlockFromHandle(metaDataHandle);
@@ -167,18 +161,16 @@ public class TopicId {
             return resOffset;
         }
 
-        int find(String queueId){
+        int find(int queueId){
             int offset = 0;
             for(int i=0; i<currentNum; ++i){
-                byte[] tmp = new byte[queueIdSize];
-                queueIdArray.copyToArray(offset + Long.BYTES, tmp, 0, queueIdSize);
-                String name = new String(tmp).trim();
-                if(name.equals(queueId)) return offset;
-                offset += queueIdSize + Long.BYTES;
+                int id = queueIdArray.getInt(offset + Long.BYTES);
+                if(id == queueId) return offset;
+                offset += Integer.BYTES + Long.BYTES;
             }
             return -1;
         }
-        public Map<Integer, ByteBuffer> getRange(String queueId, Long offset, int fetchNum){
+        public Map<Integer, ByteBuffer> getRange(int queueId, Long offset, int fetchNum){
             int  place = find(queueId);
             if(place == -1) return null;
             Long dataHandle = queueIdArray.getLong(place);

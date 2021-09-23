@@ -1,9 +1,5 @@
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-
-import com.intel.pmem.llpl.Transaction;
 import com.intel.pmem.llpl.TransactionalHeap;
 
 
@@ -32,15 +28,13 @@ public class DefaultMessageQueueImpl extends MessageQueue {
         }
 
     }
-
-
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
-        return 0L;
+        return queueMessage.setTopic(topic, queueId, data);
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        return null;
+        return queueMessage.getRange(topic, queueId, offset, fetchNum);
     }
 }
