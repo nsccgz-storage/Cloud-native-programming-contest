@@ -3,6 +3,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.intel.pmem.llpl.Transaction;
+import com.intel.pmem.llpl.TransactionalHeap;
+
 
 /**
  * 这是一个简单的基于内存的实现，以方便选手理解题意；
@@ -10,7 +13,24 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class DefaultMessageQueueImpl extends MessageQueue {
     // Initialization
-    public DefaultMessageQueueImpl(){
+
+    private TopicId queueMessage;
+
+    public DefaultMessageQueueImpl(String path){
+
+        // String pmemPath = path;
+        String pmemPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/messageQueue";
+        
+        boolean initialized  = TransactionalHeap.exists(pmemPath);
+        TransactionalHeap heap = initialized ? TransactionalHeap.openHeap(pmemPath) : TransactionalHeap.createHeap(pmemPath, 100_000_000);
+        if(!initialized){
+            queueMessage = new TopicId(heap);
+            heap.setRoot(queueMessage.getHandle());
+        }else{
+            Long metaHandle = heap.getRoot();
+            queueMessage = new TopicId(heap, metaHandle);
+        }
+
     }
 
 

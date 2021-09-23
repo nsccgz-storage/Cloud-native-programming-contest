@@ -18,12 +18,12 @@ public class Main {
             Long metaHandle = heap.getRoot();
             TopicId queueMessage = new TopicId(heap, metaHandle);
             
-            System.out.println("has one");
+            //System.out.println("has one");
             ByteBuffer data = ByteBuffer.wrap("10008611".getBytes());
-            queueMessage.setTopic("wyk", "1002", data);
+            System.out.println(queueMessage.setTopic("wykda", "1002dad", data));
             
             System.out.println(queueMessage);
-            Map<Integer, ByteBuffer> tmpRes = queueMessage.getRange("wyk", "1002", 0L, 9);
+            Map<Integer, ByteBuffer> tmpRes = queueMessage.getRange("wykda", "1002dad", 8L, 9);
             
             for(Map.Entry<Integer, ByteBuffer> entry: tmpRes.entrySet()){
                 String t = new String(entry.getValue().array());
