@@ -20,21 +20,39 @@ public class SSDBench {
 			System.out.println("dbPath : " + args[0]);
 			String dbPath = args[0] ;
 			FileChannel fileChannel = new RandomAccessFile(new File(dbPath), "rw").getChannel();
-			long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
+			// long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
+			long totalBenchSize = 256L*1024L*1024L; //256MiB 
 			// long totalBenchSize = 64L*1024L*1024L; // 64MiB
 
 			System.out.println("type,thread,ioSize,bandwidth,iops");
 			int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
-			// for (int i = 0; i < ioSizes.length; i++){
-			// 	benchFileChannelWrite(fileChannel, totalBenchSize, ioSizes[i]); // ioSize = 64KiB
-			// }
+			for (int i = 0; i < ioSizes.length; i++){
+				benchFileChannelWrite(fileChannel, totalBenchSize, ioSizes[i]); // ioSize = 64KiB
+			}
 
-			benchFileChannelWrite(fileChannel, totalBenchSize, 64*1024); // ioSize = 64KiB
-			benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, 1, 64*1024);
-			benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, 16, 64*1024);
+			for (int t = 1; t <= 50; t+=1){
+				for (int i = 0; i < ioSizes.length; i++){
+					benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, t, i);
+				}
+			}
 
-			benchFileChannelWriteThreadPoolAtomicPosition(fileChannel, totalBenchSize, 1, 64*1024);
-			benchFileChannelWriteThreadPoolAtomicPosition(fileChannel, totalBenchSize, 16, 64*1024);
+
+			for (int t = 1; t <= 50; t+=1){
+				for (int i = 0; i < ioSizes.length; i++){
+					benchFileChannelWriteThreadPoolRange(fileChannel, totalBenchSize, t, i);
+				}
+			}
+
+
+
+			// benchFileChannelWrite(fileChannel, totalBenchSize, 64*1024); // ioSize = 64KiB
+			// benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, 16, 64*1024);
+
+			// benchFileChannelWriteThreadPoolAtomicPosition(fileChannel, totalBenchSize, 1, 64*1024);
+			// benchFileChannelWriteThreadPoolAtomicPosition(fileChannel, totalBenchSize, 16, 64*1024);
+
+			// benchFileChannelWriteThreadPoolRange(fileChannel, totalBenchSize, 1, 64*1024);
+			// benchFileChannelWriteThreadPoolRange(fileChannel, totalBenchSize, 16, 64*1024);
 
 
 		} catch(IOException ie) {
@@ -149,6 +167,59 @@ public class SSDBench {
 	public static synchronized void mySyncWriteAtomicPosition(FileChannel fileChannel, byte[] data, int ioSize) throws IOException {
 		fileChannel.write(ByteBuffer.wrap(data),writePosition.getAndAdd(ioSize));
 		fileChannel.force(true);
+	}
+
+
+	public static void benchFileChannelWriteThreadPoolRange(FileChannel fileChannel, long totalBenchSize, int thread ,int ioSize) throws IOException {
+		assert(totalBenchSize % ioSize == 0);
+		long totalBenchCount = totalBenchSize/ioSize;
+		long operationPerThread = totalBenchCount/thread;
+		totalBenchSize = operationPerThread*thread*ioSize;
+		totalBenchCount = operationPerThread*thread;
+		long curPosition = 0L;
+		long maxPosition = totalBenchSize;
+		ExecutorService executor = Executors.newFixedThreadPool(thread);
+		long startTime = System.nanoTime();    
+		while (curPosition < maxPosition){
+			final long finalCurPosition = curPosition;
+			final long curMaxPosition = curPosition + operationPerThread*ioSize;
+
+			executor.execute(()->{
+				try {
+					byte[] data = new byte[ioSize];
+					myWriteRange(fileChannel, data, finalCurPosition, curMaxPosition, ioSize);
+				} catch(IOException ie) {
+					ie.printStackTrace();
+				}  
+
+			});
+			curPosition = curMaxPosition;
+		}
+		executor.shutdown();
+
+		try {
+		  // Wait a while for existing tasks to terminate
+		  while(!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+			System.out.println("Pool did not terminate, waiting ...");
+		  }
+		} catch (InterruptedException ie) {
+			executor.shutdownNow();
+			ie.printStackTrace();
+		}
+		long elapsedTime = System.nanoTime() - startTime;
+		double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
+		double totalBenchSizeMiB = (double)totalBenchSize/(1024*1024);
+		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
+		double iops = totalBenchCount/elapsedTimeS;
+		System.out.println("sequentialWriteThreadPoolRange,"+thread+","+ioSize+","+bandwidth+","+iops);
+	}
+	public static void myWriteRange(FileChannel fileChannel, byte[] data, long minPosition, long maxPosition, int ioSize) throws IOException {
+		long curPosition = minPosition;
+		while (curPosition < maxPosition){
+			fileChannel.write(ByteBuffer.wrap(data),curPosition);
+			fileChannel.force(true);
+			curPosition += ioSize;
+		}
 	}
 
 
