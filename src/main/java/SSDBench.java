@@ -28,8 +28,8 @@ public class SSDBench {
 			// benchFileChannel(fileChannel, 1, 4096);
 			// long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
 			long totalBenchSize = 64L*1024L*1024L; // 64MiB
-			benchFileChannelWrite(fileChannel, totalBenchSize, 1, 64*1024);
-			benchFileChannelRead(fileChannel, totalBenchSize, 1, 64*1024);
+			benchFileChannelWrite(fileChannel, totalBenchSize, 1, 64*1024); // ioSize = 64KiB
+			benchFileChannelRead(fileChannel, totalBenchSize, 1, 64*1024); // ioSize = 64KiB
 		} catch(IOException ie) {
 			ie.printStackTrace();
 		}  
