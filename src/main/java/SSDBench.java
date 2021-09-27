@@ -32,14 +32,14 @@ public class SSDBench {
 
 			for (int t = 1; t <= 50; t+=1){
 				for (int i = 0; i < ioSizes.length; i++){
-					benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, t, i);
+					benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, t, ioSizes[i]);
 				}
 			}
 
 
 			for (int t = 1; t <= 50; t+=1){
 				for (int i = 0; i < ioSizes.length; i++){
-					benchFileChannelWriteThreadPoolRange(fileChannel, totalBenchSize, t, i);
+					benchFileChannelWriteThreadPoolRange(fileChannel, totalBenchSize, t, ioSizes[i]);
 				}
 			}
 
