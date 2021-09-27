@@ -17,7 +17,7 @@ public class SSDBench {
 			long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
 			// long totalBenchSize = 64L*1024L*1024L; // 64MiB
 
-			System.out.println("thread,ioSize,bandwidth,iops");
+			System.out.println("type,thread,ioSize,bandwidth,iops");
 			int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
 			for (int i = 0; i < ioSizes.length; i++){
 				benchFileChannelWrite(fileChannel, totalBenchSize, 1, ioSizes[i]); // ioSize = 64KiB
@@ -31,7 +31,6 @@ public class SSDBench {
 
 	public static void benchFileChannelWrite(FileChannel fileChannel, long totalBenchSize ,int thread, int ioSize) throws IOException {
 		// thread = 1
-		System.out.println("Test Sequential Write Bandwidth and IOPS");
 		assert(totalBenchSize % ioSize == 0);
 		long totalBenchCount = totalBenchSize/ioSize;
 		byte[] data = new byte[ioSize];
@@ -52,7 +51,7 @@ public class SSDBench {
 		// System.out.println(totalBenchSize);
 		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
 		double iops = totalBenchCount/elapsedTimeS;
-		System.out.println(thread+","+ioSize+","+bandwidth+","+iops);
+		System.out.println("sequentialWrite,"+thread+","+ioSize+","+bandwidth+","+iops);
 	}
 
 	public static void benchFileChannelRead(FileChannel fileChannel, long totalBenchSize ,int thread, int ioSize) throws IOException {
@@ -74,7 +73,7 @@ public class SSDBench {
 		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
 		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS) ;
 		double iops = totalBenchCount/elapsedTimeS;
-		System.out.println(thread+","+ioSize+","+bandwidth+","+iops);
+		System.out.println("sequentialRead,"+thread+","+ioSize+","+bandwidth+","+iops);
 	}
 
 
