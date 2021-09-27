@@ -42,13 +42,10 @@ public class SSDBench {
 			// fileChannel.force(false);
 			fileChannel.force(true);
 			curPosition += ioSize;
-			// System.out.println(curPosition);
 		}
 		long elapsedTime = System.nanoTime() - startTime;
 		double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
 		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
-		// System.out.println(elapsedTime);
-		// System.out.println(totalBenchSize);
 		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
 		double iops = totalBenchCount/elapsedTimeS;
 		System.out.println("sequentialWrite,"+thread+","+ioSize+","+bandwidth+","+iops);
@@ -56,7 +53,7 @@ public class SSDBench {
 
 	public static void benchFileChannelRead(FileChannel fileChannel, long totalBenchSize ,int thread, int ioSize) throws IOException {
 		// thread = 1
-		System.out.println("Test Sequential Read Bandwidth and IOPS");
+		// System.out.println("Test Sequential Read Bandwidth and IOPS");
 		assert(totalBenchSize % ioSize == 0);
 		long totalBenchCount = totalBenchSize/ioSize;
 		ByteBuffer buffer = ByteBuffer.allocate(4096);
