@@ -20,8 +20,9 @@ public class SSDBench {
 			System.out.println("dbPath : " + args[0]);
 			String dbPath = args[0] ;
 			FileChannel fileChannel = new RandomAccessFile(new File(dbPath), "rw").getChannel();
+			long totalBenchSize = 4L*1024L*1024L*1024L; // 4GiB
 			// long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
-			long totalBenchSize = 256L*1024L*1024L; //256MiB 
+			// long totalBenchSize = 256L*1024L*1024L; //256MiB 
 			// long totalBenchSize = 64L*1024L*1024L; // 64MiB
 
 			System.out.println("type,thread,ioSize,bandwidth,iops");
