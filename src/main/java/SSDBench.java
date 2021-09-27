@@ -14,10 +14,16 @@ public class SSDBench {
 			System.out.println("dbPath : " + args[0]);
 			String dbPath = args[0] ;
 			FileChannel fileChannel = new RandomAccessFile(new File(dbPath), "rw").getChannel();
-			// long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
-			long totalBenchSize = 64L*1024L*1024L; // 64MiB
-			benchFileChannelWrite(fileChannel, totalBenchSize, 1, 64*1024); // ioSize = 64KiB
-			benchFileChannelRead(fileChannel, totalBenchSize, 1, 64*1024); // ioSize = 64KiB
+			long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
+			// long totalBenchSize = 64L*1024L*1024L; // 64MiB
+
+			System.out.println("thread,ioSize,bandwidth,iops");
+			int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
+			for (int i = 0; i < ioSizes.length; i++){
+				benchFileChannelWrite(fileChannel, totalBenchSize, 1, ioSizes[i]); // ioSize = 64KiB
+			}
+			// benchFileChannelWrite(fileChannel, totalBenchSize, 1, 64*1024); // ioSize = 64KiB
+			// benchFileChannelRead(fileChannel, totalBenchSize, 1, 64*1024); // ioSize = 64KiB
 		} catch(IOException ie) {
 			ie.printStackTrace();
 		}  
@@ -44,8 +50,9 @@ public class SSDBench {
 		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
 		// System.out.println(elapsedTime);
 		// System.out.println(totalBenchSize);
-		System.out.println("Bandwidth : " + (totalBenchSizeMiB)/(elapsedTimeS) + " MiB/s");
-		System.out.println("IOPS : " + totalBenchCount/elapsedTimeS + " op/s");
+		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
+		double iops = totalBenchCount/elapsedTimeS;
+		System.out.println(thread+","+ioSize+","+bandwidth+","+iops);
 	}
 
 	public static void benchFileChannelRead(FileChannel fileChannel, long totalBenchSize ,int thread, int ioSize) throws IOException {
@@ -65,10 +72,9 @@ public class SSDBench {
 		long elapsedTime = System.nanoTime() - startTime;
 		double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
 		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
-		// System.out.println(elapsedTime);
-		// System.out.println(totalBenchSize);
-		System.out.println("Bandwidth : " + (totalBenchSizeMiB)/(elapsedTimeS) + " MiB/s");
-		System.out.println("IOPS : " + totalBenchCount/elapsedTimeS + " op/s");
+		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS) ;
+		double iops = totalBenchCount/elapsedTimeS;
+		System.out.println(thread+","+ioSize+","+bandwidth+","+iops);
 	}
 
 
