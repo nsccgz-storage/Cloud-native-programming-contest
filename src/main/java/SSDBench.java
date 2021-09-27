@@ -6,8 +6,11 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class SSDBench {
+	public static AtomicLong writePosition = new AtomicLong(0);
+	// public static long writePosition = 0;
 	public static void main(String []args) {
 		try {
 			if (args.length < 1){
@@ -26,10 +29,14 @@ public class SSDBench {
 			// 	benchFileChannelWrite(fileChannel, totalBenchSize, ioSizes[i]); // ioSize = 64KiB
 			// }
 
-			benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, 4, 64*1024);
+			benchFileChannelWrite(fileChannel, totalBenchSize, 64*1024); // ioSize = 64KiB
+			benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, 1, 64*1024);
+			benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, 16, 64*1024);
 
-			// benchFileChannelWrite(fileChannel, totalBenchSize, 1, 64*1024); // ioSize = 64KiB
-			// benchFileChannelRead(fileChannel, totalBenchSize, 1, 64*1024); // ioSize = 64KiB
+			benchFileChannelWriteThreadPoolAtomicPosition(fileChannel, totalBenchSize, 1, 64*1024);
+			benchFileChannelWriteThreadPoolAtomicPosition(fileChannel, totalBenchSize, 16, 64*1024);
+
+
 		} catch(IOException ie) {
 			ie.printStackTrace();
 		}  
@@ -82,7 +89,7 @@ public class SSDBench {
 
 		try {
 		  // Wait a while for existing tasks to terminate
-		  while(!executor.awaitTermination(2, TimeUnit.SECONDS)) {
+		  while(!executor.awaitTermination(60, TimeUnit.SECONDS)) {
 			System.out.println("Pool did not terminate, waiting ...");
 		  }
 		} catch (InterruptedException ie) {
@@ -94,12 +101,56 @@ public class SSDBench {
 		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
 		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
 		double iops = totalBenchCount/elapsedTimeS;
-		System.out.println("sequentialWrite,"+thread+","+ioSize+","+bandwidth+","+iops);
+		System.out.println("sequentialWriteThreadPool,"+thread+","+ioSize+","+bandwidth+","+iops);
 	}
 	public static synchronized void mySyncWrite(FileChannel fileChannel, byte[] data, long curPosition) throws IOException {
 		fileChannel.write(ByteBuffer.wrap(data),curPosition);
-		// fileChannel.force(true);
-	    }
+		fileChannel.force(true);
+	}
+
+
+	public static void benchFileChannelWriteThreadPoolAtomicPosition(FileChannel fileChannel, long totalBenchSize, int thread ,int ioSize) throws IOException {
+		assert(totalBenchSize % ioSize == 0);
+		long totalBenchCount = totalBenchSize/ioSize;
+		byte[] data = new byte[ioSize];
+		long curPosition = 0L;
+		long maxPosition = totalBenchSize;
+		ExecutorService executor = Executors.newFixedThreadPool(thread);
+		long startTime = System.nanoTime();    
+		for (int i = 0; i < totalBenchCount; i++){
+			executor.execute(()->{
+				try {
+					mySyncWriteAtomicPosition(fileChannel, data, ioSize);
+				} catch(IOException ie) {
+					ie.printStackTrace();
+				}  
+
+			});
+		}
+		executor.shutdown();
+
+		try {
+		  // Wait a while for existing tasks to terminate
+		  while(!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+			System.out.println("Pool did not terminate, waiting ...");
+		  }
+		} catch (InterruptedException ie) {
+			executor.shutdownNow();
+			ie.printStackTrace();
+		}
+		long elapsedTime = System.nanoTime() - startTime;
+		double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
+		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
+		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
+		double iops = totalBenchCount/elapsedTimeS;
+		System.out.println("sequentialWriteThreadPoolAtomicPosition,"+thread+","+ioSize+","+bandwidth+","+iops);
+	}
+
+	public static synchronized void mySyncWriteAtomicPosition(FileChannel fileChannel, byte[] data, int ioSize) throws IOException {
+		fileChannel.write(ByteBuffer.wrap(data),writePosition.getAndAdd(ioSize));
+		fileChannel.force(true);
+	}
+
 
 	public static void benchFileChannelRead(FileChannel fileChannel, long totalBenchSize ,int ioSize) throws IOException {
 		int thread = 1;
