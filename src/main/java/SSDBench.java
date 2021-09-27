@@ -7,7 +7,12 @@ import java.io.IOException;
 public class SSDBench {
 	public static void main(String []args) {
 		try {
-			String dbPath = "/Users/wyf/0code/nsccgz-storage/Cloud-native-programming-contest/testDB/db.data";
+			if (args.length < 1){
+				System.out.println("java SSDBench ${dbPath}");
+				return ;
+			}
+			System.out.println("dbPath : " + args[0]);
+			String dbPath = args[0] ;
 			FileChannel fileChannel = new RandomAccessFile(new File(dbPath), "rw").getChannel();
 			// long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
 			long totalBenchSize = 64L*1024L*1024L; // 64MiB
