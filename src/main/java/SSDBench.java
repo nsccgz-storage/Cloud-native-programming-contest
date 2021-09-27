@@ -26,35 +26,64 @@ public class SSDBench {
 			// ret = fileChannel.read(buffer);
 			// System.out.println(ret);
 			// benchFileChannel(fileChannel, 1, 4096);
-			benchFileChannel(fileChannel, 1, 64*1024);
+			// long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
+			long totalBenchSize = 64L*1024L*1024L; // 64MiB
+			benchFileChannelWrite(fileChannel, totalBenchSize, 1, 64*1024);
+			benchFileChannelRead(fileChannel, totalBenchSize, 1, 64*1024);
 		} catch(IOException ie) {
 			ie.printStackTrace();
 		}  
 	}
 
-	public static void benchFileChannel(FileChannel fileChannel, int thread, int ioSize) throws IOException {
+	public static void benchFileChannelWrite(FileChannel fileChannel, long totalBenchSize ,int thread, int ioSize) throws IOException {
 		// thread = 1
-		// long totalBenchSize = 4L*1024L*1024L*1024L; // 4GiB
-		long totalBenchSize = 1L*1024L*1024L*1024L; // 1iB
+		System.out.println("Test Sequential Write Bandwidth and IOPS");
 		assert(totalBenchSize % ioSize == 0);
 		long totalBenchCount = totalBenchSize/ioSize;
 		byte[] data = new byte[ioSize];
 		long curPosition = 0L;
 		long maxPosition = totalBenchSize;
 		long startTime = System.nanoTime();    
-		for (int i = 0; i < maxPosition; i++){
+		while (curPosition < maxPosition){
 			fileChannel.write(ByteBuffer.wrap(data), curPosition);
+			// fileChannel.force(false);
 			fileChannel.force(true);
+			curPosition += ioSize;
+			// System.out.println(curPosition);
+		}
+		long elapsedTime = System.nanoTime() - startTime;
+		double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
+		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
+		// System.out.println(elapsedTime);
+		// System.out.println(totalBenchSize);
+		System.out.println("Bandwidth : " + (totalBenchSizeMiB)/(elapsedTimeS) + " MiB/s");
+		System.out.println("IOPS : " + totalBenchCount/elapsedTimeS + " op/s");
+	}
+
+	public static void benchFileChannelRead(FileChannel fileChannel, long totalBenchSize ,int thread, int ioSize) throws IOException {
+		// thread = 1
+		System.out.println("Test Sequential Read Bandwidth and IOPS");
+		assert(totalBenchSize % ioSize == 0);
+		long totalBenchCount = totalBenchSize/ioSize;
+		ByteBuffer buffer = ByteBuffer.allocate(4096);
+		long curPosition = 0L;
+		long maxPosition = totalBenchSize;
+		long startTime = System.nanoTime();    
+		while (curPosition < maxPosition){
+			// // 指定 position 读取 4kb 的数据
+			fileChannel.read(buffer,curPosition);
 			curPosition += ioSize;
 		}
 		long elapsedTime = System.nanoTime() - startTime;
 		double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
 		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
-		System.out.println(elapsedTime);
-		System.out.println(totalBenchSize);
+		// System.out.println(elapsedTime);
+		// System.out.println(totalBenchSize);
 		System.out.println("Bandwidth : " + (totalBenchSizeMiB)/(elapsedTimeS) + " MiB/s");
 		System.out.println("IOPS : " + totalBenchCount/elapsedTimeS + " op/s");
 	}
+
+
 
 	
 }
