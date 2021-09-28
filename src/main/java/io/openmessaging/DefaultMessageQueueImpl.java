@@ -88,12 +88,13 @@ public class DefaultMessageQueueImpl extends MessageQueue {
         // for SSD Benchmark
 		try {
             SSDBench.benchFileChannelWriteThreadPoolRange(ssdBenchFileChannel, ssdBenchTotalSize, 16, 1024*1024);
-            // int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
-            // for (int t = 1; t <= 50; t+=1){
-                // for (int i = 0; i < ioSizes.length; i++){
-                    // SSDBench.benchFileChannelWriteThreadPoolRange(ssdBenchFileChannel, ssdBenchTotalSize, t, ioSizes[i]);
-                // }
-            // }
+            int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
+            int[] threads = {1,2,4,8,16,32};
+            for (int t = 1; t <= threads.length; t+=1){
+                for (int i = 0; i < ioSizes.length; i++){
+                    SSDBench.benchFileChannelWriteThreadPoolRange(ssdBenchFileChannel, ssdBenchTotalSize, threads[t], ioSizes[i]);
+                }
+            }
 		} catch(IOException ie) {
 			ie.printStackTrace();
 		}
