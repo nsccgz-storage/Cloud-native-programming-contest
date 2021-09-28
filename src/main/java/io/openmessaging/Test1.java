@@ -17,6 +17,9 @@ public class Test1 {
 			data[i] = (byte)i;
 		}
 		mq.append("topic", 1324124, ByteBuffer.wrap(data));
+		mq.append("topic", 1324124, ByteBuffer.wrap(data));
+		mq.append("topic", 1324124, ByteBuffer.wrap(data));
+		mq.append("topic", 1324124, ByteBuffer.wrap(data));
 		Map<Integer, ByteBuffer> ret = mq.getRange("topic", 1324124, 0, 1);
 	}
 }
