@@ -62,8 +62,8 @@ public class DefaultMessageQueueImpl extends MessageQueue {
         // for SSD Benchmark
 		try {
             // ssdBenchPath = "./ssdBench";
-            ssdBenchPath = "/mnt/pmem/ssdBench";
-            // ssdBenchPath = "/essd/bench";
+            // ssdBenchPath = "/mnt/pmem/ssdBench";
+            ssdBenchPath = "/essd/bench";
             ssdBenchFileChannel = new RandomAccessFile(new File(ssdBenchPath), "rw").getChannel();
             ssdBenchTotalSize = 256L*1024L*1024L; //256MiB 
 		} catch(IOException ie) {
