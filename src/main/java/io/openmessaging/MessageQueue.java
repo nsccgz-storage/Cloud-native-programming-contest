@@ -1,3 +1,5 @@
+package io.openmessaging;
+
 import java.nio.ByteBuffer;
 import java.util.Map;
 

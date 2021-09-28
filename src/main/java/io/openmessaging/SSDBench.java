@@ -1,3 +1,5 @@
+package io.openmessaging;
+
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
 import java.io.RandomAccessFile;
