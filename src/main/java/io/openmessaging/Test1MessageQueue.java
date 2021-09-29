@@ -32,6 +32,93 @@ import java.lang.Math;
 
 public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
+    private class TestStat{
+        // report throughput per second
+        ThreadLocal<Long> appendStartTime;
+        ThreadLocal<Long> appendEndTime;
+        ThreadLocal<Long> getRangeStartTime;
+        ThreadLocal<Long> getRangeEndTime;
+        ThreadLocal<Long> opCount;
+        ThreadLocal<Long> appendCount;
+        ThreadLocal<Long> getRangeCount;
+        // ThreadLocal< HashMap<Integer, Long> > 
+        // report operation per second
+        TestStat(){
+            appendStartTime = new ThreadLocal<>();
+            appendEndTime = new ThreadLocal<>();
+            getRangeStartTime = new ThreadLocal<>();
+            getRangeEndTime = new ThreadLocal<>();
+
+            appendCount = new ThreadLocal<>();
+            getRangeCount = new ThreadLocal<>();
+            opCount = new ThreadLocal<>();
+        }
+        void appendStart(){
+            if(appendStartTime.get() == null || appendStartTime.get() == 0L){
+                appendStartTime.set(System.nanoTime());
+                log.info("init append time");
+            }
+        }
+        void getRangeStart(){
+            if(getRangeStartTime.get() == null || getRangeStartTime.get() == 0L){
+                getRangeStartTime.set(System.nanoTime());
+                log.info("init getRange time");
+            }
+        }
+
+        void appendUpdateStat(String topic, int queueId, ByteBuffer data){
+            if (appendCount.get() == null){
+                appendCount.set(0L);
+            }
+            appendEndTime.set(System.nanoTime());
+            appendCount.set(appendCount.get()+1);
+            update();
+        }
+        void getRangeUpdateStat(String topic, int queueId, long offset, int fetchNum){
+            if (getRangeCount.get() == null){
+                getRangeCount.set(0L);
+            }
+            getRangeEndTime.set(System.nanoTime());
+            getRangeCount.set(getRangeCount.get()+1);
+            update();
+        }
+        void update(){
+            if (opCount.get() == null){
+                opCount.set(0L);
+            }
+            long curOpCount = opCount.get();
+            if (curOpCount % 10000 == 0){
+                report();
+            }
+            opCount.set(curOpCount+1);
+        }
+        void report(){
+            double appendElapsedTimeMS = (double)(appendEndTime.get()-appendStartTime.get())/(1000*1000);
+            double appendThroughput = (double)appendCount.get()/appendElapsedTimeMS;
+            log.info("[Append  ] op count : " + appendCount.get());
+            log.info("[Append  ] elapsed time (ms) : " + appendElapsedTimeMS);
+            log.info("[Append  ] Throughput (op/ms): " + appendThroughput);
+
+            if (getRangeEndTime.get() == null){
+                getRangeEndTime.set(0L);
+            }
+            if (getRangeStartTime.get() == null){
+                getRangeStartTime.set(0L);
+            }
+            if (getRangeCount.get() == null){
+                getRangeCount.set(0L);
+            }
+            double getRangeElapsedTimeMS = (double)(getRangeEndTime.get()-getRangeStartTime.get())/(1000*1000);
+            double getRangeThroughput = (double)getRangeCount.get()/getRangeElapsedTimeMS;
+            log.info("[getRange] op count : " + getRangeCount.get());
+            log.info("[getRange] elapsed time (ms) : " + getRangeElapsedTimeMS);
+            log.info("[getRange] Throughput (op/ms): " + getRangeThroughput);
+ 
+ 
+        }
+
+        // report topic stat per second
+    }
 
     private class DataFile {
         // public String dataFileName;
@@ -148,6 +235,7 @@ public class Test1MessageQueue {
     private FileChannel metadataFileChannel;
     private ArrayList<DataFile> dataFiles;
     private int numOfDataFiles;
+    private TestStat testStat;
     // private ConcurrentHashMap<String, Integer> topic2queueid;
     // private ConcurrentHashMap<String, HashMap<int, > > topic2queueid;
     // private ConcurrentHashMap<String, Long> topic2queueid;
@@ -224,6 +312,8 @@ public class Test1MessageQueue {
             }
         }
 
+        testStat = new TestStat();
+
         log.info("init ok!");
     }
 
@@ -237,6 +327,7 @@ public class Test1MessageQueue {
     }
 
     public long append(String topic, int queueId, ByteBuffer data){
+        testStat.appendStart();
         MQTopic mqTopic;
         MQQueue q;
         if (!mqMap.containsKey(topic)){
@@ -265,6 +356,7 @@ public class Test1MessageQueue {
         Long ret = q.maxOffset;
         q.maxOffset++;
 
+        testStat.appendUpdateStat(topic, queueId, data);
 	    return ret;
     }
 
@@ -277,6 +369,7 @@ public class Test1MessageQueue {
      * @param fetchNum 读取消息个数，不超过100
      */
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
+        testStat.getRangeStart();
         MQTopic mqTopic;
         MQQueue q;
         if (!mqMap.containsKey(topic)){
@@ -304,6 +397,8 @@ public class Test1MessageQueue {
             ByteBuffer bbf = df.read(pos);
             ret.put(i, bbf);
         }
+
+        testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
 
         return ret;
     }
