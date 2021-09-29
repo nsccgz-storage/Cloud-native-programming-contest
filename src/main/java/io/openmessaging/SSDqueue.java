@@ -46,7 +46,7 @@ public class SSDqueue{
 
         ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
         metaFileChannel.read(tmp);
-        tmp.flip();
+        tmp.position(0);
 
         this.currentNum = tmp.getInt();
 
@@ -58,14 +58,14 @@ public class SSDqueue{
             Long offset = startOffset + i*(Long.BYTES + TOPIC_NAME_SZIE);
             tmp = ByteBuffer.allocate(Long.BYTES);
             int len = metaFileChannel.read(tmp, offset);
-            tmp.flip();
+            tmp.position(0);
             //System.out.println("65: " + len);
 
             Long queueMetaOffset = tmp.getLong();
 
             tmp = ByteBuffer.allocate(TOPIC_NAME_SZIE);
             metaFileChannel.read(tmp,offset + Long.BYTES);
-            tmp.flip();
+            tmp.position(0);
 
             String topicName = new String(tmp.array()).trim();
 
