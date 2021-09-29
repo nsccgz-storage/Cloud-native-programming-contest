@@ -27,6 +27,7 @@ import org.apache.log4j.spi.LoggerFactory;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
+import java.lang.Math;
 
 
 public class Test1MessageQueue {
@@ -55,6 +56,8 @@ public class Test1MessageQueue {
             }
             writeMetaLength = Integer.BYTES;
             readMetaLength = Integer.BYTES;
+            threadLocalWriteMetaBuf = new ThreadLocal<>();
+            threadLocalReadMetaBuf = new ThreadLocal<>();
             // writeMeta = ByteBuffer.allocate(Integer.BYTES);
             // readMeta = ByteBuffer.allocate(Integer.BYTES);
             // readTmp = ByteBuffer.allocate(Integer.BYTES+17408);
@@ -73,9 +76,10 @@ public class Test1MessageQueue {
         // }
     
         public synchronized Long syncSeqWrite(ByteBuffer data) {
-            if (threadLocalWriteMetaBuf == null){
-                threadLocalWriteMetaBuf = new ThreadLocal<>();
+            if (threadLocalWriteMetaBuf.get() == null){
                 threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
+                log.info(threadLocalWriteMetaBuf.get());
+                log.info(threadLocalWriteMetaBuf);
             }
             ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
 
@@ -103,8 +107,7 @@ public class Test1MessageQueue {
         }
     
         public ByteBuffer read(long position) {
-            if (threadLocalReadMetaBuf == null){
-                threadLocalReadMetaBuf = new ThreadLocal<>();
+            if (threadLocalReadMetaBuf.get() == null){
                 threadLocalReadMetaBuf.set(ByteBuffer.allocate(readMetaLength));
             }
             ByteBuffer readMeta = threadLocalReadMetaBuf.get();
@@ -198,7 +201,7 @@ public class Test1MessageQueue {
         }
 
         // init datafile
-        numOfDataFiles = 4;
+        numOfDataFiles = 2;
         dataFiles = new ArrayList<>();
         for (int i = 0; i < numOfDataFiles; i++){
             String dataFileName = dbDirPath+"/db"+i;
@@ -250,7 +253,12 @@ public class Test1MessageQueue {
             q = mqTopic.topicMap.get(queueId);
         }
 
-        int dataFileId = queueId % numOfDataFiles;
+        int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+        // log.info(dataFileId);
+        if (dataFileId < 0){
+            log.info(dataFileId);
+        }
+
         DataFile df = dataFiles.get(dataFileId);
         long position = df.syncSeqWrite(data);
         q.queueMap.put(q.maxOffset, position);
@@ -284,7 +292,7 @@ public class Test1MessageQueue {
         }
 
         long pos = 0;
-        int dataFileId = queueId % numOfDataFiles;
+        int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
         DataFile df = dataFiles.get(dataFileId);
 
         Map<Integer, ByteBuffer> ret = new HashMap<Integer, ByteBuffer>();
