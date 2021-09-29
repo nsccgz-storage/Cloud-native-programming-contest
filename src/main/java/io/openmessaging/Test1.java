@@ -12,7 +12,7 @@ import java.util.Arrays;
 public class Test1 {
 	public static void main(String []args) {
 		Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
-		int ioSize = 18;
+		int ioSize = 1000;
 		byte[] data = new byte[ioSize];
 		for (int i = 0; i < ioSize; i++){
 			data[i] = (byte)(i+96);
@@ -20,15 +20,20 @@ public class Test1 {
 		System.out.println(Arrays.toString(data));
 
 		for (int i = 0; i < 50; i++){
-			for (int j = 0; j < 10; i++){
+			for (int j = 0; j < 10; j++){
 				mq.append("topic",i , ByteBuffer.wrap(data));
 			}
 		}
-		// Map<Integer, ByteBuffer> ret = mq.getRange("topic", 1324124, 0, 3);
+		for (int i = 0; i < 50; i++){
+			for (int j = 0; j < 10; j++){
+				mq.getRange("topic", i, j, 1);
+			}
+		}
+		Map<Integer, ByteBuffer> ret = mq.getRange("topic", 3, 0, 3);
 		// System.out.println(ret);
 		// System.out.println(ret.get(0));
-		// System.out.println(Arrays.toString(ret.get(0).array()));
-		// System.out.println(Arrays.toString(ret.get(1).array()));
+		System.out.println(Arrays.toString(ret.get(0).array()));
+		System.out.println(Arrays.toString(ret.get(1).array()));
 		// byte[] getdata = ret.get(0).array();
 		// for (int i = 0; i < getdata.length; i++){
 		// 	System.out.println(getdata[i]);

@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import org.apache.log4j.spi.LoggerFactory;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import java.lang.ThreadLocal;
 
 
 public class Test1MessageQueue {
@@ -36,9 +37,11 @@ public class Test1MessageQueue {
         public FileChannel dataFileChannel;
         // public AtomicLong atomicCurPosition;
         public Long curPosition;
-        ByteBuffer writeMeta;
-        ByteBuffer readMeta;
-        ByteBuffer readTmp;
+        public int writeMetaLength;
+        public int readMetaLength;
+        ThreadLocal<ByteBuffer> threadLocalWriteMetaBuf;
+        ThreadLocal<ByteBuffer> threadLocalReadMetaBuf;
+        ThreadLocal<ByteBuffer> readTmp;
     
         DataFile(String dataFileName) {
             // atomicCurPosition = new AtomicLong(0);
@@ -50,8 +53,10 @@ public class Test1MessageQueue {
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
-            writeMeta = ByteBuffer.allocate(Integer.BYTES);
-            readMeta = ByteBuffer.allocate(Integer.BYTES);
+            writeMetaLength = Integer.BYTES;
+            readMetaLength = Integer.BYTES;
+            // writeMeta = ByteBuffer.allocate(Integer.BYTES);
+            // readMeta = ByteBuffer.allocate(Integer.BYTES);
             // readTmp = ByteBuffer.allocate(Integer.BYTES+17408);
         }
     
@@ -68,6 +73,12 @@ public class Test1MessageQueue {
         // }
     
         public synchronized Long syncSeqWrite(ByteBuffer data) {
+            if (threadLocalWriteMetaBuf == null){
+                threadLocalWriteMetaBuf = new ThreadLocal<>();
+                threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
+            }
+            ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
+
             int datalength = data.capacity();
             log.debug(writeMeta);
             writeMeta.clear();
@@ -92,6 +103,13 @@ public class Test1MessageQueue {
         }
     
         public ByteBuffer read(long position) {
+            if (threadLocalReadMetaBuf == null){
+                threadLocalReadMetaBuf = new ThreadLocal<>();
+                threadLocalReadMetaBuf.set(ByteBuffer.allocate(readMetaLength));
+            }
+            ByteBuffer readMeta = threadLocalReadMetaBuf.get();
+
+
             log.debug("read from position : "+position);
             readMeta.clear();
             try {
