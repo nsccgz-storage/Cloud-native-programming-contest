@@ -1,7 +1,11 @@
 package io.openmessaging;
 
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+
+
 import java.io.IOException;
-import java.lang.System.Logger;
+// import java.lang.System.Logger;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
@@ -9,6 +13,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SSDqueue{
+	private static final Logger log = Logger.getLogger(SSDqueue.class);
     static volatile  Long FREE_OFFSET = 0L;
     static volatile  Long META_FREE_OFFSET = 0L;
 
@@ -309,6 +314,7 @@ public class SSDqueue{
             
             // 更新 totalNum, tail, head 进 SSD
             //System.out.println("275: "+ startOffset);
+            Long ret = totalNum;
             totalNum++;
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 3);
             tmp.putLong(totalNum);
@@ -324,7 +330,7 @@ public class SSDqueue{
             int len = fileChannel.write(tmp, this.metaOffset);
             //System.out.println("w: " + this.toString() + " : " + len);
 
-            return totalNum;
+            return ret;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
             Long startOffset = head;

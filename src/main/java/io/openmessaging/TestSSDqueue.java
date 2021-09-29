@@ -110,7 +110,7 @@ public class TestSSDqueue {
 		} catch (BrokenBarrierException e) {
 			e.printStackTrace();
 		}
-		log.info("begin run!");
+		log.info("begin append!");
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
 			try {
@@ -120,15 +120,28 @@ public class TestSSDqueue {
 			}
 			if (msg.getOffset != msg.offset) {
 				log.error("offset error !");
+				return;
 			}
 		}
+		try {
+			barrier.await();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+
+		log.info("begin getRange!");
+
 		Map<Integer, ByteBuffer> result;
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
 			try {
 				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				msg.buf.position(0);
 				if (result.get(0).compareTo(msg.buf) != 0) {
 					log.error("data error !");
+					return;
 				}
 
 			} catch (IOException ie) {
