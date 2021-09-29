@@ -6,6 +6,7 @@ import io.openmessaging.DefaultMessageQueueImpl;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
+import java.io.IOException;
 import java.lang.Integer;
 import java.util.Random;
 import java.util.Arrays;
@@ -61,8 +62,9 @@ public class Test1 {
 		return msgs;
 	}
 
-	public static void testOne() {
-		Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
+	public static void testOne() throws IOException{
+		//Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
+		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
 		Vector<Message> msgs = generateOne();
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
@@ -93,7 +95,7 @@ public class Test1 {
 		return msgs;
 	}
 
-	public static void threadRun(int threadId, Test1MessageQueue mq, CyclicBarrier barrier) {
+	public static void threadRun(int threadId, DefaultMessageQueueImpl mq, CyclicBarrier barrier) {
 		Vector<Message> msgs = generateTopic(threadId);
 		log.info("init messages ok");
 		try {
@@ -122,7 +124,7 @@ public class Test1 {
 	}
 
 	public static void testThreadPool() {
-		Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
+		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
 		int numOfThreads = 2;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);

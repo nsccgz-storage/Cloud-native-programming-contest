@@ -15,6 +15,8 @@ import org.slf4j.Logger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import javax.net.ssl.SSLHandshakeException;
+
 import io.openmessaging.Test1MessageQueue;
 // import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -38,78 +40,38 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     private int benchFinished;
     private Test1MessageQueue mq;
     
-
-    public DefaultMessageQueueImpl(String path){
-
-
-        // String pmemPath = path;
-        String pmemPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/messageQueue";
-        
-        boolean initialized  = TransactionalHeap.exists(pmemPath);
-        TransactionalHeap heap = initialized ? TransactionalHeap.openHeap(pmemPath) : TransactionalHeap.createHeap(pmemPath, 100_000_000);
-        if(!initialized){
-            queueMessage = new TopicId(heap);
-            heap.setRoot(queueMessage.getHandle());
-        }else{
-            Long metaHandle = heap.getRoot();
-            queueMessage = new TopicId(heap, metaHandle);
-        }
-
-
-    }
-
+    private SSDqueue ssdQueue;
     public DefaultMessageQueueImpl(){
-        mq = new Test1MessageQueue("/essd");
-        // benchFinished = 0;
-        // // for SSD Benchmark
-		// try {
-        //     // ssdBenchPath = "./ssdBench";
-        //     // ssdBenchPath = "/mnt/pmem/ssdBench";
-        //     ssdBenchPath = "/essd/bench";
-        //     ssdBenchFileChannel = new RandomAccessFile(new File(ssdBenchPath), "rw").getChannel();
-        //     ssdBenchTotalSize = 256L*1024L*1024L; //256MiB 
-		// } catch(IOException ie) {
-		// 	ie.printStackTrace();
-		// }  
-        // bigLock = new ReentrantLock();
-    }
+        try{
+            String metaPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/MetaData";
+            String dataPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/data";
+            boolean flag = new File(metaPath).exists();
+            if(flag){
+                //System.out.println(" 28 ");
+                
+                FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
+                FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+                ssdQueue = new SSDqueue(fileChannel, metaFileChannel, false);
+                
+            }else{
+                FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
+                FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+                ssdQueue = new SSDqueue(fileChannel, metaFileChannel);
+            }
 
+        }catch(IOException e){
+            
+        }
+   
+        
+    }
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
-        return mq.append(topic, queueId, data);
-        // if (benchFinished == 1){
-        //     return 0;
-        // }
-        // bigLock.lock();
-        // if (benchFinished == 1){
-        //     bigLock.unlock();
-        //     return 0;
-        // }
-
-        // // return queueMessage.setTopic(topic, queueId, data);
-
-        // // for SSD Benchmark
-		// try {
-        //     SSDBench.benchFileChannelWriteThreadPoolRange(ssdBenchFileChannel, ssdBenchTotalSize, 16, 1024*1024);
-        //     int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
-        //     int[] threads = {1,2,4,8,16,32};
-        //     for (int t = 0; t < threads.length; t+=1){
-        //         for (int i = 0; i < ioSizes.length; i++){
-        //             SSDBench.benchFileChannelWriteThreadPoolRange(ssdBenchFileChannel, ssdBenchTotalSize, threads[t], ioSizes[i]);
-        //         }
-        //     }
-		// } catch(IOException ie) {
-		// 	ie.printStackTrace();
-		// }
-        // benchFinished = 1;
-        // bigLock.unlock();
-        // return 0;
-
+        return ssdQueue.setTopic(topic, queueId, data);
     }
 
     @Override
-    public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        return mq.getRange(topic, queueId, offset, fetchNum);
-        // return null;
+    public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum){
+        return ssdQueue.getRange(topic, queueId, offset, fetchNum);
     }
 }

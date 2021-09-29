@@ -85,78 +85,87 @@ public class SSDqueue{
         return resData.readAll();
 
     }
-    public Long setTopic(String topicName, int queueId, ByteBuffer data)throws IOException{
-        Map<Integer, Long> topicData = queueTopicMap.get(topicName);
-        if(topicData == null){
-            // 增加 topicIdArray
+    public Long setTopic(String topicName, int queueId, ByteBuffer data){
+    
+        try {
+            Map<Integer, Long> topicData = queueTopicMap.get(topicName);
+            if(topicData == null){
+                // 增加 topicIdArray
 
-            // 自下而上
-            Data writeData = new Data(fileChannel);
-            Long res = writeData.put(data);
-
-            QueueId queueArray =  new QueueId(metaFileChannel, QUEUE_NUM);
-            Long queueOffset = queueArray.put(queueId, writeData.getMetaOffset());
-
-            // 
-            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE); // offset : name
-            tmp.putLong(queueArray.getMetaOffset());
-            tmp.put(topicName.getBytes(), 0, topicName.length());
-            tmp.flip();
-            metaFileChannel.write(tmp, this.topicArrayOffset + currentNum * (TOPIC_NAME_SZIE + Long.BYTES));
-            currentNum++;
-
-            tmp.clear();
-            tmp = ByteBuffer.allocate(Integer.BYTES);
-            tmp.putInt(currentNum);
-            tmp.flip();
-            int len = metaFileChannel.write(tmp, 0L);
-
-            //System.out.println("110: " + len);
-
-            // 更新 DRAM map
-            topicData = new HashMap<>();
-            topicData.put(queueId, writeData.getMetaOffset());
-            topicNameQueueMetaMap.put(topicName, queueArray.getMetaOffset());
-            queueTopicMap.put(topicName, topicData);
-
-            //System.out.println("112: w meta: "+ writeData.getMetaOffset());
-
-            return res;
-
-        }else{
-            Long metaDataOffset = topicData.get(queueId);
-            if(metaDataOffset == null){
-                // 增加 queueIdArray
                 // 自下而上
                 Data writeData = new Data(fileChannel);
                 Long res = writeData.put(data);
-                Long queueMetaOffset = topicNameQueueMetaMap.get(topicName);
-                QueueId queueArray =  new QueueId(metaFileChannel, queueMetaOffset); // 写入 SSD
+
+                QueueId queueArray =  new QueueId(metaFileChannel, QUEUE_NUM);
                 Long queueOffset = queueArray.put(queueId, writeData.getMetaOffset());
 
-                // 插入 DRAM 哈希表
+                // 
+                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE); // offset : name
+                tmp.putLong(queueArray.getMetaOffset());
+                tmp.put(topicName.getBytes(), 0, topicName.length());
+                tmp.flip();
+                metaFileChannel.write(tmp, this.topicArrayOffset + currentNum * (TOPIC_NAME_SZIE + Long.BYTES));
+                currentNum++;
+
+                tmp.clear();
+                tmp = ByteBuffer.allocate(Integer.BYTES);
+                tmp.putInt(currentNum);
+                tmp.flip();
+                int len = metaFileChannel.write(tmp, 0L);
+
+                //System.out.println("110: " + len);
+
+                // 更新 DRAM map
+                topicData = new HashMap<>();
                 topicData.put(queueId, writeData.getMetaOffset());
+                topicNameQueueMetaMap.put(topicName, queueArray.getMetaOffset());
                 queueTopicMap.put(topicName, topicData);
-                
-                return res; 
+
+                //System.out.println("112: w meta: "+ writeData.getMetaOffset());
+
+                return res;
+
             }else{
-                Data writeData = new Data(fileChannel, metaDataOffset);
-                return writeData.put(data);
+                Long metaDataOffset = topicData.get(queueId);
+                if(metaDataOffset == null){
+                    // 增加 queueIdArray
+                    // 自下而上
+                    Data writeData = new Data(fileChannel);
+                    Long res = writeData.put(data);
+                    Long queueMetaOffset = topicNameQueueMetaMap.get(topicName);
+                    QueueId queueArray =  new QueueId(metaFileChannel, queueMetaOffset); // 写入 SSD
+                    Long queueOffset = queueArray.put(queueId, writeData.getMetaOffset());
+
+                    // 插入 DRAM 哈希表
+                    topicData.put(queueId, writeData.getMetaOffset());
+                    queueTopicMap.put(topicName, topicData);
+                    
+                    return res; 
+                }else{
+                    Data writeData = new Data(fileChannel, metaDataOffset);
+                    return writeData.put(data);
+                }
             }
+        } catch (Exception e) {
+            //TODO: handle exception
+            return null;
         }
-
     }
-    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum)throws IOException{
-        Map<Integer, Long> topicData = queueTopicMap.get(topicName);
-        if(topicData == null) return null;
-        Long metaDataOffset = topicData.get(queueId);
-        if(metaDataOffset == null) return null;
+    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
+        try{
+            Map<Integer, Long> topicData = queueTopicMap.get(topicName);
+            if(topicData == null) return null;
+            Long metaDataOffset = topicData.get(queueId);
+            if(metaDataOffset == null) return null;
 
-        //System.out.println("143: r meta: "+ metaDataOffset);
+            //System.out.println("143: r meta: "+ metaDataOffset);
 
-        Data resData = new Data(fileChannel, metaDataOffset);
-
-        return resData.getRange(offset, fetchNum);
+            Data resData = new Data(fileChannel, metaDataOffset);
+            return resData.getRange(offset, fetchNum);
+        }catch(IOException e){
+            return null;
+        }
+        
     }
     private class QueueId{
         FileChannel metaFileChannel;
