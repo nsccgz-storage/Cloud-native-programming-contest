@@ -7,20 +7,30 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Map;
 
-
-
-
 public class Main {
     public static void main(String args[]) throws IOException{
         System.out.println("Hello World!");
-
         String metaPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/MetaData";
         String dataPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/data";
         
-        FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
-        FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+        boolean flag = new File(metaPath).exists();
+        SSDqueue ssdQueue;
+        if(flag){
+            System.out.println(" 28 ");
+            FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
+            FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+            ssdQueue = new SSDqueue(fileChannel, metaFileChannel, false);
+            
+            
+            
 
-        SSDqueue ssdQueue = new SSDqueue(fileChannel, metaFileChannel);
+        }else{
+            FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
+            FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+            ssdQueue = new SSDqueue(fileChannel, metaFileChannel);
+
+        }
+        
         String t = "1234545";
         ByteBuffer tmp = ByteBuffer.wrap(t.getBytes());
         ssdQueue.setTopic("12345", 123, tmp);
@@ -34,10 +44,6 @@ public class Main {
             System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
         }
         
-
-        metaFileChannel.close();
-        fileChannel.close();
-    
     }
 
 }
