@@ -103,7 +103,7 @@ public class Test1 {
 		} catch (BrokenBarrierException e) {
 			e.printStackTrace();
 		}
-		log.info("begin run!");
+		log.info("begin write!");
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
 			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
@@ -111,10 +111,20 @@ public class Test1 {
 				log.error("offset error !");
 			}
 		}
+		try {
+			barrier.await();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+
+		log.info("begin read!");
 		Map<Integer, ByteBuffer> result;
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
 			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+			msg.buf.position(0);
 			if (result.get(0).compareTo(msg.buf) != 0) {
 				log.error("data error !");
 			}
