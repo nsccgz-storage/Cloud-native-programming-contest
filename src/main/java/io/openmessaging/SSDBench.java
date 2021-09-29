@@ -10,8 +10,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 public class SSDBench {
 	public static AtomicLong writePosition = new AtomicLong(0);
+	public static Lock benchLock = new ReentrantLock();
 	// public static long writePosition = 0;
 	public static void main(String []args) {
 		try {
@@ -174,6 +178,7 @@ public class SSDBench {
 
 
 	public static void benchFileChannelWriteThreadPoolRange(FileChannel fileChannel, long totalBenchSize, int thread ,int ioSize) throws IOException {
+		benchLock.lock();
 		assert(totalBenchSize % ioSize == 0);
 		long totalBenchCount = totalBenchSize/ioSize;
 		long operationPerThread = totalBenchCount/thread;
@@ -215,6 +220,7 @@ public class SSDBench {
 		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
 		double iops = totalBenchCount/elapsedTimeS;
 		System.out.println("sequentialWriteThreadPoolRange,"+thread+","+ioSize+","+bandwidth+","+iops);
+		benchLock.unlock();
 	}
 	public static void myWriteRange(FileChannel fileChannel, byte[] data, long minPosition, long maxPosition, int ioSize) throws IOException {
 		long curPosition = minPosition;

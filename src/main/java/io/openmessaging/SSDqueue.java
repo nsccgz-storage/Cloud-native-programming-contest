@@ -1,13 +1,12 @@
 package io.openmessaging;
 
 import java.io.IOException;
-
+import java.lang.System.Logger;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
 
 public class SSDqueue{
     static volatile  Long FREE_OFFSET = 0L;
@@ -18,12 +17,10 @@ public class SSDqueue{
     int currentNum;
     int TOPIC_NAME_SZIE = 128;
     Long topicArrayOffset;
-    
-    
+
     ConcurrentHashMap<String, Long> topicNameQueueMetaMap;
     ConcurrentHashMap<String, Map<Integer, Long>> queueTopicMap;
     
-
     FileChannel fileChannel;
     FileChannel metaFileChannel;
 
@@ -42,7 +39,7 @@ public class SSDqueue{
     public SSDqueue(FileChannel fileChannel, FileChannel metaFileChannel, Boolean t)throws IOException{
         // 读盘，建表
         this.fileChannel = fileChannel;
-        this.metaFileChannel = fileChannel;
+        this.metaFileChannel = metaFileChannel;
         this.topicNameQueueMetaMap = new ConcurrentHashMap<>();
         this.queueTopicMap = new ConcurrentHashMap<>();
         this.topicArrayOffset = 0L + Integer.BYTES;
@@ -53,7 +50,7 @@ public class SSDqueue{
 
         this.currentNum = tmp.getInt();
 
-        System.out.println("55 " + this.currentNum);
+        //System.out.println("55 " + this.currentNum);
  
         Long startOffset = 0L + Integer.BYTES;
         for(int i=0; i<this.currentNum; i++){
@@ -62,7 +59,7 @@ public class SSDqueue{
             tmp = ByteBuffer.allocate(Long.BYTES);
             int len = metaFileChannel.read(tmp, offset);
             tmp.flip();
-            System.out.println("65: " + len);
+            //System.out.println("65: " + len);
 
             Long queueMetaOffset = tmp.getLong();
 
@@ -72,7 +69,7 @@ public class SSDqueue{
 
             String topicName = new String(tmp.array()).trim();
 
-            System.out.println("75： " + queueMetaOffset);
+            //System.out.println("75： " + queueMetaOffset);
 
             topicNameQueueMetaMap.put(topicName, queueMetaOffset);
             
@@ -84,7 +81,7 @@ public class SSDqueue{
 
     }
     public Map<Integer, Long> readQueue(Long queueMetaOffset) throws IOException{
-        QueueId resData = new QueueId(fileChannel, queueMetaOffset);
+        QueueId resData = new QueueId(metaFileChannel, queueMetaOffset);
         return resData.readAll();
 
     }
@@ -114,7 +111,7 @@ public class SSDqueue{
             tmp.flip();
             int len = metaFileChannel.write(tmp, 0L);
 
-            System.out.println("110: " + len);
+            //System.out.println("110: " + len);
 
             // 更新 DRAM map
             topicData = new HashMap<>();
@@ -194,6 +191,8 @@ public class SSDqueue{
 
             this.currentNum = tmp.getInt();
 
+            //System.out.println("194: r " + this.toString());
+
         }
         public Long put(int queueId, Long dataMetaOffset)throws IOException{
             Long offset = queueIdArray + currentNum * (Integer.BYTES + Long.BYTES);
@@ -211,6 +210,8 @@ public class SSDqueue{
             metaFileChannel.write(tmp, metaDataOffset);
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
 
+            //System.out.println("w 213: " + this.toString());
+
             return offset;
         }
         public Long getMetaOffset(){
@@ -220,15 +221,18 @@ public class SSDqueue{
             Map<Integer, Long> res = new HashMap<>();
             ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
             for(int i=0; i<this.currentNum; ++i){
-                int len2 = fileChannel.read(tmp, this.queueIdArray + i*(Integer.BYTES + Long.BYTES));
+                int len2 = metaFileChannel.read(tmp, this.queueIdArray + i*(Integer.BYTES + Long.BYTES));
 
-                System.out.println("222: " + len2);
+                //System.out.println("222: " + len2);
 
                 tmp.flip();
                 res.put(tmp.getInt(), tmp.getLong());
                 tmp.flip();
             }
             return res;
+        }
+        public String toString(){
+            return "num: " + this.currentNum + " meta:  " + this.metaDataOffset + "  array： " + this.queueIdArray;
         }
     }
     /*
@@ -257,9 +261,6 @@ public class SSDqueue{
             tmp.putLong(tail);
             tmp.flip();
             fileChannel.write(tmp, this.metaOffset);
-
-            
-
         }
 
         public String toString(){

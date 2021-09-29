@@ -16,14 +16,11 @@ public class Main {
         boolean flag = new File(metaPath).exists();
         SSDqueue ssdQueue;
         if(flag){
-            System.out.println(" 28 ");
+            //System.out.println(" 28 ");
             FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
             FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
             ssdQueue = new SSDqueue(fileChannel, metaFileChannel, false);
             
-            
-            
-
         }else{
             FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
             FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
