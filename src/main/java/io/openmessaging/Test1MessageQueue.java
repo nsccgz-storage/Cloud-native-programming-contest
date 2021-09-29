@@ -36,6 +36,9 @@ public class Test1MessageQueue {
         public FileChannel dataFileChannel;
         // public AtomicLong atomicCurPosition;
         public Long curPosition;
+        ByteBuffer writeMeta;
+        ByteBuffer readMeta;
+        ByteBuffer readTmp;
     
         DataFile(String dataFileName) {
             // atomicCurPosition = new AtomicLong(0);
@@ -47,6 +50,9 @@ public class Test1MessageQueue {
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
+            writeMeta = ByteBuffer.allocate(Integer.BYTES);
+            readMeta = ByteBuffer.allocate(Integer.BYTES);
+            // readTmp = ByteBuffer.allocate(Integer.BYTES+17408);
         }
     
         // public long allocate(long size) {
@@ -62,36 +68,55 @@ public class Test1MessageQueue {
         // }
     
         public synchronized Long syncSeqWrite(ByteBuffer data) {
-            ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES+data.capacity());
-            tmp.putInt(data.capacity());
-            tmp.put(data);
+            int datalength = data.capacity();
+            log.debug(writeMeta);
+            writeMeta.clear();
+            log.debug(datalength);
+            writeMeta.putInt(datalength);
+            writeMeta.flip();
             long position = curPosition;
             log.debug("position : " + position);
+            int ret = 0;
             try {
-                dataFileChannel.write(tmp, position);
+                ret += dataFileChannel.write(writeMeta, position);
+                ret += dataFileChannel.write(data, position+writeMeta.capacity());
+                dataFileChannel.force(true);
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
-            log.debug("write size : " + tmp.capacity());
+            log.debug("write size : " + ret);
             log.debug("data size : " + data.capacity());
-            curPosition += tmp.capacity();
+            curPosition += ret;
             log.debug("update position to: " + curPosition);
             return position;
         }
     
         public ByteBuffer read(long position) {
-            ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES+17408);
+            log.debug("read from position : "+position);
+            readMeta.clear();
             try {
-                dataFileChannel.read(tmp, position);
+                int ret;
+                // dataFileChannel.read(tmp);
+                ret = dataFileChannel.read(readMeta, position);
+                readMeta.flip();
+                int dataLength = readMeta.getInt();
+                ByteBuffer tmp = ByteBuffer.allocate(dataLength);
+                ret = dataFileChannel.read(tmp, position+readMeta.capacity());
+                log.debug(ret);
+                return tmp;
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
-            int dataLength = tmp.getInt();
-            byte[] data = new byte[dataLength];
-            tmp.get(data);
-    
 
-            return ByteBuffer.wrap(data);
+            return null;
+        }
+
+        public void close(){
+            try {
+                dataFileChannel.close();
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            }
         }
     
     }
@@ -99,7 +124,6 @@ public class Test1MessageQueue {
 
 
     private String metadataFileName;
-    private String dataFileName;
     private FileChannel metadataFileChannel;
     private ArrayList<DataFile> dataFiles;
     private int numOfDataFiles;
@@ -181,11 +205,14 @@ public class Test1MessageQueue {
         log.info("init ok!");
     }
 
-    // @Override
-    // protected void finalize() throws Throwable {
-    // metadataFileChannel.close();
-    // dataFileChannel.close();
-    // }
+    @Override
+    protected void finalize() throws Throwable {
+        metadataFileChannel.close();
+        for (int i = 0; i < dataFiles.size(); i++){
+            dataFiles.get(i).close();
+        }
+
+    }
 
     public long append(String topic, int queueId, ByteBuffer data){
         MQTopic mqTopic;
@@ -243,6 +270,9 @@ public class Test1MessageQueue {
 
         Map<Integer, ByteBuffer> ret = new HashMap<Integer, ByteBuffer>();
         for (int i = 0; i < fetchNum; i++){
+            if (!q.queueMap.containsKey(offset+i)){
+                break;
+            }
             pos = q.queueMap.get(offset+i);
             ByteBuffer bbf = df.read(pos);
             ret.put(i, bbf);
