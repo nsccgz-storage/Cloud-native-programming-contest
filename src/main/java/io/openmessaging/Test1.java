@@ -50,7 +50,7 @@ public class Test1 {
 	}
 
 	public static Vector<Message> generateOne() {
-		String topicName = "tipic";
+		String topicName = "topic";
 		Vector<Message> msgs = new Vector<>();
 		for (long offset = 0; offset < 999; offset++) {
 			for (int queueId = 0; queueId < 99; queueId++) {
