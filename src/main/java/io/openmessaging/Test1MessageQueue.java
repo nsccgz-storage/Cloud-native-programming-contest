@@ -23,12 +23,13 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.ArrayList;
 
-import org.slf4j.LoggerFactory;
-import org.apache.log4j.pattern.ThrowableInformationPatternConverter;
-import org.slf4j.Logger;
+import org.apache.log4j.spi.LoggerFactory;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+
 
 public class Test1MessageQueue {
-    private static final Logger log = LoggerFactory.getLogger(Test1MessageQueue.class);
+    private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
 
     private class DataFile {
         // public String dataFileName;
@@ -140,6 +141,7 @@ public class Test1MessageQueue {
      * @param data    信息的内容，评测时会随机产生
      */
     Test1MessageQueue(String dbDirPath) {
+        log.setLevel(Level.DEBUG);
         // dbDirPath = /essd
         log.info("start init MessageQueue!!");
         mqMap = new ConcurrentHashMap<String, MQTopic>();

@@ -19,7 +19,7 @@ public class Test1 {
 
 		mq.append("topic", 1324124, ByteBuffer.wrap(data));
 		Map<Integer, ByteBuffer> ret = mq.getRange("topic", 1324124, 0, 1);
-		System.out.println(ret);
+		System.out.println(ret.get(0));
 
 		// MessageQueue mq = new DefaultMessageQueueImpl();
 		// int ioSize = 4096;
