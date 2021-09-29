@@ -132,7 +132,7 @@ public class Test1 {
 
 	public static void testThreadPool() {
 		Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
-		int numOfThreads = 2;
+		int numOfThreads = 16;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();

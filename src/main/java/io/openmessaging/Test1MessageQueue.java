@@ -113,8 +113,6 @@ public class Test1MessageQueue {
             log.info("[getRange] op count : " + getRangeCount.get());
             log.info("[getRange] elapsed time (ms) : " + getRangeElapsedTimeMS);
             log.info("[getRange] Throughput (op/ms): " + getRangeThroughput);
- 
- 
         }
 
         // report topic stat per second
@@ -166,7 +164,7 @@ public class Test1MessageQueue {
             if (threadLocalWriteMetaBuf.get() == null){
                 threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
                 log.info(threadLocalWriteMetaBuf.get());
-                log.info(threadLocalWriteMetaBuf);
+                // log.info(threadLocalWriteMetaBuf);
             }
             ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
 
