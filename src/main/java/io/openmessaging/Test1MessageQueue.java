@@ -165,7 +165,8 @@ public class Test1MessageQueue {
      * @param data    信息的内容，评测时会随机产生
      */
     Test1MessageQueue(String dbDirPath) {
-        log.setLevel(Level.DEBUG);
+        // log.setLevel(Level.DEBUG);
+        log.setLevel(Level.INFO);
         // dbDirPath = /essd
         log.info("start init MessageQueue!!");
         mqMap = new ConcurrentHashMap<String, MQTopic>();
@@ -179,7 +180,7 @@ public class Test1MessageQueue {
         }
 
         // init datafile
-        numOfDataFiles = 1;
+        numOfDataFiles = 4;
         dataFiles = new ArrayList<>();
         for (int i = 0; i < numOfDataFiles; i++){
             String dataFileName = dbDirPath+"/db"+i;

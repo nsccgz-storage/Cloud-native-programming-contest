@@ -19,13 +19,15 @@ public class Test1 {
 		}
 		System.out.println(Arrays.toString(data));
 
-		for (int i = 0; i < 1; i++){
-			mq.append("topic", 1324124, ByteBuffer.wrap(data));
+		for (int i = 0; i < 50; i++){
+			for (int j = 0; j < 10; i++){
+				mq.append("topic",i , ByteBuffer.wrap(data));
+			}
 		}
-		Map<Integer, ByteBuffer> ret = mq.getRange("topic", 1324124, 0, 3);
-		System.out.println(ret);
-		System.out.println(ret.get(0));
-		System.out.println(Arrays.toString(ret.get(0).array()));
+		// Map<Integer, ByteBuffer> ret = mq.getRange("topic", 1324124, 0, 3);
+		// System.out.println(ret);
+		// System.out.println(ret.get(0));
+		// System.out.println(Arrays.toString(ret.get(0).array()));
 		// System.out.println(Arrays.toString(ret.get(1).array()));
 		// byte[] getdata = ret.get(0).array();
 		// for (int i = 0; i < getdata.length; i++){
