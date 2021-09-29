@@ -393,11 +393,18 @@ public class Test1MessageQueue {
             }
             pos = q.queueMap.get(offset+i);
             ByteBuffer bbf = df.read(pos);
-            ret.put(i, bbf);
+            if (bbf != null){
+                bbf.position(0);
+                bbf.limit(bbf.capacity());
+                ret.put(i, bbf);
+            }
         }
 
         testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
 
+        if (ret.size() == 0){
+            return null;
+        }
         return ret;
     }
 }
