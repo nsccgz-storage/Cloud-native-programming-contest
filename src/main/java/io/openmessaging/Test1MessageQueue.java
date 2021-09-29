@@ -287,7 +287,7 @@ public class Test1MessageQueue {
         }
 
         // init datafile
-        numOfDataFiles = 2;
+        numOfDataFiles = 8;
         dataFiles = new ArrayList<>();
         for (int i = 0; i < numOfDataFiles; i++){
             String dataFileName = dbDirPath+"/db"+i;
