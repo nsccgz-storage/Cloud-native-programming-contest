@@ -1,41 +1,43 @@
 package io.openmessaging;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.Map;
 
-import com.intel.pmem.llpl.TransactionalHeap;
+
+
 
 public class Main {
-    public static void main(String args[]) {
+    public static void main(String args[]) throws IOException{
         System.out.println("Hello World!");
 
-        String path = "/home/ubuntu/ContestForAli/pmem_test_llpl/messageQueue";
+        String metaPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/MetaData";
+        String dataPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/data";
         
-        boolean initialized  = TransactionalHeap.exists(path);
-        TransactionalHeap heap = initialized ? TransactionalHeap.openHeap(path) : TransactionalHeap.createHeap(path, 100_000_000);
-        if(!initialized){
-            TopicId queueMessage = new TopicId(heap);
-            heap.setRoot(queueMessage.getHandle());
-        }else{
-            Long metaHandle = heap.getRoot();
-            TopicId queueMessage = new TopicId(heap, metaHandle);
-            
-            //System.out.println("has one");
-            ByteBuffer data = ByteBuffer.wrap("10008611".getBytes());
-            System.out.println(queueMessage.setTopic("wykda", 11, data));
-            
-            System.out.println(queueMessage);
-            Map<Integer, ByteBuffer> tmpRes = queueMessage.getRange("wykda", 11, 0L, 9);
-            
-            for(Map.Entry<Integer, ByteBuffer> entry: tmpRes.entrySet()){
-                String t = new String(entry.getValue().array());
-                System.out.println("key: "+ entry.getKey() + " value: " + t);
-            }
+        FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
+        FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+
+        SSDqueue ssdQueue = new SSDqueue(fileChannel, metaFileChannel);
+        String t = "1234545";
+        ByteBuffer tmp = ByteBuffer.wrap(t.getBytes());
+        ssdQueue.setTopic("12345", 123, tmp);
+        ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
+        ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
+        //ssdQueue.setTopic("dsfsf", 123, tmp);
+
+        Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, 0L, 5);
+
+        for(Map.Entry<Integer, ByteBuffer> entry: res.entrySet()){
+            System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
         }
         
 
-        System.out.println("succ");
-
+        metaFileChannel.close();
+        fileChannel.close();
+    
     }
 
 }

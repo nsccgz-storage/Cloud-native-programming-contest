@@ -12,3 +12,5 @@ buildNumber.properties
 *.class
 .setting
 .classpath
+
+hs_err_*
