@@ -57,8 +57,20 @@ public class Test1MessageQueue {
                 getRangeCount = 0;
                 writeBytes = 0L;
             }
+            public ThreadStat clone() {
+                ThreadStat ret = new ThreadStat();
+                ret.appendStartTime = this.appendStartTime;
+                ret.appendEndTime = this.appendEndTime;
+                ret.appendCount = this.appendCount;
+                ret.getRangeStartTime = this.getRangeStartTime;
+                ret.getRangeEndTime = this.getRangeEndTime;
+                ret.getRangeCount = this.getRangeCount;
+                ret.writeBytes = this.writeBytes;
+                return ret;
+            }
         }
         ThreadStat[] oldStats;
+        Long oldEndTime;
         ThreadStat[] stats;
         // ThreadLocal< HashMap<Integer, Long> > 
         // report operation per second
@@ -72,6 +84,7 @@ public class Test1MessageQueue {
             }
             startTime = 0L;
             endTime = 0L;
+            oldEndTime = 0L;
             opCount = 0L;
         }
         void updateThreadId(){
@@ -170,13 +183,56 @@ public class Test1MessageQueue {
             // writeBandwidth  /= getNumOfThreads; // bandwidth 不用平均，要看总的
 
 
-            log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency);
+
+            double curAppendThroughput = 0;
+            double curGetRangeThroughput = 0;
+            double curAppendLatency = 0;
+            double curGetRangeLatency = 0;
+            double curWriteBandwidth = 0; // MiB/s
+            double thisElapsedTimeS = 0;
 
             // current
-            // TODO:  get the stat for this period
+            // get the stat for this period
+            if (oldStats != null){
+                thisElapsedTimeS = (endTime - oldEndTime)/(double)(1000*1000*1000);
+                for (int i = 0; i < getNumOfThreads; i++){
+                    double appendElapsedTimeS = (stats[i].appendEndTime - oldStats[i].appendEndTime)/((double)(1000*1000*1000));
+                    double appendCount = stats[i].appendCount-oldStats[i].appendCount;
+                    appendTpPerThread[i] = (appendCount)/appendElapsedTimeS;
+                    appendLatencyPerThread[i] = appendElapsedTimeS/appendCount;
+                    double getRangeElapsedTimeS = (oldStats[i].getRangeEndTime - stats[i].getRangeEndTime)/((double)(1000*1000*1000));
+                    double getRangeCount = stats[i].getRangeCount-oldStats[i].getRangeCount;
+                    getRangeTpPerThread[i] = getRangeCount / getRangeElapsedTimeS;
+                    getRangeLatencyPerThread[i] = getRangeElapsedTimeS/getRangeCount;
+                    log.info(i+"+"+stats[i].writeBytes);
+                    log.info(i+"+"+oldStats[i].writeBytes);
+                    double dataSize = (stats[i].writeBytes-oldStats[i].writeBytes)/(double)(1024*1024);
+                    bandwidthPerThread[i] = dataSize/thisElapsedTimeS;
+                }
+                for (int i = 0; i < getNumOfThreads; i++){
+                    curAppendThroughput += appendTpPerThread[i];
+                    curGetRangeThroughput += getRangeTpPerThread[i];
+                    curAppendLatency += appendLatencyPerThread[i];
+                    curGetRangeLatency += getRangeLatencyPerThread[i];
+                    curWriteBandwidth += bandwidthPerThread[i];
+                }
+                curAppendThroughput /= getNumOfThreads;
+                curGetRangeThroughput /= getNumOfThreads;
+                curAppendLatency /= getNumOfThreads;
+                curGetRangeLatency /= getNumOfThreads;
+            }
 
 
+
+            log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency);
+            log.info(curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
+
+            // deep copy
             oldStats = stats.clone();
+            for (int i = 0; i < 100; i++){
+                oldStats[i] = stats[i].clone();
+            }
+            oldEndTime = endTime;
         }
 
         // report topic stat per second
