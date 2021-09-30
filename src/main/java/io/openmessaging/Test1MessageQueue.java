@@ -144,7 +144,7 @@ public class Test1MessageQueue {
             opCount = 0L;
         }
 
-        void updateThreadId() {
+        synchronized void updateThreadId() {
             if (threadId.get() == null) {
                 threadId.set(numOfThreads.getAndAdd(1));
                 log.info("init thread id : " + numOfThreads.get());
