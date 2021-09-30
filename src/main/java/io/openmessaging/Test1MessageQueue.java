@@ -29,6 +29,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
 import java.lang.Math;
+import java.text.Format;
 
 
 public class Test1MessageQueue {
@@ -160,11 +161,13 @@ public class Test1MessageQueue {
             double elapsedTimeS = (endTime - startTime)/(double)(1000*1000*1000);
             for (int i = 0; i < getNumOfThreads; i++){
                 double appendElapsedTimeS = (stats[i].appendEndTime - stats[i].appendStartTime)/((double)(1000*1000*1000));
+                double appendElapsedTimeMS = (stats[i].appendEndTime - stats[i].appendStartTime)/((double)(1000*1000));
                 appendTpPerThread[i] = stats[i].appendCount / appendElapsedTimeS;
-                appendLatencyPerThread[i] = appendElapsedTimeS/stats[i].appendCount;
+                appendLatencyPerThread[i] = appendElapsedTimeMS/stats[i].appendCount;
                 double getRangeElapsedTimeS = (stats[i].getRangeEndTime - stats[i].getRangeStartTime)/((double)(1000*1000*1000));
+                double getRangeElapsedTimeMS = (stats[i].getRangeEndTime - stats[i].getRangeStartTime)/((double)(1000*1000));
                 getRangeTpPerThread[i] = stats[i].getRangeCount / getRangeElapsedTimeS;
-                getRangeLatencyPerThread[i] = getRangeElapsedTimeS/stats[i].getRangeCount;
+                getRangeLatencyPerThread[i] = getRangeElapsedTimeMS/stats[i].getRangeCount;
                 double dataSize = stats[i].writeBytes/(double)(1024*1024);
                 bandwidthPerThread[i] = dataSize/elapsedTimeS;
             }
@@ -196,16 +199,16 @@ public class Test1MessageQueue {
             if (oldStats != null){
                 thisElapsedTimeS = (endTime - oldEndTime)/(double)(1000*1000*1000);
                 for (int i = 0; i < getNumOfThreads; i++){
+                    double appendElapsedTimeMS = (stats[i].appendEndTime - oldStats[i].appendEndTime)/((double)(1000*1000));
                     double appendElapsedTimeS = (stats[i].appendEndTime - oldStats[i].appendEndTime)/((double)(1000*1000*1000));
                     double appendCount = stats[i].appendCount-oldStats[i].appendCount;
                     appendTpPerThread[i] = (appendCount)/appendElapsedTimeS;
-                    appendLatencyPerThread[i] = appendElapsedTimeS/appendCount;
+                    appendLatencyPerThread[i] = appendElapsedTimeMS/appendCount;
+                    double getRangeElapsedTimeMS = (oldStats[i].getRangeEndTime - stats[i].getRangeEndTime)/((double)(1000*1000));
                     double getRangeElapsedTimeS = (oldStats[i].getRangeEndTime - stats[i].getRangeEndTime)/((double)(1000*1000*1000));
                     double getRangeCount = stats[i].getRangeCount-oldStats[i].getRangeCount;
                     getRangeTpPerThread[i] = getRangeCount / getRangeElapsedTimeS;
-                    getRangeLatencyPerThread[i] = getRangeElapsedTimeS/getRangeCount;
-                    log.info(i+"+"+stats[i].writeBytes);
-                    log.info(i+"+"+oldStats[i].writeBytes);
+                    getRangeLatencyPerThread[i] = getRangeElapsedTimeMS/getRangeCount;
                     double dataSize = (stats[i].writeBytes-oldStats[i].writeBytes)/(double)(1024*1024);
                     bandwidthPerThread[i] = dataSize/thisElapsedTimeS;
                 }
@@ -222,10 +225,11 @@ public class Test1MessageQueue {
                 curGetRangeLatency /= getNumOfThreads;
             }
 
+            String csvStat=String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f", writeBandwidth,elapsedTimeS,appendThroughput,appendLatency,getRangeThroughput,getRangeLatency,curWriteBandwidth,thisElapsedTimeS,curAppendThroughput,curAppendLatency,curGetRangeThroughput,curGetRangeLatency);  
 
+            log.info(csvStat);
 
-            log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency);
-            log.info(curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
+            // log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
 
             // deep copy
             oldStats = stats.clone();
