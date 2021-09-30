@@ -367,17 +367,18 @@ public class Test1MessageQueue {
      * @param fetchNum 读取消息个数，不超过100
      */
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
+        Map<Integer, ByteBuffer> ret = new HashMap<Integer, ByteBuffer>();
         testStat.getRangeStart();
         MQTopic mqTopic;
         MQQueue q;
         if (!mqMap.containsKey(topic)){
-            return null;
+            return ret;
         } else {
             mqTopic = mqMap.get(topic);
         }
 
         if (!mqTopic.topicMap.containsKey(queueId)){
-            return null;
+            return ret;
         } else {
             q = mqTopic.topicMap.get(queueId);
         }
@@ -386,7 +387,6 @@ public class Test1MessageQueue {
         int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
         DataFile df = dataFiles.get(dataFileId);
 
-        Map<Integer, ByteBuffer> ret = new HashMap<Integer, ByteBuffer>();
         for (int i = 0; i < fetchNum; i++){
             if (!q.queueMap.containsKey(offset+i)){
                 break;
@@ -402,9 +402,6 @@ public class Test1MessageQueue {
 
         testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
 
-        if (ret.size() == 0){
-            return null;
-        }
         return ret;
     }
 }
