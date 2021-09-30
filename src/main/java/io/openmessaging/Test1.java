@@ -84,7 +84,7 @@ public class Test1 {
 	public static Vector<Message> generateTopic(int i) {
 		String topicName = "topic" + i;
 		Vector<Message> msgs = new Vector<>();
-		for (long offset = 0; offset < 99; offset++) {
+		for (long offset = 0; offset < 999; offset++) {
 			for (int queueId = 0; queueId < 99; queueId++) {
 				Message msg = new Message(topicName, queueId, offset);
 				msgs.add(msg);
@@ -115,9 +115,16 @@ public class Test1 {
 			for (int i = 0; i < msgs.size(); i++) {
 				Message msg = msgs.get(i);
 				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+				Map<Integer, ByteBuffer> result;
+				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 				if (msg.getOffset != msg.offset) {
 					log.error("offset error !");
 				}
+				msg.buf.position(0);
+				if (result.get(0).compareTo(msg.buf) != 0) {
+					log.error("data error !");
+				}
+
 			}
 			barrier.await();
 
@@ -151,7 +158,7 @@ public class Test1 {
 
 	public static void testThreadPool() {
 		Test1MessageQueue mq = new Test1MessageQueue("/mnt/ssd/mq");
-		int numOfThreads = 16;
+		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();
