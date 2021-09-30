@@ -252,6 +252,7 @@ public class Test1MessageQueue {
         ThreadLocal<ByteBuffer> threadLocalWriteMetaBuf;
         ThreadLocal<ByteBuffer> threadLocalReadMetaBuf;
         ThreadLocal<ByteBuffer> readTmp;
+        Lock fileLock;
     
         DataFile(String dataFileName) {
             // atomicCurPosition = new AtomicLong(0);
@@ -270,6 +271,7 @@ public class Test1MessageQueue {
             // writeMeta = ByteBuffer.allocate(Integer.BYTES);
             // readMeta = ByteBuffer.allocate(Integer.BYTES);
             // readTmp = ByteBuffer.allocate(Integer.BYTES+17408);
+            fileLock = new ReentrantLock(false);
         }
     
         // public long allocate(long size) {
@@ -284,7 +286,8 @@ public class Test1MessageQueue {
         //     }
         // }
     
-        public synchronized Long syncSeqWrite(ByteBuffer data) {
+        public Long syncSeqWrite(ByteBuffer data) {
+            fileLock.lock();
             if (threadLocalWriteMetaBuf.get() == null){
                 threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
                 log.info(threadLocalWriteMetaBuf.get());
@@ -292,16 +295,18 @@ public class Test1MessageQueue {
             }
             ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
 
-            int datalength = data.capacity();
+            int datalength = data.remaining();
+            // int datalength = data.capacity();
             log.debug(writeMeta);
             writeMeta.clear();
             log.debug(datalength);
             writeMeta.putInt(datalength);
-            writeMeta.flip();
+            writeMeta.position(0);
             long position = curPosition;
             log.debug("position : " + position);
             int ret = 0;
             try {
+                // ByteBuffer buf = ByteBuffer.allocate(data.remaining());
                 ret += dataFileChannel.write(writeMeta, position);
                 ret += dataFileChannel.write(data, position+writeMeta.capacity());
                 dataFileChannel.force(true);
@@ -309,9 +314,10 @@ public class Test1MessageQueue {
                 ie.printStackTrace();
             }
             log.debug("write size : " + ret);
-            log.debug("data size : " + data.capacity());
+            log.debug("data size : " + datalength);
             curPosition += ret;
             log.debug("update position to: " + curPosition);
+            fileLock.unlock();
             return position;
         }
     
