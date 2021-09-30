@@ -38,20 +38,34 @@ import java.util.concurrent.locks.Condition;
 public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
-        // // local : 120MiB/s   
-        int numOfDataFiles = 4;
-        int minBufNum = 20;
-        int minBufLength = 28672;
-        int timeOutMS = 150;
-        boolean fairLock = true;
-        boolean useWriteAgg = true;
+        // // version 0: local SSD: 70 MiB/s   
+        // int numOfDataFiles = 10;
+        // int minBufNum = 20; // 无效
+        // int minBufLength = 32768; // 无效
+        // int timeOutMS = 150; // 无效
+        // boolean fairLock = true;
+        // boolean useWriteAgg = false; // 不使用写聚合
 
-        // int numOfDataFiles = 3;
+        // version 1: local SSD: 110MiB/s   
+        // int numOfDataFiles = 4;
         // int minBufNum = 20;
-        // int minBufLength = 32768;
+        // int minBufLength = 28672;
         // int timeOutMS = 150;
         // boolean fairLock = true;
-        // boolean useWriteAgg = true;
+        // boolean useWriteAgg = true; // 使用写聚合
+
+
+
+        // version 2: local SSD: 100MiB/s   for 40t
+        int numOfDataFiles = 4;
+        int minBufNum = 16;
+        // int minBufLength = 16384;
+        int minBufLength = 20480+1024+1024;
+        // int minBufLength = 24576;
+        // int minBufLength = 28672;
+        int timeOutMS = 100;
+        boolean fairLock = true;
+        boolean useWriteAgg = true; // 使用写聚合
 
 
 
