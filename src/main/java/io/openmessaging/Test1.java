@@ -108,27 +108,33 @@ public class Test1 {
 	public static void threadRun(int threadId, Test1MessageQueue mq, CyclicBarrier barrier) {
 		try {
 			Vector<Message> msgs = generateTopic(threadId);
-			log.info("init messages ok");
+			if (threadId == 0){
+				log.info("init messages ok");
+			}
 			barrier.await();
 
-			log.info("begin write!");
+			if (threadId == 0){
+				log.info("begin write!");
+			}
 			for (int i = 0; i < msgs.size(); i++) {
 				Message msg = msgs.get(i);
 				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-				Map<Integer, ByteBuffer> result;
-				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 				if (msg.getOffset != msg.offset) {
 					log.error("offset error !");
 				}
-				msg.buf.position(0);
-				if (result.get(0).compareTo(msg.buf) != 0) {
-					log.error("data error !");
-				}
+				// Map<Integer, ByteBuffer> result;
+				// result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				// msg.buf.position(0);
+				// if (result.get(0).compareTo(msg.buf) != 0) {
+				// 	log.error("data error !");
+				// }
 
 			}
 			barrier.await();
 
-			log.info("begin read!");
+			if (threadId == 0){
+				log.info("begin read!");
+			}
 			Map<Integer, ByteBuffer> result;
 			for (int i = 0; i < msgs.size(); i++) {
 				Message msg = msgs.get(i);
@@ -142,7 +148,10 @@ public class Test1 {
 			barrier.await();
 
 			msgs = generateGetRange(threadId);
-			log.info("begin other read!");
+
+			if (threadId == 0){
+				log.info("begin other read!");
+			}
 			for (int i = 0; i < msgs.size(); i++) {
 				Message msg = msgs.get(i);
 				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
@@ -158,7 +167,7 @@ public class Test1 {
 
 	public static void testThreadPool() {
 		Test1MessageQueue mq = new Test1MessageQueue("/mnt/ssd/mq");
-		int numOfThreads = 40;
+		int numOfThreads = 50;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();

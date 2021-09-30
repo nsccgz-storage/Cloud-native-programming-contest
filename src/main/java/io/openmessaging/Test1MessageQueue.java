@@ -38,10 +38,10 @@ import java.util.concurrent.locks.Condition;
 public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
-        int numOfDataFiles = 4;
+        int numOfDataFiles = 8;
         int minBufLength = 8;
         int minBufNum = 32768;
-        boolean useWriteAgg = true;
+        boolean useWriteAgg = false;
         @Override
         public String toString() {
             String ret = String.format("numOfDataFiles=%d | minBufLength=%d | minBufNum=%d",numOfDataFiles,minBufLength,minBufNum);
@@ -337,7 +337,7 @@ public class Test1MessageQueue {
             fileLock.lock();
             if (threadLocalWriteMetaBuf.get() == null) {
                 threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
-                log.info(threadLocalWriteMetaBuf.get());
+                // log.info(threadLocalWriteMetaBuf.get());
                 // log.info(threadLocalWriteMetaBuf);
             }
             ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
