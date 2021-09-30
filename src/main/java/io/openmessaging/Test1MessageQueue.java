@@ -78,8 +78,7 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            String ret = String.format("numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d",numOfDataFiles,minBufLength,minBufNum,timeOutMS);
-            return ret;
+            return String.format("useWriteAgg=%b | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d",useWriteAgg,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
     private static MQConfig mqConfig = new MQConfig();
@@ -144,10 +143,11 @@ public class Test1MessageQueue {
             opCount = 0L;
         }
 
-        synchronized void updateThreadId() {
+        void updateThreadId() {
             if (threadId.get() == null) {
-                threadId.set(numOfThreads.getAndAdd(1));
-                log.info("init thread id : " + numOfThreads.get());
+                int thisNumOfThread = numOfThreads.getAndAdd(1);
+                threadId.set(thisNumOfThread);
+                log.info("init thread id : " + thisNumOfThread);
             }
         }
 
