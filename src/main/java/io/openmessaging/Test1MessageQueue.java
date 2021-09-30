@@ -204,8 +204,8 @@ public class Test1MessageQueue {
                     double appendCount = stats[i].appendCount-oldStats[i].appendCount;
                     appendTpPerThread[i] = (appendCount)/appendElapsedTimeS;
                     appendLatencyPerThread[i] = appendElapsedTimeMS/appendCount;
-                    double getRangeElapsedTimeMS = (oldStats[i].getRangeEndTime - stats[i].getRangeEndTime)/((double)(1000*1000));
-                    double getRangeElapsedTimeS = (oldStats[i].getRangeEndTime - stats[i].getRangeEndTime)/((double)(1000*1000*1000));
+                    double getRangeElapsedTimeMS = (stats[i].getRangeEndTime - oldStats[i].getRangeEndTime)/((double)(1000*1000));
+                    double getRangeElapsedTimeS = (stats[i].getRangeEndTime - oldStats[i].getRangeEndTime)/((double)(1000*1000*1000));
                     double getRangeCount = stats[i].getRangeCount-oldStats[i].getRangeCount;
                     getRangeTpPerThread[i] = getRangeCount / getRangeElapsedTimeS;
                     getRangeLatencyPerThread[i] = getRangeElapsedTimeMS/getRangeCount;

@@ -106,58 +106,47 @@ public class Test1 {
 	}
 
 	public static void threadRun(int threadId, Test1MessageQueue mq, CyclicBarrier barrier) {
-		Vector<Message> msgs = generateTopic(threadId);
-		log.info("init messages ok");
 		try {
+			Vector<Message> msgs = generateTopic(threadId);
+			log.info("init messages ok");
 			barrier.await();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (BrokenBarrierException e) {
-			e.printStackTrace();
-		}
-		log.info("begin write!");
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-			if (msg.getOffset != msg.offset) {
-				log.error("offset error !");
+
+			log.info("begin write!");
+			for (int i = 0; i < msgs.size(); i++) {
+				Message msg = msgs.get(i);
+				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+				if (msg.getOffset != msg.offset) {
+					log.error("offset error !");
+				}
 			}
-		}
-		try {
 			barrier.await();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (BrokenBarrierException e) {
-			e.printStackTrace();
-		}
 
-		log.info("begin read!");
-		Map<Integer, ByteBuffer> result;
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-			msg.buf.position(0);
-			if (result.get(0).compareTo(msg.buf) != 0) {
-				log.error("data error !");
+			log.info("begin read!");
+			Map<Integer, ByteBuffer> result;
+			for (int i = 0; i < msgs.size(); i++) {
+				Message msg = msgs.get(i);
+				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				msg.buf.position(0);
+				if (result.get(0).compareTo(msg.buf) != 0) {
+					log.error("data error !");
+				}
 			}
-		}
 
-
-		msgs = generateGetRange(threadId);
-		try {
 			barrier.await();
+
+			msgs = generateGetRange(threadId);
+			log.info("begin other read!");
+			for (int i = 0; i < msgs.size(); i++) {
+				Message msg = msgs.get(i);
+				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				msg.buf.position(0);
+			}
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		} catch (BrokenBarrierException e) {
 			e.printStackTrace();
 		}
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-			msg.buf.position(0);
-		}
 
-		log.info("begin other read!");
 	}
 
 	public static void testThreadPool() {
