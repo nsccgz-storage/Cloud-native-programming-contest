@@ -270,6 +270,9 @@ public class Test1MessageQueue {
             double curWriteBandwidth = 0; // MiB/s
             double thisElapsedTimeS = 0;
 
+            int[] curAppendCount = new int[getNumOfThreads];
+            int[] curGetRangeCount = new int[getNumOfThreads];
+
             // current
             // get the stat for this period
             if (oldStats != null) {
@@ -280,6 +283,7 @@ public class Test1MessageQueue {
                     double appendElapsedTimeS = (stats[i].appendEndTime - oldStats[i].appendEndTime)
                             / ((double) (1000 * 1000 * 1000));
                     double appendCount = stats[i].appendCount - oldStats[i].appendCount;
+                    curAppendCount[i] = stats[i].appendCount - oldStats[i].appendCount;
                     appendTpPerThread[i] = (appendCount) / appendElapsedTimeS;
                     appendLatencyPerThread[i] = appendElapsedTimeMS / appendCount;
                     double getRangeElapsedTimeMS = (stats[i].getRangeEndTime - oldStats[i].getRangeEndTime)
@@ -287,6 +291,7 @@ public class Test1MessageQueue {
                     double getRangeElapsedTimeS = (stats[i].getRangeEndTime - oldStats[i].getRangeEndTime)
                             / ((double) (1000 * 1000 * 1000));
                     double getRangeCount = stats[i].getRangeCount - oldStats[i].getRangeCount;
+                    curGetRangeCount[i] = stats[i].getRangeCount - oldStats[i].getRangeCount;
                     getRangeTpPerThread[i] = getRangeCount / getRangeElapsedTimeS;
                     getRangeLatencyPerThread[i] = getRangeElapsedTimeMS / getRangeCount;
                     double dataSize = (stats[i].writeBytes - oldStats[i].writeBytes) / (double) (1024 * 1024);
@@ -304,13 +309,21 @@ public class Test1MessageQueue {
                 curAppendLatency /= getNumOfThreads;
                 curGetRangeLatency /= getNumOfThreads;
             }
-
+            
+            String appendStat = "";
+            String getRangeStat = "";
+            for (int i = 0; i < getNumOfThreads; i++){
+                appendStat += String.format("%d,", curAppendCount[i]);
+                getRangeStat += String.format("%d,", curAppendCount[i]);
+            }
             String csvStat = String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
                     writeBandwidth, elapsedTimeS, appendThroughput, appendLatency, getRangeThroughput, getRangeLatency,
                     curWriteBandwidth, thisElapsedTimeS, curAppendThroughput, curAppendLatency, curGetRangeThroughput,
                     curGetRangeLatency);
 
-            log.info(csvStat);
+            log.info("appendStat   :"+appendStat);
+            log.info("getRangeStat :"+getRangeStat);
+            log.info("csvStat      :"+csvStat);
 
             // log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
 
