@@ -173,6 +173,7 @@ public class Test1MessageQueue {
             log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency);
 
             // current
+            // TODO:  get the stat for this period
 
 
             oldStats = stats.clone();
