@@ -84,8 +84,20 @@ public class Test1 {
 	public static Vector<Message> generateTopic(int i) {
 		String topicName = "topic" + i;
 		Vector<Message> msgs = new Vector<>();
-		for (long offset = 0; offset < 999; offset++) {
+		for (long offset = 0; offset < 99; offset++) {
 			for (int queueId = 0; queueId < 99; queueId++) {
+				Message msg = new Message(topicName, queueId, offset);
+				msgs.add(msg);
+			}
+		}
+		return msgs;
+	}
+
+	public static Vector<Message> generateGetRange(int i) {
+		String topicName = "topic" + i;
+		Vector<Message> msgs = new Vector<>();
+		for (long offset = 900; offset < 1300; offset++) {
+			for (int queueId = 50; queueId < 150; queueId++) {
 				Message msg = new Message(topicName, queueId, offset);
 				msgs.add(msg);
 			}
@@ -129,11 +141,28 @@ public class Test1 {
 				log.error("data error !");
 			}
 		}
+
+
+		msgs = generateGetRange(threadId);
+		try {
+			barrier.await();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+		for (int i = 0; i < msgs.size(); i++) {
+			Message msg = msgs.get(i);
+			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+			msg.buf.position(0);
+		}
+
+		log.info("begin other read!");
 	}
 
 	public static void testThreadPool() {
 		Test1MessageQueue mq = new Test1MessageQueue("/mnt/ssd/mq");
-		int numOfThreads = 2;
+		int numOfThreads = 16;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();

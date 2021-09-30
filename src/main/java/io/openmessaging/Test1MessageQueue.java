@@ -116,7 +116,7 @@ public class Test1MessageQueue {
             stats[id].appendEndTime = System.nanoTime();
             stats[id].appendCount += 1;
             stats[id].writeBytes += data.capacity();
-            stats[id].writeBytes += Integer.BYTES; // 元数据
+            stats[id].writeBytes += Integer.BYTES; // metadata
             if (id == 1){
                 update();
             }
@@ -509,12 +509,14 @@ public class Test1MessageQueue {
         DataFile df = dataFiles.get(dataFileId);
 
         for (int i = 0; i < fetchNum; i++){
-            pos = q.queueMap.get(offset+i);
-            ByteBuffer bbf = df.read(pos);
-            if (bbf != null){
-                bbf.position(0);
-                bbf.limit(bbf.capacity());
-                ret.put(i, bbf);
+            if (q.queueMap.containsKey(offset+i)){
+                pos = q.queueMap.get(offset+i);
+                ByteBuffer bbf = df.read(pos);
+                if (bbf != null){
+                    bbf.position(0);
+                    bbf.limit(bbf.capacity());
+                    ret.put(i, bbf);
+                }
             }
         }
 
