@@ -38,13 +38,33 @@ import java.util.concurrent.locks.Condition;
 public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
-        int numOfDataFiles = 8;
-        int minBufLength = 8;
-        int minBufNum = 32768;
-        boolean useWriteAgg = false;
+        // // local : 120MiB/s   
+        int numOfDataFiles = 4;
+        int minBufNum = 20;
+        int minBufLength = 28672;
+        int timeOutMS = 150;
+        boolean fairLock = true;
+        boolean useWriteAgg = true;
+
+        // int numOfDataFiles = 3;
+        // int minBufNum = 20;
+        // int minBufLength = 32768;
+        // int timeOutMS = 150;
+        // boolean fairLock = true;
+        // boolean useWriteAgg = true;
+
+
+
+        // int minBufLength = 32768;
+        
+        // int minBufLength = 24576;
+        // int minBufLength = 16384;
+        // boolean useWriteAgg = true;
+        // boolean fairLock = false;
+        // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            String ret = String.format("numOfDataFiles=%d | minBufLength=%d | minBufNum=%d",numOfDataFiles,minBufLength,minBufNum);
+            String ret = String.format("numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d",numOfDataFiles,minBufLength,minBufNum,timeOutMS);
             return ret;
         }
     }
@@ -312,7 +332,7 @@ public class Test1MessageQueue {
             // writeMeta = ByteBuffer.allocate(Integer.BYTES);
             // readMeta = ByteBuffer.allocate(Integer.BYTES);
             // readTmp = ByteBuffer.allocate(Integer.BYTES+17408);
-            fileLock = new ReentrantLock(true);
+            fileLock = new ReentrantLock(mqConfig.fairLock);
             writeAggCondition = fileLock.newCondition();
             // 写聚合
             minBufLength = mqConfig.minBufLength; // 缓冲区长度 32KiB
@@ -401,7 +421,13 @@ public class Test1MessageQueue {
                 log.debug("update position to: " + curPosition);
 
                 // TODO: 条件调优
-                if (curBufLength >= minBufLength || curBufNum >= minBufNum) {
+                if (curBufNum >= minBufNum || curBufLength >= minBufLength) {
+                    if (curBufNum >= minBufNum){
+                        log.info("Write Aggregate by number of data!");
+                    }
+                    if (curBufLength >= minBufLength){
+                        // log.info("Write Aggregate by length of buffer!");
+                    }
                     dataFileChannel.force(true);
                     writeAggCondition.signalAll();
                     curBufLength = 0;
@@ -410,7 +436,7 @@ public class Test1MessageQueue {
                     try {
                         // writeAggCondition.wait(10, 0);
                         // writeAggCondition.await();
-                        Boolean isTimeOut = !writeAggCondition.await(100, TimeUnit.MILLISECONDS);
+                        Boolean isTimeOut = !writeAggCondition.await(mqConfig.timeOutMS, TimeUnit.MILLISECONDS);
                         if (isTimeOut){
                             log.info("Time Out !!");
                             dataFileChannel.force(true);
