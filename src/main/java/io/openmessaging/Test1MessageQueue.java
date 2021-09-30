@@ -334,7 +334,7 @@ public class Test1MessageQueue {
                 int ret;
                 // dataFileChannel.read(tmp);
                 ret = dataFileChannel.read(readMeta, position);
-                readMeta.flip();
+                readMeta.position(0);
                 int dataLength = readMeta.getInt();
                 ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position+readMeta.capacity());
