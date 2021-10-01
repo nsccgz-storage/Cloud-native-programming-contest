@@ -81,11 +81,19 @@ public class Test1MessageQueue {
         // boolean fairLock = true;
         // boolean useWriteAgg = true; // 使用写聚合
 
-        // version 3: test for online
-        int numOfDataFiles = 5;
-        int minBufNum = 3;
-        int minBufLength = 24576;
-        int timeOutMS = 15;
+        // // version 3: test for online
+        // int numOfDataFiles = 5;
+        // int minBufNum = 3;
+        // int minBufLength = 24576;
+        // int timeOutMS = 15;
+        // boolean fairLock = true;
+        // boolean useWriteAgg = true; // 使用写聚合
+
+        // version 4: test for online
+        int numOfDataFiles = 4;
+        int minBufNum = 4;
+        int minBufLength = 32768;
+        int timeOutMS = 10;
         boolean fairLock = true;
         boolean useWriteAgg = true; // 使用写聚合
 
