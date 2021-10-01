@@ -44,12 +44,12 @@ public class Test1MessageQueue {
 
 
         // version 0: local SSD: 70 MiB/s   
-        int numOfDataFiles = 10;
-        int minBufNum = 20; // 无效
-        int minBufLength = 32768; // 无效
-        int timeOutMS = 150; // 无效
-        boolean fairLock = true;
-        boolean useWriteAgg = false; // 不使用写聚合
+        // int numOfDataFiles = 10;
+        // int minBufNum = 20; // 无效
+        // int minBufLength = 32768; // 无效
+        // int timeOutMS = 150; // 无效
+        // boolean fairLock = true;
+        // boolean useWriteAgg = false; // 不使用写聚合
 
         // version 1: local SSD: 110MiB/s   
         // int numOfDataFiles = 4;
@@ -84,6 +84,15 @@ public class Test1MessageQueue {
         // int timeOutMS = 200;
         // boolean fairLock = true;
         // boolean useWriteAgg = true; // 使用写聚合
+
+        // version 4: test for online
+        int numOfDataFiles = 4;
+        int minBufNum = 4;
+        int minBufLength = 32768;
+        int timeOutMS = 10;
+        boolean fairLock = true;
+        boolean useWriteAgg = true; // 使用写聚合
+
 
 
 
