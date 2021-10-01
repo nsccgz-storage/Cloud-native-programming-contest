@@ -314,7 +314,7 @@ public class Test1MessageQueue {
             String getRangeStat = "";
             for (int i = 0; i < getNumOfThreads; i++){
                 appendStat += String.format("%d,", curAppendCount[i]);
-                getRangeStat += String.format("%d,", curAppendCount[i]);
+                getRangeStat += String.format("%d,", curGetRangeCount[i]);
             }
             String csvStat = String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
                     writeBandwidth, elapsedTimeS, appendThroughput, appendLatency, getRangeThroughput, getRangeLatency,
