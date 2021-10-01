@@ -73,8 +73,8 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = true; // 使用写聚合
 
         // version 3: test for online
-        int numOfDataFiles = 4;
-        int minBufNum = 4;
+        int numOfDataFiles = 5;
+        int minBufNum = 3;
         int minBufLength = 24576;
         int timeOutMS = 200;
         boolean fairLock = true;
