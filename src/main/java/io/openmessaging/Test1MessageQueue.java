@@ -109,19 +109,25 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false; // 使用写聚合
         // boolean useWriteAggDirect = true;
 
-        int numOfDataFiles = 4;
-        int minBufNum = 5;
-        int minBufLength = 32768;
-        int timeOutMS = 8;
-        boolean fairLock = true;
-        int writeMethod = 4; 
+        // int numOfDataFiles = 4;
+        // int minBufNum = 5;
+        // int minBufLength = 32768;
+        // int timeOutMS = 8;
+        // boolean fairLock = true;
+        // int writeMethod = 1; 
         // 0: no write agg
         // 1: write agg (best)
         // 2: write agg direct
         // 3. write agg heap
         // 4. syncSeqWritePushQueue
 
-
+        int numOfDataFiles = 4;
+        int minBufNum = 5;
+        int minBufLength = 32768;
+        int timeOutMS = 8;
+        boolean fairLock = true;
+        int writeMethod = 4; 
+ 
 
         // version just for test
         // int numOfDataFiles = 4;
@@ -143,7 +149,7 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,32KiB (8KiB if data < 1KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
     private static MQConfig mqConfig = new MQConfig();
@@ -471,7 +477,7 @@ public class Test1MessageQueue {
             writeAggDirectBuffer.position(0);
 
             writerQueue = new ArrayDeque<>();
-            writerQueueLock = new ReentrantLock();
+            writerQueueLock = new ReentrantLock(false);
             writerQueueCondition = writerQueueLock.newCondition();
         }
 
@@ -765,20 +771,34 @@ public class Test1MessageQueue {
             long position = 0L;
             try {
                 writerQueueLock.lock();
+                // only for debug
+                // fileLock.lock();
+                // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
+                // fileLock.unlock();
+ 
+                log.debug("try to new a writer to queue");
                 Writer w = new Writer(data, writerQueueCondition);
-                writerQueue.push(w);
+                writerQueue.addLast(w);
+                log.debug(writerQueue);
+                log.debug(writerQueue.getFirst());
                 while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
+                    log.debug("wait for the leader of queue");
                     w.cv.await();
                 }
                 if (w.done == 1){
+                    log.debug(w.position);
                     return w.position;
                 }
                 log.debug("I am the head");
-
+                
+                // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 32*1024; // 32 KiB
+                int maxBufLength = 36*1024; // 32 KiB
+                if (w.data.remaining() < 1024){
+                    maxBufLength = 8192;
+                }
                 int bufNum = 0;
-                int maxBufNum = 4;
+                int maxBufNum = 6;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
@@ -789,6 +809,7 @@ public class Test1MessageQueue {
                 Writer lastWriter = null;
                 while ( iter.hasNext() && continueMerge ){
                     lastWriter = iter.next();
+                    log.debug(lastWriter);
                     writeMeta.position(0);
                     writeMeta.putInt(lastWriter.data.remaining());
                     writeMeta.position(0);
@@ -812,13 +833,15 @@ public class Test1MessageQueue {
                 }
                 curPosition = position;
                 {
+                    log.debug("need to flush, unlock !");
                     writerQueueLock.unlock();
                     dataFileChannel.force(true);
                     writerQueueLock.lock();
+                    log.debug("flush ok , get the lock again!");
                 }
 
                 while(true){
-                    Writer ready = writerQueue.pop();;
+                    Writer ready = writerQueue.removeFirst();
                     if (!ready.equals(w)){
                         ready.done = 1;
                         ready.cv.signal();
@@ -831,6 +854,7 @@ public class Test1MessageQueue {
                 if (!writerQueue.isEmpty()){
                     writerQueue.getFirst().cv.signal();
                 }
+                log.debug(w.position);
                 position = w.position;
 
             } catch (IOException ie) {
