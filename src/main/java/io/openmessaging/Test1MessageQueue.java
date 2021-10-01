@@ -123,6 +123,7 @@ public class Test1MessageQueue {
                 getRangeEndTime = 0L;
                 getRangeCount = 0;
                 writeBytes = 0L;
+                reported = new AtomicBoolean();
                 reported.set(false);
             }
 
