@@ -107,7 +107,7 @@ public class Test1MessageQueue {
         // boolean useWriteAggDirect = true;
 
         int numOfDataFiles = 4;
-        int minBufNum = 4;
+        int minBufNum = 5;
         int minBufLength = 32768;
         int timeOutMS = 10;
         boolean fairLock = true;
