@@ -40,16 +40,15 @@ import java.nio.MappedByteBuffer;
 public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
-        boolean useStats = false;
-
+        boolean useStats = true;
 
         // version 0: local SSD: 70 MiB/s   
-        // int numOfDataFiles = 10;
-        // int minBufNum = 20; // 无效
-        // int minBufLength = 32768; // 无效
-        // int timeOutMS = 150; // 无效
-        // boolean fairLock = true;
-        // boolean useWriteAgg = false; // 不使用写聚合
+        int numOfDataFiles = 10;
+        int minBufNum = 20; // 无效
+        int minBufLength = 32768; // 无效
+        int timeOutMS = 150; // 无效
+        boolean fairLock = true;
+        boolean useWriteAgg = false; // 不使用写聚合
 
         // version 1: local SSD: 110MiB/s   
         // int numOfDataFiles = 4;
@@ -85,13 +84,13 @@ public class Test1MessageQueue {
         // boolean fairLock = true;
         // boolean useWriteAgg = true; // 使用写聚合
 
-        // version 4: test for online
-        int numOfDataFiles = 4;
-        int minBufNum = 4;
-        int minBufLength = 32768;
-        int timeOutMS = 10;
-        boolean fairLock = true;
-        boolean useWriteAgg = true; // 使用写聚合
+        // // version 4: test for online
+        // int numOfDataFiles = 4;
+        // int minBufNum = 4;
+        // int minBufLength = 32768;
+        // int timeOutMS = 10;
+        // boolean fairLock = true;
+        // boolean useWriteAgg = true; // 使用写聚合
 
 
 
@@ -450,6 +449,41 @@ public class Test1MessageQueue {
             return position;
         }
 
+        public Long syncSeqWriteDirect(ByteBuffer data) {
+            fileLock.lock();
+            if (threadLocalWriteMetaBuf.get() == null) {
+                threadLocalWriteMetaBuf.set(ByteBuffer.allocateDirect(writeMetaLength));
+                // log.info(threadLocalWriteMetaBuf.get());
+                // log.info(threadLocalWriteMetaBuf);
+            }
+            ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
+
+            int datalength = data.remaining();
+            // int datalength = data.capacity();
+            log.debug(writeMeta);
+            writeMeta.clear();
+            log.debug(datalength);
+            writeMeta.putInt(datalength);
+            writeMeta.position(0);
+            long position = curPosition;
+            log.debug("position : " + position);
+            int ret = 0;
+            try {
+                // ByteBuffer buf = ByteBuffer.allocate(data.remaining());
+                ret += dataFileChannel.write(writeMeta, position);
+                ret += dataFileChannel.write(data, position + writeMeta.capacity());
+                dataFileChannel.force(true);
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            }
+            log.debug("write size : " + ret);
+            log.debug("data size : " + datalength);
+            curPosition += ret;
+            log.debug("update position to: " + curPosition);
+            fileLock.unlock();
+            return position;
+        }
+
         public Long syncSeqWriteAgg(ByteBuffer data) {
             fileLock.lock();
 
@@ -690,7 +724,8 @@ public class Test1MessageQueue {
         if (mqConfig.useWriteAgg){
             position = df.syncSeqWriteAgg(data);
         } else {
-            position = df.syncSeqWrite(data);
+            // position = df.syncSeqWrite(data);
+            position = df.syncSeqWriteDirect(data);
         }
         q.queueMap.put(q.maxOffset, position);
         Long ret = q.maxOffset;
