@@ -39,6 +39,7 @@ import java.util.concurrent.locks.Condition;
 public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
+        boolean useStats = false;
         // // version 0: local SSD: 70 MiB/s   
         // int numOfDataFiles = 10;
         // int minBufNum = 20; // 无效
@@ -108,7 +109,7 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            return String.format("useWriteAgg=%b | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d",useWriteAgg,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | useWriteAgg=%b | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d",useStats,useWriteAgg,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
     private static MQConfig mqConfig = new MQConfig();
@@ -646,7 +647,9 @@ public class Test1MessageQueue {
             }
         }
 
-        testStat = new TestStat();
+        if (mqConfig.useStats){
+            testStat = new TestStat();
+        }
 
         log.info("init ok!");
     }
@@ -661,7 +664,9 @@ public class Test1MessageQueue {
     }
 
     public long append(String topic, int queueId, ByteBuffer data) {
-        testStat.appendStart();
+        if (mqConfig.useStats){
+            testStat.appendStart();
+        }
         MQTopic mqTopic;
         MQQueue q;
         if (!mqMap.containsKey(topic)) {
@@ -695,7 +700,9 @@ public class Test1MessageQueue {
         Long ret = q.maxOffset;
         q.maxOffset++;
 
-        testStat.appendUpdateStat(topic, queueId, data);
+        if (mqConfig.useStats){
+            testStat.appendUpdateStat(topic, queueId, data);
+        }
         return ret;
     }
 
@@ -708,8 +715,10 @@ public class Test1MessageQueue {
      * @param fetchNum 读取消息个数，不超过100
      */
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        testStat.getRangeStart();
-        testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
+        if (mqConfig.useStats){
+            testStat.getRangeStart();
+            testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
+        }
         Map<Integer, ByteBuffer> ret = new HashMap<>();
         MQTopic mqTopic;
         MQQueue q;
