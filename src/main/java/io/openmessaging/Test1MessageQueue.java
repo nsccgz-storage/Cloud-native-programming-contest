@@ -44,13 +44,14 @@ public class Test1MessageQueue {
         // Level logLevel = Level.DEBUG;
         Level logLevel = Level.INFO;
 
-        // version 0: local SSD: 70 MiB/s   
+        // // version 0: local SSD: 70 MiB/s   
         // int numOfDataFiles = 10;
         // int minBufNum = 20; // 无效
         // int minBufLength = 32768; // 无效
         // int timeOutMS = 500; // 无效
         // boolean fairLock = true;
         // boolean useWriteAgg = false; // 不使用写聚合
+        // boolean useWriteAggDirect = false;
 
         // version 1: local SSD: 110MiB/s   
         // int numOfDataFiles = 4;
@@ -93,15 +94,30 @@ public class Test1MessageQueue {
         // int timeOutMS = 10;
         // boolean fairLock = true;
         // boolean useWriteAgg = true; // 使用写聚合
+        // boolean useWriteAggDirect = false; 
+        // boolean useWriteAggHeap = false;
 
         // version 5: test for online
+        // int numOfDataFiles = 4;
+        // int minBufNum = 4;
+        // int minBufLength = 32768;
+        // int timeOutMS = 10;
+        // boolean fairLock = true;
+        // boolean useWriteAgg = false; // 使用写聚合
+        // boolean useWriteAggDirect = true;
+
         int numOfDataFiles = 4;
         int minBufNum = 4;
         int minBufLength = 32768;
         int timeOutMS = 10;
         boolean fairLock = true;
-        boolean useWriteAgg = true; // 使用写聚合
-        boolean useWriteAggDirect = true;
+        int writeMethod = 1; 
+        // 0: no write agg
+        // 1: write agg (best)
+        // 2: write agg direct
+        // 3. write agg heap
+
+
 
         // version just for test
         // int numOfDataFiles = 4;
@@ -123,7 +139,7 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            return String.format("useStats=%b | useWriteAgg=%b | useWriteAggDirect=%b | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d",useStats,useWriteAgg,useWriteAggDirect,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
     private static MQConfig mqConfig = new MQConfig();
@@ -396,7 +412,9 @@ public class Test1MessageQueue {
         public Condition writeAggCondition;
 
         public ByteBuffer writeAggDirectBuffer;
+        public ByteBuffer writeAggHeapBuffer;
         public int writeAggDirectBufferCapacity;
+        public int writeAggHeapBufferCapacity;
 
         DataFile(String dataFileName) {
             // atomicCurPosition = new AtomicLong(0);
@@ -425,6 +443,10 @@ public class Test1MessageQueue {
             
             writeAggDirectBufferCapacity = 1024*1024;
             writeAggDirectBuffer = ByteBuffer.allocateDirect(writeAggDirectBufferCapacity); // 1MiB 的direct buffer
+            writeAggDirectBuffer.position(0);
+
+            writeAggHeapBufferCapacity = 1024*1024;
+            writeAggHeapBuffer = ByteBuffer.allocate(writeAggHeapBufferCapacity);
             writeAggDirectBuffer.position(0);
         }
 
@@ -517,8 +539,7 @@ public class Test1MessageQueue {
             try {
                 if (threadLocalWriteMetaBuf.get() == null) {
                     threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
-                    // log.info(threadLocalWriteMetaBuf.get());
-                    // log.info(threadLocalWriteMetaBuf);
+                    // threadLocalWriteMetaBuf.set(ByteBuffer.allocateDirect(writeMetaLength));
                 }
                 ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
 
@@ -629,6 +650,69 @@ public class Test1MessageQueue {
                             curBufNum = 0;
                             writeAggCondition.signalAll();
                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                    // catch (TimeoutException e){
+                    //     log.info("Time Out !!");
+                    //     System.out.println("Time out !");
+                    // }
+                }
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            } finally {
+                fileLock.unlock();
+            }
+
+            return position;
+        }
+
+        public Long syncSeqWriteAggHeap(ByteBuffer data) {
+            fileLock.lock();
+
+            int ret = 0;
+            Long position = 0L;
+            try {
+                int datalength = data.remaining();
+                writeAggHeapBuffer.putInt(datalength).put(data);
+                position = curPosition + curBufLength;
+                curBufLength += Integer.BYTES+datalength;
+                curBufNum += 1;
+
+                // TODO: 条件调优
+                if (curBufNum >= minBufNum || curBufLength >= minBufLength) {
+                    if (curBufNum >= minBufNum){
+                        log.debug("Write Aggregate by number of data!");
+                    }
+                    if (curBufLength >= minBufLength){
+                        log.debug("Write Aggregate by length of buffer!");
+                    }
+                    writeAggHeapBuffer.position(0);
+                    writeAggHeapBuffer.limit(curBufLength);
+                    ret = dataFileChannel.write(writeAggHeapBuffer, curPosition);
+                    dataFileChannel.force(true);
+                    curPosition += ret;
+                    writeAggHeapBuffer.position(0);
+                    writeAggHeapBuffer.limit(writeAggHeapBufferCapacity);
+                    curBufLength = 0;
+                    curBufNum = 0;
+                    writeAggCondition.signalAll();
+                } else {
+                    try {
+                        Boolean isTimeOut = !writeAggCondition.await(mqConfig.timeOutMS, TimeUnit.MILLISECONDS);
+                        if (isTimeOut){
+                            log.debug("Time Out !!");
+                            writeAggHeapBuffer.position(0);
+                            writeAggHeapBuffer.limit(curBufLength);
+                            ret = dataFileChannel.write(writeAggHeapBuffer, curPosition);
+                            dataFileChannel.force(true);
+                            curPosition += ret;
+                            writeAggHeapBuffer.position(0);
+                            writeAggHeapBuffer.limit(writeAggHeapBufferCapacity);
+                            curBufLength = 0;
+                            curBufNum = 0;
+                            writeAggCondition.signalAll();
+                        }
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -810,15 +894,22 @@ public class Test1MessageQueue {
 
         DataFile df = dataFiles.get(dataFileId);
         long position = 0;
-        if (mqConfig.useWriteAgg){
-            if (mqConfig.useWriteAggDirect){
-                position = df.syncSeqWriteAggDirect(data);
-            } else {
+        switch (mqConfig.writeMethod) {
+            case 0:
+                position = df.syncSeqWrite(data);
+                break;
+            case 1:
                 position = df.syncSeqWriteAgg(data);
-            }
-        } else {
-            // position = df.syncSeqWrite(data);
-            position = df.syncSeqWriteDirect(data);
+                break;
+            case 2:
+                position = df.syncSeqWriteAggDirect(data);
+                break;
+            case 3:
+                position = df.syncSeqWriteAggHeap(data);
+                break;
+            default:
+                position = df.syncSeqWrite(data);
+                break;
         }
         q.queueMap.put(q.maxOffset, position);
         Long ret = q.maxOffset;
