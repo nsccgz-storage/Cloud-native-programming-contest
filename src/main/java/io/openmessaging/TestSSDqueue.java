@@ -6,7 +6,6 @@ import io.openmessaging.DefaultMessageQueueImpl;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
-import java.io.IOException;
 import java.lang.Integer;
 import java.util.Random;
 import java.util.Arrays;
@@ -21,10 +20,17 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.Map;
+
 import java.util.concurrent.BrokenBarrierException;
 
-public class Test1 {
-	private static final Logger log = Logger.getLogger(Test1.class);
+public class TestSSDqueue {
+	private static final Logger log = Logger.getLogger(TestSSDqueue.class);
 	public static Random rand = new Random();
 
 	private static class Message {
@@ -62,9 +68,8 @@ public class Test1 {
 		return msgs;
 	}
 
-	public static void testOne() throws IOException{
-		//Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
-		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
+	public static void testOne() {
+		Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
 		Vector<Message> msgs = generateOne();
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
@@ -95,7 +100,7 @@ public class Test1 {
 		return msgs;
 	}
 
-	public static void threadRun(int threadId, DefaultMessageQueueImpl mq, CyclicBarrier barrier) {
+	public static void threadRun(int threadId, SSDqueue mq, CyclicBarrier barrier) {
 		Vector<Message> msgs = generateTopic(threadId);
 		log.info("init messages ok");
 		try {
@@ -105,12 +110,17 @@ public class Test1 {
 		} catch (BrokenBarrierException e) {
 			e.printStackTrace();
 		}
-		log.info("begin write!");
+		log.info("begin append!");
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
-			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+			try {
+				msg.getOffset = mq.setTopic(msg.topic, msg.queueId, msg.buf);
+			} catch (IOException ie) {
+				ie.printStackTrace();
+			}
 			if (msg.getOffset != msg.offset) {
 				log.error("offset error !");
+				return;
 			}
 		}
 		try {
@@ -121,44 +131,64 @@ public class Test1 {
 			e.printStackTrace();
 		}
 
-		log.info("begin read!");
+		log.info("begin getRange!");
+
 		Map<Integer, ByteBuffer> result;
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
-			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-			msg.buf.position(0);
-			if (result.get(0).compareTo(msg.buf) != 0) {
-				log.error("data error !");
+			try {
+				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				msg.buf.position(0);
+				if (result.get(0).compareTo(msg.buf) != 0) {
+					log.error("data error !");
+					return;
+				}
+
+			} catch (IOException ie) {
+				ie.printStackTrace();
 			}
 		}
 	}
 
 	public static void testThreadPool() {
-		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
-		int numOfThreads = 2;
-		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
-		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
-		long startTime = System.nanoTime();
-		for (int i = 0; i < numOfThreads; i++) {
-			final int thread_id = i;
-			executor.execute(() -> {
-				threadRun(thread_id, mq, barrier);
 
-			});
-		}
-		executor.shutdown();
+		String metaPath = "/mnt/nvme/mq/MetaData";
+		String dataPath = "/mnt/nvme/mq/Data";
+		// System.out.println(" 28 ");
+
 		try {
-			// Wait a while for existing tasks to terminate
-			while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-				System.out.println("Pool did not terminate, waiting ...");
+			FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
+			FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+			SSDqueue mq = new SSDqueue(fileChannel, metaFileChannel, false);
+			int numOfThreads = 1;
+			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
+			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
+			long startTime = System.nanoTime();
+			for (int i = 0; i < numOfThreads; i++) {
+				final int thread_id = i;
+				executor.execute(() -> {
+					threadRun(thread_id, mq, barrier);
+
+				});
 			}
-		} catch (InterruptedException ie) {
-			executor.shutdownNow();
+
+			executor.shutdown();
+			try {
+				// Wait a while for existing tasks to terminate
+				while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+					System.out.println("Pool did not terminate, waiting ...");
+				}
+			} catch (InterruptedException ie) {
+				executor.shutdownNow();
+				ie.printStackTrace();
+			}
+			long elapsedTime = System.nanoTime() - startTime;
+			double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+			log.info("time: " + elapsedTimeS);
+
+		} catch (IOException ie) {
 			ie.printStackTrace();
 		}
-		long elapsedTime = System.nanoTime() - startTime;
-		double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
-		log.info("time: " + elapsedTimeS);
 	}
 
 	public static void main(String[] args) {

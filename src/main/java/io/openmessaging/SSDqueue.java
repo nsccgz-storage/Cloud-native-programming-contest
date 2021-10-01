@@ -14,15 +14,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 
 public class SSDqueue{
-<<<<<<< Updated upstream
     static volatile  Long FREE_OFFSET = 0L;
     static volatile  Long META_FREE_OFFSET = 0L;
-=======
-	private static final Logger log = Logger.getLogger(SSDqueue.class);
-    static AtomicLong FREE_OFFSET;
-    static AtomicLong   META_FREE_OFFSET;
-    static AtomicInteger currentNum;
->>>>>>> Stashed changes
 
     int QUEUE_NUM = 10000;
     int TOPIC_NUM = 100;
@@ -102,14 +95,6 @@ public class SSDqueue{
         return resData.readAll();
 
     }
-<<<<<<< Updated upstream
-    public Long setTopic(String topicName, int queueId, ByteBuffer data){
-    
-        try {
-            Map<Integer, Long> topicData = queueTopicMap.get(topicName);
-            if(topicData == null){
-                // 增加 topicIdArray
-=======
     public Long setTopic(String topicName, int queueId, ByteBuffer data)throws IOException{
         Map<Integer, Long> topicData = queueTopicMap.get(topicName);
         if(topicData == null){
@@ -148,7 +133,6 @@ public class SSDqueue{
             //System.out.println("112: w meta: "+ writeData.getMetaOffset());
 
             return res;
->>>>>>> Stashed changes
 
                 // 自下而上
                 Data writeData = new Data(fileChannel);
