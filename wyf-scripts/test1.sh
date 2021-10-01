@@ -1,6 +1,7 @@
 #!/bin/bash
 
-DBDIR=/mnt/nvme/mq
+#DBDIR=/mnt/nvme/mq
+DBDIR=/mnt/ssd/mq
 
 ulimit -s unlimited
 
@@ -21,6 +22,6 @@ ls -l ${DBDIR}
 #/usr/bin/env /usr/lib/jvm/java-11-openjdk-11.0.12.0.7-0.el7_9.x86_64/bin/java -Dfile.encoding=UTF-8 @/tmp/cp_9zzf273crprs1fknagj5ly7kh.argfile -Xmx128g  -Xss2g io.openmessaging.TestSSDqueue 
 
 # on cn3
-/usr/bin/env /usr/lib/jvm/java-11/bin/java -Dfile.encoding=UTF-8 @/tmp/cp_9zzf273crprs1fknagj5ly7kh.argfile -Xmx128g  -Xss1g io.openmessaging.Test1 
+/usr/bin/env /usr/lib/jvm/java-11/bin/java -Dfile.encoding=UTF-8 @/tmp/cp_9zzf273crprs1fknagj5ly7kh.argfile -Xmx128g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.Test1  ${DBDIR}
 
 ls -l ${DBDIR}
