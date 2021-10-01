@@ -109,7 +109,7 @@ public class Test1MessageQueue {
         int numOfDataFiles = 4;
         int minBufNum = 5;
         int minBufLength = 32768;
-        int timeOutMS = 10;
+        int timeOutMS = 8;
         boolean fairLock = true;
         int writeMethod = 1; 
         // 0: no write agg
