@@ -40,12 +40,12 @@ public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
         // // version 0: local SSD: 70 MiB/s   
-        int numOfDataFiles = 10;
-        int minBufNum = 20; // 无效
-        int minBufLength = 32768; // 无效
-        int timeOutMS = 150; // 无效
-        boolean fairLock = true;
-        boolean useWriteAgg = false; // 不使用写聚合
+        // int numOfDataFiles = 10;
+        // int minBufNum = 20; // 无效
+        // int minBufLength = 32768; // 无效
+        // int timeOutMS = 150; // 无效
+        // boolean fairLock = true;
+        // boolean useWriteAgg = false; // 不使用写聚合
 
         // version 1: local SSD: 110MiB/s   
         // int numOfDataFiles = 4;
@@ -80,6 +80,14 @@ public class Test1MessageQueue {
         // int timeOutMS = 200;
         // boolean fairLock = true;
         // boolean useWriteAgg = true; // 使用写聚合
+
+        // version 3: test for online
+        int numOfDataFiles = 5;
+        int minBufNum = 3;
+        int minBufLength = 24576;
+        int timeOutMS = 15;
+        boolean fairLock = true;
+        boolean useWriteAgg = true; // 使用写聚合
 
 
 
