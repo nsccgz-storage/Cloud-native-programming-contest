@@ -11,6 +11,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -103,6 +104,7 @@ public class Test1MessageQueue {
         Long startTime;
         Long endTime;
         Long opCount;
+        AtomicBoolean reported;
 
         private class ThreadStat {
             Long appendStartTime;
@@ -121,6 +123,7 @@ public class Test1MessageQueue {
                 getRangeEndTime = 0L;
                 getRangeCount = 0;
                 writeBytes = 0L;
+                reported.set(false);
             }
 
             public ThreadStat clone() {
@@ -188,33 +191,38 @@ public class Test1MessageQueue {
             stats[id].appendCount += 1;
             stats[id].writeBytes += data.capacity();
             stats[id].writeBytes += Integer.BYTES; // metadata
-            if (id == 1) {
-                update();
-            }
+            update();
         }
 
         void getRangeUpdateStat(String topic, int queueId, long offset, int fetchNum) {
             int id = threadId.get();
             stats[id].getRangeEndTime = System.nanoTime();
             stats[id].getRangeCount += 1;
-            if (id == 1) {
-                update();
-            }
+            update();
         }
 
         synchronized void update() {
+            if (reported.get() == true){
+                return;
+            }
             if (startTime == 0L) {
                 startTime = System.nanoTime();
+                endTime = System.nanoTime();
             }
             opCount += 1;
+            if (opCount % 10 == 0){
+                return ;
+            }
             Long curTime = System.nanoTime();
             if (curTime - endTime > 5L * 1000L * 1000L * 1000L) {
                 endTime = curTime;
+                reported.set(true);
                 report();
+                reported.set(false);
             }
         }
 
-        void report() {
+        synchronized void report() {
             // throughput, iops for append/getRange
             // writeBandwidth
             int getNumOfThreads = numOfThreads.get();
