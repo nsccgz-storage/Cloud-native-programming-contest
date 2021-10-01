@@ -13,6 +13,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import java.nio.MappedByteBuffer;
+
 public class SSDBench {
 	public static AtomicLong writePosition = new AtomicLong(0);
 	public static Lock benchLock = new ReentrantLock();
@@ -26,29 +28,37 @@ public class SSDBench {
 			System.out.println("dbPath : " + args[0]);
 			String dbPath = args[0] ;
 			FileChannel fileChannel = new RandomAccessFile(new File(dbPath), "rw").getChannel();
-			long totalBenchSize = 4L*1024L*1024L*1024L; // 4GiB
+			// long totalBenchSize = 4L*1024L*1024L*1024L; // 4GiB
 			// long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
 			// long totalBenchSize = 256L*1024L*1024L; //256MiB 
-			// long totalBenchSize = 64L*1024L*1024L; // 64MiB
+			long totalBenchSize = 64L*1024L*1024L; // 64MiB
+			// long totalBenchSize = 16L*1024L*1024L; // 16MiB
 
 			System.out.println("type,thread,ioSize,bandwidth,iops");
-			int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
+			int[] ioSizes = {64, 128, 256, 512, 1*1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
+			for (int i = 0; i < ioSizes.length; i++){
+				benchFileChanneMappedlWrite(fileChannel, totalBenchSize, ioSizes[i]);
+			}
+
+
+			// System.out.println("type,thread,ioSize,bandwidth,iops");
+			// int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
 			for (int i = 0; i < ioSizes.length; i++){
 				benchFileChannelWrite(fileChannel, totalBenchSize, ioSizes[i]); // ioSize = 64KiB
 			}
 
-			for (int t = 1; t <= 50; t+=1){
-				for (int i = 0; i < ioSizes.length; i++){
-					benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, t, ioSizes[i]);
-				}
-			}
+			// for (int t = 1; t <= 50; t+=1){
+			// 	for (int i = 0; i < ioSizes.length; i++){
+			// 		benchFileChannelWriteThreadPool(fileChannel, totalBenchSize, t, ioSizes[i]);
+			// 	}
+			// }
 
 
-			for (int t = 1; t <= 50; t+=1){
-				for (int i = 0; i < ioSizes.length; i++){
-					benchFileChannelWriteThreadPoolRange(fileChannel, totalBenchSize, t, ioSizes[i]);
-				}
-			}
+			// for (int t = 1; t <= 50; t+=1){
+			// 	for (int i = 0; i < ioSizes.length; i++){
+			// 		benchFileChannelWriteThreadPoolRange(fileChannel, totalBenchSize, t, ioSizes[i]);
+			// 	}
+			// }
 
 
 
@@ -255,6 +265,31 @@ public class SSDBench {
 	}
 
 
+
+	public static void benchFileChanneMappedlWrite(FileChannel fileChannel, long totalBenchSize ,int ioSize) throws IOException {
+		int thread = 1;
+		MappedByteBuffer mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, totalBenchSize);
+
+		assert(totalBenchSize % ioSize == 0);
+		long totalBenchCount = totalBenchSize/ioSize;
+		byte[] data = new byte[ioSize];
+		long curPosition = 0L;
+		long maxPosition = totalBenchSize;
+		long startTime = System.nanoTime();    
+		while (curPosition < maxPosition){
+			mappedByteBuffer.put(ByteBuffer.wrap(data));
+			// fileChannel.write(ByteBuffer.wrap(data), curPosition);
+			// fileChannel.force(false);
+			fileChannel.force(true);
+			curPosition += ioSize;
+		}
+		long elapsedTime = System.nanoTime() - startTime;
+		double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
+		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
+		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
+		double iops = totalBenchCount/elapsedTimeS;
+		System.out.println("sequentialMappedWrite,"+thread+","+ioSize+","+bandwidth+","+iops);
+	}
 
 	
 }

@@ -165,8 +165,8 @@ public class Test1 {
 
 	}
 
-	public static void testThreadPool() {
-		Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
+	public static void testThreadPool(String dbPath) {
+		Test1MessageQueue mq = new Test1MessageQueue(dbPath);
 		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -194,8 +194,14 @@ public class Test1 {
 	}
 
 	public static void main(String[] args) {
+		if (args.length < 1){
+			System.out.println("java SSDBench ${dbPath}");
+			return ;
+		}
+		System.out.println("dbPath : " + args[0]);
+		String dbPath = args[0] ;
 		// testOne();
-		testThreadPool();
+		testThreadPool(dbPath);
 		// Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
 		// int ioSize = 1000;
 		// byte[] data = new byte[ioSize];
