@@ -247,7 +247,7 @@ public class Test1MessageQueue {
             int id = threadId.get();
             stats[id].appendEndTime = System.nanoTime();
             stats[id].appendCount += 1;
-            stats[id].writeBytes += data.capacity();
+            stats[id].writeBytes += data.remaining();
             stats[id].writeBytes += Integer.BYTES; // metadata
             update();
         }
