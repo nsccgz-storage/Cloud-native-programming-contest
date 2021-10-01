@@ -323,8 +323,8 @@ public class Test1MessageQueue {
                 getRangeLatency += getRangeLatencyPerThread[i];
                 writeBandwidth += bandwidthPerThread[i];
             }
-            appendThroughput /= getNumOfThreads;
-            getRangeThroughput /= getNumOfThreads;
+            // appendThroughput /= getNumOfThreads;
+            // getRangeThroughput /= getNumOfThreads;
             appendLatency /= getNumOfThreads;
             getRangeLatency /= getNumOfThreads;
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
@@ -370,8 +370,8 @@ public class Test1MessageQueue {
                     curGetRangeLatency += getRangeLatencyPerThread[i];
                     curWriteBandwidth += bandwidthPerThread[i];
                 }
-                curAppendThroughput /= getNumOfThreads;
-                curGetRangeThroughput /= getNumOfThreads;
+                // curAppendThroughput /= getNumOfThreads;
+                // curGetRangeThroughput /= getNumOfThreads;
                 curAppendLatency /= getNumOfThreads;
                 curGetRangeLatency /= getNumOfThreads;
             }
