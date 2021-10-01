@@ -113,11 +113,9 @@ public class TestSSDqueue {
 		log.info("begin append!");
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
-			try {
-				msg.getOffset = mq.setTopic(msg.topic, msg.queueId, msg.buf);
-			} catch (IOException ie) {
-				ie.printStackTrace();
-			}
+			
+			msg.getOffset = mq.setTopic(msg.topic, msg.queueId, msg.buf);
+			
 			if (msg.getOffset != msg.offset) {
 				log.error("offset error !");
 				return;
@@ -136,17 +134,15 @@ public class TestSSDqueue {
 		Map<Integer, ByteBuffer> result;
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
-			try {
-				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-				msg.buf.position(0);
-				if (result.get(0).compareTo(msg.buf) != 0) {
-					log.error("data error !");
-					return;
-				}
-
-			} catch (IOException ie) {
-				ie.printStackTrace();
+			
+			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+			msg.buf.position(0);
+			if (result.get(0).compareTo(msg.buf) != 0) {
+				log.error("data error !");
+				return;
 			}
+
+			
 		}
 	}
 
