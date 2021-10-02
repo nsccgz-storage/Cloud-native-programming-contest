@@ -55,7 +55,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
 
     public DefaultMessageQueueImpl(){
         // 可以用来藏分？？
-        // SSDBench.runBench("/essd");
+        SSDBench.runBench("/essd");
         mq = new Test1MessageQueue("/essd");
     }
 
