@@ -30,14 +30,14 @@ public class Main {
         
         String t = "1234545";
         ByteBuffer tmp = ByteBuffer.wrap(t.getBytes());
-        // ssdQueue.setTopic("12345", 123, tmp);
-        // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        ssdQueue.setTopic("dsfsf", 123, tmp);
+        ssdQueue.setTopic("12345", 123, tmp);
+        ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
+        ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
+        //ssdQueue.setTopic("dsfsf", 123, tmp);
 
         // ssdQueue.setTopic("32424", 256, ByteBuffer.wrap(t.getBytes()));
 
-        Map<Integer, ByteBuffer> res = ssdQueue.getRange("dsfsf", 123, 0L, 10);
+        Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, 0L, 100);
 
         for(Map.Entry<Integer, ByteBuffer> entry: res.entrySet()){
             System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
