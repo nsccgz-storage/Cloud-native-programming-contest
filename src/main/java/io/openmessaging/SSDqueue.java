@@ -204,8 +204,6 @@ public class SSDqueue{
 
             Map<Integer, Long> topicData = queueTopicMap.get(topicName);
             if(topicData == null){
-                // 增加 topicIdArray
-
                 // 自下而上
                 Data writeData = new Data(fileChannel);
 //                Long res = writeData.put(data);
@@ -225,7 +223,7 @@ public class SSDqueue{
                 metaFileChannel.force(true);
                 
                 tmp.clear();
-                tmp = ByteBuffer.allocate(Integer.BYTES);
+                // tmp = ByteBuffer.allocate(Integer.BYTES);
                 tmp.putInt(currentNum.get());
                 tmp.flip();
                 int len = metaFileChannel.write(tmp, 0L);
@@ -259,7 +257,7 @@ public class SSDqueue{
                     // 插入 DRAM 哈希表
                     topicData.put(queueId, writeData.getMetaOffset());
                     queueTopicMap.put(topicName, topicData);
-                    control.put(topicName + queueId, new ReentrantLock());
+                    //control.put(topicName + queueId, new ReentrantLock());
                     
 //                    return res;
                 }else{
@@ -428,7 +426,7 @@ public class SSDqueue{
             byteData.put(data);
             byteData.flip();
             int lens = fileChannel.write(byteData,startOffset);
-            fileChannel.force(true);
+            //fileChannel.force(true);
 
             if(tail == -1L){
                 tail = startOffset;
@@ -439,7 +437,7 @@ public class SSDqueue{
                 tmp.putLong(startOffset);
                 tmp.flip();
                 fileChannel.write(tmp, tail + Long.BYTES); // 更新 nextOffset
-                fileChannel.force(true);
+                //fileChannel.force(true);
                 tail = startOffset;
             }
             
@@ -458,10 +456,11 @@ public class SSDqueue{
             //System.out.println(tmp + " " + new String(tmp.array()));
 
             int len = fileChannel.write(tmp, this.metaOffset);
+
             fileChannel.force(true);
             //System.out.println("w: " + this.toString() + " : " + len);
 
-            return totalNum;
+            return totalNum-1;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
             Long startOffset = head;
