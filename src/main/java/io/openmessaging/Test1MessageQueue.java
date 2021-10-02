@@ -210,7 +210,7 @@ public class Test1MessageQueue {
         ThreadStat[] stats;
 
         DataFile[] myDataFiles;
-        DataFile.WriteStat[] oldWriteStat;
+        DataFile.WriteStat[] oldWriteStats;
 
         // ThreadLocal< HashMap<Integer, Long> >
         // report operation per second
@@ -227,7 +227,7 @@ public class Test1MessageQueue {
             oldEndTime = 0L;
             opCount = 0L;
             myDataFiles = dataFiles;
-            oldWriteStat = new DataFile.WriteStat[myDataFiles.length];
+            oldWriteStats = new DataFile.WriteStat[myDataFiles.length];
         }
 
         void updateThreadId() {
@@ -406,10 +406,11 @@ public class Test1MessageQueue {
 
             // report write stat
             for (int i = 0; i < dataFiles.length; i++){
-                if (oldWriteStat[i] != null){
+                if (oldWriteStats[i] != null){
                     // get total write stat and cur write stat
                     
                     DataFile.WriteStat curWriteStat = dataFiles[i].writeStat;
+                    DataFile.WriteStat oldWriteStat = oldWriteStats[i];
                     String writeReport = "";
                     writeReport += "[Total ] File " + i;
                     writeReport += " " + "emptyQueueCount : " + curWriteStat.emptyQueueCount;
@@ -417,8 +418,28 @@ public class Test1MessageQueue {
                     writeReport += " " + "exceedBufLengthCount : " + curWriteStat.exceedBufLengthCount;
                     log.info(writeReport);
                     log.info("Write Size Dist : "+curWriteStat.toString());
+
+                    // current
+
+                    oldWriteStat.emptyQueueCount = curWriteStat.emptyQueueCount - oldWriteStat.emptyQueueCount;
+                    oldWriteStat.exceedBufLengthCount = curWriteStat.exceedBufLengthCount - oldWriteStat.exceedBufLengthCount;
+                    oldWriteStat.exceedBufNumCount = curWriteStat.exceedBufNumCount - oldWriteStat.exceedBufNumCount;
+                    for (int j = 0; j < oldWriteStat.bucketCount.length; j++){
+                        oldWriteStat.bucketCount[j] = curWriteStat.bucketCount[j] - oldWriteStat.bucketCount[j];
+                    }
+
+                    curWriteStat = oldWriteStat;
+                    writeReport = "";
+                    writeReport += "[Current ] File " + i;
+                    writeReport += " " + "emptyQueueCount : " + curWriteStat.emptyQueueCount;
+                    writeReport += " " + "exceedBufNumCount : " + curWriteStat.exceedBufNumCount;
+                    writeReport += " " + "exceedBufLengthCount : " + curWriteStat.exceedBufLengthCount;
+                    log.info(writeReport);
+                    log.info("Write Size Dist : "+curWriteStat.toString());
+
+ 
                 }
-                oldWriteStat[i] = dataFiles[i].writeStat.clone();
+                oldWriteStats[i] = dataFiles[i].writeStat.clone();
             }
 
             // log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
@@ -511,7 +532,7 @@ public class Test1MessageQueue {
                 ret += bucketBound[0] + " < ";
                 for (int i = 0; i < bucketCount.length; i++){
                     ret += "[" + bucketCount[i] + "]";
-                    ret += " < " + bucketBound[i+1];
+                    ret += " < " + bucketBound[i+1] + " < "; 
                 }
                 return ret;
             }
