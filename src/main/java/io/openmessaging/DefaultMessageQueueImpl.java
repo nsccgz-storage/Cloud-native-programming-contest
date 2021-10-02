@@ -33,11 +33,6 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     // Initialization
 
     private TopicId queueMessage;
-    private String ssdBenchPath;
-    private FileChannel ssdBenchFileChannel;
-    private long ssdBenchTotalSize;
-    private Lock bigLock;
-    private int benchFinished;
     private Test1MessageQueue mq;
     
     private SSDqueue ssdQueue;
@@ -64,8 +59,6 @@ public class DefaultMessageQueueImpl extends MessageQueue {
         }catch(IOException e){
             e.printStackTrace();
         }
-   
-        
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data){

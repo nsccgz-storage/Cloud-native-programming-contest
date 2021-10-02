@@ -51,7 +51,7 @@ public class Test1 {
 	}
 
 	public static Vector<Message> generateOne() {
-		String topicName = "tipic";
+		String topicName = "topic";
 		Vector<Message> msgs = new Vector<>();
 		for (long offset = 0; offset < 999; offset++) {
 			for (int queueId = 0; queueId < 99; queueId++) {
@@ -95,47 +95,81 @@ public class Test1 {
 		return msgs;
 	}
 
-	public static void threadRun(int threadId, DefaultMessageQueueImpl mq, CyclicBarrier barrier) {
-		Vector<Message> msgs = generateTopic(threadId);
-		log.info("init messages ok");
-		try {
-			barrier.await();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (BrokenBarrierException e) {
-			e.printStackTrace();
-		}
-		log.info("begin write!");
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-			if (msg.getOffset != msg.offset) {
-				log.error("offset error !");
+	public static Vector<Message> generateGetRange(int i) {
+		String topicName = "topic" + i;
+		Vector<Message> msgs = new Vector<>();
+		for (long offset = 900; offset < 1300; offset++) {
+			for (int queueId = 50; queueId < 150; queueId++) {
+				Message msg = new Message(topicName, queueId, offset);
+				msgs.add(msg);
 			}
 		}
-		try {
-			barrier.await();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (BrokenBarrierException e) {
-			e.printStackTrace();
-		}
-
-		log.info("begin read!");
-		Map<Integer, ByteBuffer> result;
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-			msg.buf.position(0);
-			if (result.get(0).compareTo(msg.buf) != 0) {
-				log.error("data error !");
-			}
-		}
+		return msgs;
 	}
 
-	public static void testThreadPool() {
-		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
-		int numOfThreads = 2;
+	public static void threadRun(int threadId, Test1MessageQueue mq, CyclicBarrier barrier) {
+		try {
+			Vector<Message> msgs = generateTopic(threadId);
+			if (threadId == 0){
+				log.info("init messages ok");
+			}
+			barrier.await();
+
+			if (threadId == 0){
+				log.info("begin write!");
+			}
+			for (int i = 0; i < msgs.size(); i++) {
+				Message msg = msgs.get(i);
+				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+				if (msg.getOffset != msg.offset) {
+					log.error("offset error !");
+				}
+				// Map<Integer, ByteBuffer> result;
+				// result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				// msg.buf.position(0);
+				// if (result.get(0).compareTo(msg.buf) != 0) {
+				// 	log.error("data error !");
+				// }
+
+			}
+			barrier.await();
+
+			if (threadId == 0){
+				log.info("begin read!");
+			}
+			Map<Integer, ByteBuffer> result;
+			for (int i = 0; i < msgs.size(); i++) {
+				Message msg = msgs.get(i);
+				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				msg.buf.position(0);
+				if (result.get(0).compareTo(msg.buf) != 0) {
+					log.error("data error !");
+				}
+			}
+
+			barrier.await();
+
+			msgs = generateGetRange(threadId);
+
+			if (threadId == 0){
+				log.info("begin other read!");
+			}
+			for (int i = 0; i < msgs.size(); i++) {
+				Message msg = msgs.get(i);
+				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				msg.buf.position(0);
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+
+	}
+
+	public static void testThreadPool(String dbPath) {
+		Test1MessageQueue mq = new Test1MessageQueue(dbPath);
+		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();
@@ -162,8 +196,14 @@ public class Test1 {
 	}
 
 	public static void main(String[] args) {
+		if (args.length < 1){
+			System.out.println("java SSDBench ${dbPath}");
+			return ;
+		}
+		System.out.println("dbPath : " + args[0]);
+		String dbPath = args[0] ;
 		// testOne();
-		testThreadPool();
+		testThreadPool(dbPath);
 		// Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
 		// int ioSize = 1000;
 		// byte[] data = new byte[ioSize];

@@ -22,6 +22,9 @@ import org.apache.log4j.Logger;
 //import org.slf4j.Logger;
 import java.io.RandomAccessFile;
 
+
+
+
 public class SSDqueue{
     
     private static final Logger logger = Logger.getLogger(SSDqueue.class);
@@ -47,6 +50,11 @@ public class SSDqueue{
 
     FileChannel fileChannel;
     FileChannel metaFileChannel;
+
+    // opt
+    FileChannel[] fileChannels;
+    int numOfDataFileChannels;
+    DataSpace dataSpace;
 
     TestStat testStat;
     private class TestStat{
@@ -160,6 +168,7 @@ public class SSDqueue{
         init();
         this.fileChannel = fileChannel;
         this.metaFileChannel = metaFileChannel;
+        dataSpace = new DataSpace(fileChannel, 0L);
 
         // 划分起始的 Long.BYTES * 来存元数据
         currentNum.set(0);
@@ -177,16 +186,15 @@ public class SSDqueue{
     }
     public SSDqueue(FileChannel fileChannel, FileChannel metaFileChannel, Boolean t)throws IOException{
         init();
-
+        dataSpace = new DataSpace(fileChannel);
+        
         ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 2);
-        int sz = spaceMetaFc.read(tmp, 0L);
+        int size = spaceMetaFc.read(tmp, 0L);
         tmp.flip();
         FREE_OFFSET.set(tmp.getLong());
         META_FREE_OFFSET.set(tmp.getLong());
         
-
         // 读盘，建表 
-        // TODO, recover
         this.fileChannel = fileChannel;
         this.metaFileChannel = metaFileChannel;
         this.topicNameQueueMetaMap = new ConcurrentHashMap<>();
@@ -217,9 +225,6 @@ public class SSDqueue{
             tmp.flip();
 
             String topicName = new String(tmp.array()).trim();
-            //logger.info("len: " + len + " topicName: " + topicName + " queueMetaOffset: " + queueMetaOffset + " num" + currentNum.get());
-            //System.out.println("75： " + queueMetaOffset);
-
             topicNameQueueMetaMap.put(topicName, queueMetaOffset);
             
             // 遍历每个 topic 下的 queue
@@ -235,69 +240,69 @@ public class SSDqueue{
         return resData.readAll();
 
     }
+    public void put(String topic, long qHandle){
+
+        StringBuilder padStr = new StringBuilder(topic);
+        char[] help = new char[TOPIC_NAME_SZIE-topic.length() + 1];
+        for(int i=0;i<help.length; ++i){
+            help[i] = ' ';
+        }
+        padStr.append(help);
+        
+        ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE); // offset : name
+        tmp.putLong(qHandle);
+        tmp.put(padStr.toString().getBytes(), 0, TOPIC_NAME_SZIE);
+        tmp.flip();
+    
+        ByteBuffer metaTmp = ByteBuffer.allocate(Integer.BYTES);
+        metaTmp.putInt(currentNum.get());
+        metaTmp.flip();
+        
+        try {
+            metaFileChannel.write(tmp, this.topicArrayOffset + (currentNum.getAndIncrement()) * (TOPIC_NAME_SZIE + Long.BYTES));
+            int len = metaFileChannel.write(tmp, 0L);
+            metaFileChannel.force(true);
+        } catch (Exception e) {
+            //TODO: handle exception
+            e.printStackTrace();
+        }
+        
+    }
+
     public Long setTopic(String topicName, int queueId, ByteBuffer data){
         testStat.appendStart();
         Long result;
         try{
-
             Map<Integer, Long> topicData = queueTopicMap.get(topicName);
             if(topicData == null){
                 // 自下而上
+                //int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
+                //Data writeData = new Data(fileChannels[fcId]);
                 Data writeData = new Data(fileChannel);
-//                Long res = writeData.put(data);
                 result = writeData.put(data);
 
-                QueueId queueArray =  new QueueId(metaFileChannel, QUEUE_NUM);
-                Long queueOffset = queueArray.put(queueId, writeData.getMetaOffset());
+                QueueId q =  new QueueId(metaFileChannel, QUEUE_NUM);
+                Long qOffset = q.put(queueId, writeData.getMetaOffset());
 
-                // 
-                
+                this.put(topicName, q.metaDataOffset);
 
-                StringBuilder padStr = new StringBuilder(topicName);
-                char[] help = new char[TOPIC_NAME_SZIE-topicName.length() + 1];
-                for(int i=0;i<help.length; ++i){
-                    help[i] = ' ';
-                }
-                padStr.append(help);
-                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE); // offset : name
-                tmp.putLong(queueArray.getMetaOffset());
-                tmp.put(padStr.toString().getBytes(), 0, TOPIC_NAME_SZIE);
-
-
-                tmp.flip();
-                // 
-                int cur = currentNum.getAndIncrement();
-                metaFileChannel.write(tmp, this.topicArrayOffset + (cur) * (TOPIC_NAME_SZIE + Long.BYTES));
-                metaFileChannel.force(true);
-                
-                tmp.clear();
-                // tmp = ByteBuffer.allocate(Integer.BYTES);
-                tmp.putInt(currentNum.get());
-                tmp.flip();
-                int len = metaFileChannel.write(tmp, 0L);
-                metaFileChannel.force(true);
-
-                //System.out.println("110: " + len);
                 //logger.info("num: "+ cur + " metaQueue: "+ queueArray.getMetaOffset());
                 // 更新 DRAM map
                 topicData = new HashMap<>();
                 topicData.put(queueId, writeData.getMetaOffset());
-                topicNameQueueMetaMap.put(topicName, queueArray.getMetaOffset());
+                topicNameQueueMetaMap.put(topicName, q.getMetaOffset());
                 queueTopicMap.put(topicName, topicData);
 
                 //control.put(topicName + queueId, new ReentrantLock());
-                //System.out.println("112: w meta: "+ writeData.getMetaOffset());
-
-//                return res;
-            
+                //System.out.println("112: w meta: "+ writeData.getMetaOffset());  
             }else{
                 Long metaDataOffset = topicData.get(queueId);
                 if(metaDataOffset == null){
                     // 增加 queueIdArray
                     // 自下而上
                     Data writeData = new Data(fileChannel);
-//                    Long res = writeData.put(data);
                     result = writeData.put(data);
+
                     Long queueMetaOffset = topicNameQueueMetaMap.get(topicName);
                     QueueId queueArray =  new QueueId(metaFileChannel, queueMetaOffset); // 写入 SSD
                     Long queueOffset = queueArray.put(queueId, writeData.getMetaOffset());
@@ -305,13 +310,9 @@ public class SSDqueue{
                     // 插入 DRAM 哈希表
                     topicData.put(queueId, writeData.getMetaOffset());
                     queueTopicMap.put(topicName, topicData);
-                    //control.put(topicName + queueId, new ReentrantLock());
-                    
-//                    return res;
                 }else{
                     Data writeData = new Data(fileChannel, metaDataOffset);
                     result = writeData.put(data);
-//                    return writeData.put(data);
                 }
             }
 
@@ -329,14 +330,15 @@ public class SSDqueue{
             testStat.getRangeStart();
             Map<Integer, Long> topicData = queueTopicMap.get(topicName);
             if(topicData == null) return result;
+
             Long metaDataOffset = topicData.get(queueId);
             if(metaDataOffset == null) return result;
 
-            //System.out.println("143: r meta: "+ metaDataOffset);
-
+            // int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
+            // Data resData = new Data(fileChannels[fcId], metaDataOffset);
             Data resData = new Data(fileChannel, metaDataOffset);
-
             result = resData.getRange(offset, fetchNum);
+
             testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
         }catch(IOException e){
             logger.error(e);
@@ -408,8 +410,6 @@ public class SSDqueue{
             //logger.info(toString());
             for(int i=0; i<this.currentNum; ++i){
                 int len2 = metaFileChannel.read(tmp, this.queueIdArray + i*(Integer.BYTES + Long.BYTES));
-                //logger.info(toString());
-                //System.out.println("222: " + len2);
                 tmp.flip();
                 res.put(tmp.getInt(), tmp.getLong());
                 tmp.clear(); // 清空buffer为下一次写buffer作准备
@@ -479,12 +479,10 @@ public class SSDqueue{
             byteData.put(data);
             byteData.flip();
             int lens = fileChannel.write(byteData,startOffset);
-            //fileChannel.force(true);
 
             if(tail == -1L){
                 tail = startOffset;
                 head = tail;
-
             }else{
                 ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
                 tmp.putLong(startOffset);
@@ -495,26 +493,16 @@ public class SSDqueue{
             }
             
             // 更新 totalNum, tail, head 进 SSD
-            //System.out.println("275: "+ startOffset);
             totalNum++;
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 3);
             tmp.putLong(totalNum);
-            //System.out.println(tmp + " " + new String(tmp.array()));
             tmp.putLong(head);
-            //System.out.println(tmp + " " + new String(tmp.array()));
             tmp.putLong(tail);
-            //System.out.println(tmp + " " + new String(tmp.array()));
             tmp.flip();
-
-            //System.out.println(tmp + " " + new String(tmp.array()));
-
             int len = fileChannel.write(tmp, this.metaOffset);
-
             fileChannel.force(true);
-            //System.out.println("w: " + this.toString() + " : " + len);
 
             logger.info("startOffset: "+ startOffset + " tail: " + tail);
-
             return totalNum-1;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
@@ -527,8 +515,7 @@ public class SSDqueue{
                 ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
                 int len = fileChannel.read(tmp, nextOffset);
                 tmp.flip();    
-                startOffset = tmp.getLong();
-                
+                startOffset = tmp.getLong(); 
             }
 
             for(int i=0; i<fetchNum && startOffset != -1L; ++i){
@@ -545,7 +532,6 @@ public class SSDqueue{
                 tmp1.flip();
                 res.put(i, tmp1);
                 startOffset = nextOffset;
-
             }
             return res;
         }
