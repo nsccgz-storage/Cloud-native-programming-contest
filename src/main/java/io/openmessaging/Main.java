@@ -16,7 +16,7 @@ public class Main {
         boolean flag = new File(metaPath).exists();
         SSDqueue ssdQueue;
         if(flag){
-            System.out.println(" 28 ");
+            //System.out.println(" 28 ");
             FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
             FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
             ssdQueue = new SSDqueue(fileChannel, metaFileChannel, false);
@@ -33,9 +33,11 @@ public class Main {
         // ssdQueue.setTopic("12345", 123, tmp);
         // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
         // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // ssdQueue.setTopic("dsfsf", 123, tmp);
+        ssdQueue.setTopic("dsfsf", 123, tmp);
 
-        Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, 0L, 2);
+        // ssdQueue.setTopic("32424", 256, ByteBuffer.wrap(t.getBytes()));
+
+        Map<Integer, ByteBuffer> res = ssdQueue.getRange("dsfsf", 123, 0L, 10);
 
         for(Map.Entry<Integer, ByteBuffer> entry: res.entrySet()){
             System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));

@@ -134,10 +134,10 @@ public class SSDqueue2 {
                     
                 }
             }
-
+            return null;
     }
 
     public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
-        
+        return null;
     }
 }
