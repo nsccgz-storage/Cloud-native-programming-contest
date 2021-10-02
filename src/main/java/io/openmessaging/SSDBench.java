@@ -43,7 +43,7 @@ public class SSDBench {
 			// long totalBenchSize = 64L*1024L*1024L; // 64MiB
 			// long totalBenchSize = 16L*1024L*1024L; // 16MiB
 
-			System.out.println("type,thread,ioSize,bandwidth,iops");
+			log.info("type,thread,ioSize,bandwidth,iops");
 			int[] ioSizes = {2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
 			// int[] ioSizes = {64, 128, 256, 512, 1*1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
 			for (int i = 0; i < ioSizes.length; i++){
