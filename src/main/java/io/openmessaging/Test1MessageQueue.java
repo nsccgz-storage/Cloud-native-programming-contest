@@ -498,7 +498,7 @@ public class Test1MessageQueue {
             public int exceedBufNumCount;
             public int exceedBufLengthCount;
             WriteStat(){
-                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024};
+                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 128*1024};
 
                 bucketCount = new int[bucketBound.length-1];
                 for (int i = 0; i < bucketCount.length; i++){
@@ -915,9 +915,12 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 36*1024; // 36 KiB
+                int maxBufLength = 48*1024; // 36 KiB
                 if (w.data.remaining() < 1024){
-                    maxBufLength = 8192;
+                    maxBufLength = 32*1024;
+                }
+                if (w.data.remaining() > 16*1024){
+                    maxBufLength = 64*1024;
                 }
                 int bufNum = 0;
                 int maxBufNum = 6;
@@ -1024,10 +1027,13 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 36*1024; // 36 KiB
+                int maxBufLength = 48*1024; // 36 KiB
                 // if (w.data.remaining() < 1024){
-                //     maxBufLength = 8192;
+                //     maxBufLength = 32*1024;
                 // }
+                if (w.data.remaining() > 16*1024){
+                    maxBufLength = 64*1024;
+                }
                 int bufNum = 0;
                 int maxBufNum = 6;
                 boolean continueMerge = true;
