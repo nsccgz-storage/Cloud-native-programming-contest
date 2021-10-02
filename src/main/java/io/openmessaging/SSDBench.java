@@ -13,9 +13,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+
 import java.nio.MappedByteBuffer;
 
 public class SSDBench {
+	private static final Logger log = Logger.getLogger(SSDBench.class);
 	public static AtomicLong writePosition = new AtomicLong(0);
 	public static Lock benchLock = new ReentrantLock();
 
@@ -25,6 +29,7 @@ public class SSDBench {
 	// numOfFiles ( threads )
 
 	public static void main(String []args) {
+        	log.setLevel(Level.INFO);
 		try {
 			if (args.length < 1){
 				System.out.println("java SSDBench ${dbPath}");
@@ -58,7 +63,7 @@ public class SSDBench {
 
 	public static void benchFileChannelWrite(String dbPath, long totalBenchSize ,int ioSize, boolean isDirect) throws IOException {
 		dbPath = dbPath+"/ssdbench" ;
-		System.out.println("dbPath : " + dbPath);
+		log.debug("dbPath : " + dbPath);
 		File db = new File(dbPath);
 		FileChannel fileChannel = new RandomAccessFile(db, "rw").getChannel();
 
@@ -86,7 +91,8 @@ public class SSDBench {
 		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
 		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
 		double iops = totalBenchCount/elapsedTimeS;
-		System.out.println(type+","+thread+","+ioSize+","+bandwidth+","+iops);
+		String output = String.format("%s,%d,%d,%.3f,%.3f", type, thread, ioSize, bandwidth, iops);
+		log.info(output);
 		fileChannel.close();
 		db.delete();
 	}
@@ -94,7 +100,7 @@ public class SSDBench {
 
 	public static void benchMappedlWrite(String dbPath, long totalBenchSize ,int ioSize, boolean isDirect) throws IOException {
 		dbPath = dbPath+"/ssdbench" ;
-		System.out.println("dbPath : " + dbPath);
+		log.debug("dbPath : " + dbPath);
 		File db = new File(dbPath);
 		FileChannel fileChannel = new RandomAccessFile(db, "rw").getChannel();
 
@@ -119,7 +125,7 @@ public class SSDBench {
 		long startTime = System.nanoTime();    
 		while (curPosition < maxPosition){
 			mappedByteBuffer.put(buf);
-			fileChannel.force(true);
+			mappedByteBuffer.force();
 			curPosition += ioSize;
 		}
 		long elapsedTime = System.nanoTime() - startTime;
@@ -127,7 +133,8 @@ public class SSDBench {
 		double totalBenchSizeMiB = totalBenchSize/(1024*1024);
 		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
 		double iops = totalBenchCount/elapsedTimeS;
-		System.out.println(type+","+thread+","+ioSize+","+bandwidth+","+iops);
+		String output = String.format("%s,%d,%d,%.3f,%.3f", type, thread, ioSize, bandwidth, iops);
+		log.info(output);
 		fileChannel.close();
 		db.delete();
 	}
