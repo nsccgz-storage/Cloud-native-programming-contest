@@ -121,7 +121,14 @@ public class Test1MessageQueue {
         // 3. write agg heap
         // 4. syncSeqWritePushQueue
 
-        int numOfDataFiles = 4;
+        // int numOfDataFiles = 4;
+        // int minBufNum = 5;
+        // int minBufLength = 32768;
+        // int timeOutMS = 8;
+        // boolean fairLock = true;
+        // int writeMethod = 4; 
+    
+        int numOfDataFiles = 2;
         int minBufNum = 5;
         int minBufLength = 32768;
         int timeOutMS = 8;
@@ -149,7 +156,8 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,32KiB (8KiB if data < 1KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 16,128KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 16,128KiB (8KiB if data < 1KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
     private static MQConfig mqConfig = new MQConfig();
@@ -793,12 +801,12 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 36*1024; // 32 KiB
-                if (w.data.remaining() < 1024){
-                    maxBufLength = 8192;
-                }
+                int maxBufLength = 128*1024; // 32 KiB
+                // if (w.data.remaining() < 1024){
+                //     maxBufLength = 8192;
+                // }
                 int bufNum = 0;
-                int maxBufNum = 6;
+                int maxBufNum = 16;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
