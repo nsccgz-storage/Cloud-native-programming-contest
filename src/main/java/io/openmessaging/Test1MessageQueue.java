@@ -128,7 +128,7 @@ public class Test1MessageQueue {
         // boolean fairLock = true;
         // int writeMethod = 4; 
     
-        int numOfDataFiles = 2;
+        int numOfDataFiles = 3;
         int minBufNum = 5;
         int minBufLength = 32768;
         int timeOutMS = 8;
@@ -156,7 +156,7 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 12,88KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 9,72KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
             // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 12,88KiB (64KiB if data > 16KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
@@ -564,6 +564,7 @@ public class Test1MessageQueue {
             public int exceedBufLengthCount;
             WriteStat(){
                 bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024};
+                // bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024, 256*1024, 512*1024};
 
                 bucketCount = new int[bucketBound.length-1];
                 for (int i = 0; i < bucketCount.length; i++){
@@ -659,7 +660,8 @@ public class Test1MessageQueue {
             writeAggDirectBuffer.position(0);
 
             writerQueue = new ArrayDeque<>();
-            writerQueueLock = new ReentrantLock(false);
+            writerQueueLock = new ReentrantLock(true);
+            // writerQueueLock = new ReentrantLock(false);
             writerQueueCondition = writerQueueLock.newCondition();
 
             writerQueueBufferCapacity = 128*1024;
@@ -1092,15 +1094,15 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 88*1024; // 36 KiB
+                int maxBufLength = 72*1024; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
                 // if (w.data.remaining() > 16*1024){
-                    // maxBufLength = 64*1024;
+                //     maxBufLength = 80*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 12;
+                int maxBufNum = 9;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
@@ -1452,8 +1454,9 @@ public class Test1MessageQueue {
         } else {
             q = mqTopic.topicMap.get(queueId);
         }
-
-        int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+        Integer queueIdObject = queueId;
+        int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+        // int dataFileId = Math.floorMod(topic.hashCode()+queueId, numOfDataFiles);
         // log.info(dataFileId);
         if (dataFileId < 0) {
             log.info(dataFileId);
@@ -1520,7 +1523,8 @@ public class Test1MessageQueue {
             return ret;
         }
         long pos = 0;
-        int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+        Integer queueIdObject = queueId;
+        int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
         DataFile df = dataFiles[dataFileId];
 
         for (int i = 0; i < fetchNum; i++) {
