@@ -128,7 +128,7 @@ public class Test1MessageQueue {
         // boolean fairLock = true;
         // int writeMethod = 4; 
     
-        int numOfDataFiles = 4;
+        int numOfDataFiles = 2;
         int minBufNum = 5;
         int minBufLength = 32768;
         int timeOutMS = 8;
@@ -156,8 +156,8 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 16,128KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,48KiB (64KiB if data > 16KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 12,88KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 12,88KiB (64KiB if data > 16KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
     private static MQConfig mqConfig = new MQConfig();
@@ -170,6 +170,7 @@ public class Test1MessageQueue {
         Long endTime;
         Long opCount;
         AtomicBoolean reported;
+        int[] oldTotalWriteBucketCount;
 
         private class ThreadStat {
             Long appendStartTime;
@@ -179,6 +180,8 @@ public class Test1MessageQueue {
             Long getRangeEndTime;
             int getRangeCount;
             Long writeBytes;
+            public int[] bucketBound;
+            public int[] bucketCount;
 
             ThreadStat() {
                 appendStartTime = 0L;
@@ -190,6 +193,17 @@ public class Test1MessageQueue {
                 writeBytes = 0L;
                 reported = new AtomicBoolean();
                 reported.set(false);
+
+                bucketBound = new int[19];
+                bucketBound[0] = 100;
+                bucketBound[1] = 512;
+                for (int i = 1; i <= 17; i++){
+                    bucketBound[i+1] = i*1024;
+                }
+                bucketCount = new int[bucketBound.length-1];
+                for (int i = 0; i < bucketCount.length; i++){
+                    bucketCount[i] = 0;
+                }
             }
 
             public ThreadStat clone() {
@@ -201,7 +215,17 @@ public class Test1MessageQueue {
                 ret.getRangeEndTime = this.getRangeEndTime;
                 ret.getRangeCount = this.getRangeCount;
                 ret.writeBytes = this.writeBytes;
+                ret.bucketBound = this.bucketBound.clone();
+                ret.bucketCount = this.bucketCount.clone();
                 return ret;
+            }
+            public void addSample(int len){
+                for (int i = 0; i < bucketCount.length; i++){
+                    if (len < bucketBound[i+1]){
+                        bucketCount[i]++;
+                        break;
+                    }
+                }
             }
         }
 
@@ -258,6 +282,7 @@ public class Test1MessageQueue {
 
         void appendUpdateStat(String topic, int queueId, ByteBuffer data) {
             int id = threadId.get();
+            stats[id].addSample(data.remaining());
             stats[id].appendEndTime = System.nanoTime();
             stats[id].appendCount += 1;
             stats[id].writeBytes += data.remaining();
@@ -303,6 +328,7 @@ public class Test1MessageQueue {
             double[] getRangeLatencyPerThread = new double[getNumOfThreads];
             double[] bandwidthPerThread = new double[getNumOfThreads];
 
+
             double appendThroughput = 0;
             double getRangeThroughput = 0;
             double appendLatency = 0;
@@ -341,6 +367,45 @@ public class Test1MessageQueue {
             appendLatency /= getNumOfThreads;
             getRangeLatency /= getNumOfThreads;
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
+            
+            // 报告总的写入大小分布
+            int[] totalWriteBucketCount = new int[100];
+            int[] myBucketBound = stats[0].bucketBound;
+            for (int i = 0; i < 100; i++){
+                totalWriteBucketCount[i] = 0;
+            }
+            int numOfBucket = stats[0].bucketCount.length;
+            for (int i = 0; i < getNumOfThreads; i++){
+                for (int j = 0; j < numOfBucket; j++){
+                    totalWriteBucketCount[j] += stats[i].bucketCount[j];
+                }
+            }
+
+            String totalWriteBucketReport = "";
+            totalWriteBucketReport += myBucketBound[0] + " < ";
+            for (int i = 0; i < numOfBucket; i++){
+                totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
+                totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
+            }
+            log.info("[Total Append Data Dist]" + totalWriteBucketReport);
+
+            if (oldTotalWriteBucketCount != null) {
+                int[] curWriteBucketCount = new int[100];
+                for (int i = 0; i < numOfBucket; i++) {
+                    curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
+                }
+                String curWriteBucketReport = "";
+                curWriteBucketReport += myBucketBound[0] + " < ";
+                for (int i = 0; i < numOfBucket; i++) {
+                    curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
+                    curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
+                }
+
+                log.info("[Current Append Data Dist]" + curWriteBucketReport);
+
+            }
+
+            oldTotalWriteBucketCount = totalWriteBucketCount;
 
             double curAppendThroughput = 0;
             double curGetRangeThroughput = 0;
@@ -498,7 +563,7 @@ public class Test1MessageQueue {
             public int exceedBufNumCount;
             public int exceedBufLengthCount;
             WriteStat(){
-                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 128*1024};
+                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024};
 
                 bucketCount = new int[bucketBound.length-1];
                 for (int i = 0; i < bucketCount.length; i++){
@@ -1027,15 +1092,15 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 48*1024; // 36 KiB
+                int maxBufLength = 88*1024; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
-                if (w.data.remaining() > 16*1024){
-                    maxBufLength = 64*1024;
-                }
+                // if (w.data.remaining() > 16*1024){
+                    // maxBufLength = 64*1024;
+                // }
                 int bufNum = 0;
-                int maxBufNum = 6;
+                int maxBufNum = 12;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
