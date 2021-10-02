@@ -31,11 +31,6 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     // Initialization
 
     private TopicId queueMessage;
-    private String ssdBenchPath;
-    private FileChannel ssdBenchFileChannel;
-    private long ssdBenchTotalSize;
-    private Lock bigLock;
-    private int benchFinished;
     private Test1MessageQueue mq;
     
 
@@ -62,49 +57,11 @@ public class DefaultMessageQueueImpl extends MessageQueue {
         // 可以用来藏分？？
         SSDBench.runBench("/essd");
         mq = new Test1MessageQueue("/essd");
-        // benchFinished = 0;
-        // // for SSD Benchmark
-		// try {
-        //     // ssdBenchPath = "./ssdBench";
-        //     // ssdBenchPath = "/mnt/pmem/ssdBench";
-        //     ssdBenchPath = "/essd/bench";
-        //     ssdBenchFileChannel = new RandomAccessFile(new File(ssdBenchPath), "rw").getChannel();
-        //     ssdBenchTotalSize = 256L*1024L*1024L; //256MiB 
-		// } catch(IOException ie) {
-		// 	ie.printStackTrace();
-		// }  
-        // bigLock = new ReentrantLock();
     }
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
         return mq.append(topic, queueId, data);
-        // if (benchFinished == 1){
-        //     return 0;
-        // }
-        // bigLock.lock();
-        // if (benchFinished == 1){
-        //     bigLock.unlock();
-        //     return 0;
-        // }
-
-        // // return queueMessage.setTopic(topic, queueId, data);
-
-        // // for SSD Benchmark
-		// try {
-        //     SSDBench.benchFileChannelWriteThreadPoolRange(ssdBenchFileChannel, ssdBenchTotalSize, 16, 1024*1024);
-        //     int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
-        //     int[] threads = {1,2,4,8,16,32};
-        //     for (int t = 0; t < threads.length; t+=1){
-        //         for (int i = 0; i < ioSizes.length; i++){
-        //             SSDBench.benchFileChannelWriteThreadPoolRange(ssdBenchFileChannel, ssdBenchTotalSize, threads[t], ioSizes[i]);
-        //         }
-        //     }
-		// } catch(IOException ie) {
-		// 	ie.printStackTrace();
-		// }
-        // benchFinished = 1;
-        // bigLock.unlock();
         // return 0;
 
     }
