@@ -360,7 +360,7 @@ public class SSDqueue{
             fileChannel.force(true);
             //System.out.println("w: " + this.toString() + " : " + len);
 
-            return totalNum;
+            return totalNum-1;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
             Long startOffset = head;
