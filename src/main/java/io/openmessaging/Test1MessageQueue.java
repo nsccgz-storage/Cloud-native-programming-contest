@@ -157,7 +157,7 @@ public class Test1MessageQueue {
         @Override
         public String toString() {
             // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 16,128KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,36KiB (8KiB if data < 1KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,48KiB (64KiB if data > 16KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
     private static MQConfig mqConfig = new MQConfig();
