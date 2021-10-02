@@ -13,10 +13,16 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+
+import java.util.concurrent.CyclicBarrier;
+
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import java.nio.MappedByteBuffer;
+
+import java.util.concurrent.BrokenBarrierException;
+import java.io.IOException;
 
 public class SSDBench {
 	private static final Logger log = Logger.getLogger(SSDBench.class);
@@ -29,6 +35,7 @@ public class SSDBench {
 	// numOfFiles ( threads )
 
 	public static void main(String []args) {
+        	// log.setLevel(Level.DEBUG);
         	log.setLevel(Level.INFO);
 		benchLock.lock();
 		try {
@@ -45,16 +52,27 @@ public class SSDBench {
 			// long totalBenchSize = 16L*1024L*1024L; // 16MiB
 
 			log.info("type,thread,ioSize,bandwidth,iops");
-			int[] ioSizes = {2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
+			int[] ioSizes = {4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
+			// int[] ioSizes = {2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
 			// int[] ioSizes = {64, 128, 256, 512, 1*1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
-			for (int i = 0; i < ioSizes.length; i++){
-				benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i],false);
-				benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i],true);
+			// for (int i = 0; i < ioSizes.length; i++){
+			// 	benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i],false);
+			// 	benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i],true);
+			// }
+			// for (int i = 0; i < ioSizes.length; i++){
+			// 	benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false); 
+			// 	benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true); 
+			// }
+			int[] numOfFiles = {1,2};
+			// int[] numOfFiles = {1,2,3,4,5};
+
+			for (int i = 0; i < numOfFiles.length; i++){
+				for (int j = 0; j < ioSizes.length; j++){
+					benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
+					benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
+				}
 			}
-			for (int i = 0; i < ioSizes.length; i++){
-				benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false); 
-				benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true); 
-			}
+
 		} catch(IOException ie) {
 			ie.printStackTrace();
 		}  
@@ -141,62 +159,97 @@ public class SSDBench {
 		db.delete();
 	}
 
+	public static class ThreadStat{
+		long startTime;
+		long endTime;
+		ThreadStat(){
+			startTime = 0L;
+			endTime = 0L;
+		}
+	}
 
 
-	// public static void benchFileChannelWriteMultiFile(long totalBenchSize, int thread ,int ioSize, boolean isDirect) throws IOException {
 
-	// 	CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
-	// 	assert(totalBenchSize % ioSize == 0);
-	// 	long totalBenchCount = totalBenchSize/ioSize;
-	// 	long operationPerThread = totalBenchCount/thread;
-	// 	totalBenchSize = operationPerThread*thread*ioSize;
-	// 	totalBenchCount = operationPerThread*thread;
-	// 	long curPosition = 0L;
-	// 	long maxPosition = totalBenchSize;
-	// 	ExecutorService executor = Executors.newFixedThreadPool(thread);
-	// 	long startTime = System.nanoTime();    
-	// 	while (curPosition < maxPosition){
-	// 		final long finalCurPosition = curPosition;
-	// 		final long curMaxPosition = curPosition + operationPerThread*ioSize;
+	public static void benchFileChannelWriteMultiFile(String dbPath ,long totalBenchSize, int thread ,int ioSize, boolean isDirect) throws IOException {
+		CyclicBarrier barrier = new CyclicBarrier(thread);
+		assert(totalBenchSize % ioSize == 0);
+		long totalBenchCount = totalBenchSize/ioSize;
 
-	// 		executor.execute(()->{
-	// 			try {
-	// 				byte[] data = new byte[ioSize];
-	// 				myWriteRange(fileChannel, data, finalCurPosition, curMaxPosition, ioSize);
-	// 			} catch(IOException ie) {
-	// 				ie.printStackTrace();
-	// 			}  
+		
+		ThreadStat[] stats = new ThreadStat[thread];
+		for (int i = 0; i < stats.length; i++){
+			stats[i] = new ThreadStat();
+		}
+		String type = "seqWriteMultiFile";
+		if (isDirect){
+			type += "Direct";
+		}
+		ExecutorService executor = Executors.newFixedThreadPool(thread);
+		long startTime = System.nanoTime();    
+		for (int i = 0; i < thread; i++){
+			final int threadId = i;
+			executor.execute(()->{
+				threadRunSeqWrite(stats[threadId], barrier, dbPath, threadId, totalBenchSize, ioSize, isDirect);
+			});
+	
+		}
+		executor.shutdown();
 
-	// 		});
-	// 		curPosition = curMaxPosition;
-	// 	}
-	// 	executor.shutdown();
+		try {
+		  // Wait a while for existing tasks to terminate
+		  while(!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+			System.out.println("Pool did not terminate, waiting ...");
+		  }
+		} catch (InterruptedException ie) {
+			executor.shutdownNow();
+			ie.printStackTrace();
+		}
+		long endTime = System.nanoTime();
+		long elapsedTime = endTime - stats[0].startTime;
+		double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
+		double totalBenchSizeMiB = (double)totalBenchSize*thread/(1024*1024);
+		double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
+		double iops = totalBenchCount*thread/elapsedTimeS;
+		String output = String.format("%s,%d,%d,%.3f,%.3f", type, thread, ioSize, bandwidth, iops);
+		log.info(output);
+	}
+	public static void threadRunSeqWrite(ThreadStat stat,  CyclicBarrier barrier,String dbPath,int threadId, long totalBenchSize, int ioSize, boolean isDirect) {
+		try {
+			dbPath = dbPath+"/ssdbench"+threadId ;
+			File db = new File(dbPath);
+			FileChannel fileChannel = new RandomAccessFile(db, "rw").getChannel();
+			log.debug("dbPath : " + dbPath);
 
-	// 	try {
-	// 	  // Wait a while for existing tasks to terminate
-	// 	  while(!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-	// 		System.out.println("Pool did not terminate, waiting ...");
-	// 	  }
-	// 	} catch (InterruptedException ie) {
-	// 		executor.shutdownNow();
-	// 		ie.printStackTrace();
-	// 	}
-	// 	long elapsedTime = System.nanoTime() - startTime;
-	// 	double elapsedTimeS = (double)elapsedTime/(1000*1000*1000);
-	// 	double totalBenchSizeMiB = (double)totalBenchSize/(1024*1024);
-	// 	double bandwidth =  (totalBenchSizeMiB)/(elapsedTimeS);
-	// 	double iops = totalBenchCount/elapsedTimeS;
-	// 	System.out.println("sequentialWriteThreadPoolRange,"+thread+","+ioSize+","+bandwidth+","+iops);
-	// 	benchLock.unlock();
-	// }
-	// public static void write(FileChannel fileChannel, byte[] data, long minPosition, long maxPosition, int ioSize) throws IOException {
-	// 	long curPosition = minPosition;
-	// 	while (curPosition < maxPosition){
-	// 		fileChannel.write(ByteBuffer.wrap(data),curPosition);
-	// 		fileChannel.force(true);
-	// 		curPosition += ioSize;
-	// 	}
-	// }
+			assert(totalBenchSize % ioSize == 0);
+			ByteBuffer buf;
+			if (isDirect){
+				buf = ByteBuffer.allocateDirect(ioSize);
+			} else {
+				buf = ByteBuffer.allocate(ioSize);
+			}
+			barrier.await();
+			log.debug("begin bench !!");
+			long curPosition = 0L;
+			long maxPosition = totalBenchSize;
+			long startTime = System.nanoTime();    
+			while (curPosition < maxPosition){
+				fileChannel.write(buf, curPosition);
+				fileChannel.force(true);
+				curPosition += ioSize;
+			}
+			long endTime = System.nanoTime();
+			stat.startTime = startTime;
+			stat.endTime = endTime;
+			fileChannel.close();
+			db.delete();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		} catch(IOException ie) {
+			ie.printStackTrace();
+		}  
+	}
 
 
 	// public static void benchFileChannelWriteThreadPool(FileChannel fileChannel, long totalBenchSize, int thread ,int ioSize) throws IOException {
