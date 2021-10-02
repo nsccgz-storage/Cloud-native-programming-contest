@@ -37,7 +37,7 @@ public class Main {
 
          ssdQueue.setTopic("32424", 256, ByteBuffer.wrap(t.getBytes()));
 
-        Map<Integer, ByteBuffer> res = ssdQueue.getRange("dsfsf", 123, 0L, 10);
+        Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, 0L, 100);
 
         for(Map.Entry<String, Long> entry: ssdQueue.topicNameQueueMetaMap.entrySet()){
             System.out.println("" + entry.getKey() + " : " + entry.getValue());
