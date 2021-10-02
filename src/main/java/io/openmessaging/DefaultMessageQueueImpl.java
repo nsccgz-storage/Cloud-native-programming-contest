@@ -10,8 +10,8 @@ import java.io.File;
 
 import io.openmessaging.SSDBench;
 
-import org.slf4j.LoggerFactory;
-import org.slf4j.Logger;
+//import org.slf4j.LoggerFactory;
+//import org.slf4j.Logger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -21,8 +21,8 @@ import io.openmessaging.Test1MessageQueue;
 // import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 
-// import org.apache.log4j.spi.LoggerFactory;
-// import org.apache.log4j.Logger;
+import org.apache.log4j.spi.LoggerFactory;
+import org.apache.log4j.Logger;
 
 
 /**
@@ -43,8 +43,8 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     private SSDqueue ssdQueue;
     public DefaultMessageQueueImpl(){
         try{
-            String metaPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/MetaData";
-            String dataPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/data";
+            String metaPath = "/home/wangxr/桌面/pmem_test/MetaData";
+            String dataPath = "/home/wangxr/桌面/pmem_test/data";
             boolean flag = new File(metaPath).exists();
             if(flag){
                 //System.out.println(" 28 ");
@@ -60,7 +60,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
             }
 
         }catch(IOException e){
-            
+            e.printStackTrace();
         }
    
         

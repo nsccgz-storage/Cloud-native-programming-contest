@@ -69,75 +69,75 @@ public class SSDqueue2 {
         return DATA_FREE_OFFSET.getAndAdd( Long.BYTES * 3 + (Long.BYTES * 2 + size));
     }
 
-    public Long setTopic(String topicName, int queueId, ByteBuffer data){
-        Map<Integer, Long> topicData = queueTopicMap.get(topicName);
-            if(topicData == null){
-                int idx = currentNum.getAndIncrement();
-                //////
-                // set data
-                int size = data.array().length;
-                Long dataMeta = createDataLink(size);
-                Long head = dataMeta + 3*Long.BYTES;
-                Long tail = head;
-                Long dataNum = 1L;
-                ByteBuffer writeData = ByteBuffer.allocate(Long.BYTES * 3 + (Long.BYTES * 2 + size));
-                writeData.putLong(dataNum);
-                writeData.putLong(head);
-                writeData.putLong(tail);
-                writeData.putLong(size);
-                writeData.putLong(-1L);
-                writeData.put(data);
-                writeData.flip();   
-                try{
-                    dataFc.write(writeData, dataMeta);
-                }catch(IOException ie){
-                    ie.printStackTrace();
-                }
-                //////
-                // queueId set
-                Long queueMeta = createQueue();
-                ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES + Integer.BYTES + Long.BYTES);
-                tmp.putInt(1);
-                tmp.putInt(queueId);
-                tmp.putLong(dataMeta);
-                tmp.flip();
-                try{
-                    metaFc.write(tmp, queueMeta);
-                    //metaFc.force();
-                }catch(IOException ie){
-                    ie.printStackTrace();
-                }
-                tmp.clear();
-                //////
-                // topic set
-                tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE);
-                tmp.putLong(queueMeta);
-                tmp.put(topicName.getBytes());
-                tmp.flip();
+//    public Long setTopic(String topicName, int queueId, ByteBuffer data){
+//        Map<Integer, Long> topicData = queueTopicMap.get(topicName);
+//            if(topicData == null){
+//                int idx = currentNum.getAndIncrement();
+//                //////
+//                // set data
+//                int size = data.array().length;
+//                Long dataMeta = createDataLink(size);
+//                Long head = dataMeta + 3*Long.BYTES;
+//                Long tail = head;
+//                Long dataNum = 1L;
+//                ByteBuffer writeData = ByteBuffer.allocate(Long.BYTES * 3 + (Long.BYTES * 2 + size));
+//                writeData.putLong(dataNum);
+//                writeData.putLong(head);
+//                writeData.putLong(tail);
+//                writeData.putLong(size);
+//                writeData.putLong(-1L);
+//                writeData.put(data);
+//                writeData.flip();
+//                try{
+//                    dataFc.write(writeData, dataMeta);
+//                }catch(IOException ie){
+//                    ie.printStackTrace();
+//                }
+//                //////
+//                // queueId set
+//                Long queueMeta = createQueue();
+//                ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES + Integer.BYTES + Long.BYTES);
+//                tmp.putInt(1);
+//                tmp.putInt(queueId);
+//                tmp.putLong(dataMeta);
+//                tmp.flip();
+//                try{
+//                    metaFc.write(tmp, queueMeta);
+//                    //metaFc.force();
+//                }catch(IOException ie){
+//                    ie.printStackTrace();
+//                }
+//                tmp.clear();
+//                //////
+//                // topic set
+//                tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE);
+//                tmp.putLong(queueMeta);
+//                tmp.put(topicName.getBytes());
+//                tmp.flip();
+//
+//                ByteBuffer tmp1 = ByteBuffer.allocate(Integer.BYTES);
+//                tmp1.putInt(currentNum.get());
+//                tmp1.flip();
+//                try{
+//                    metaFc.write(tmp, getTopicPostion(idx));
+//                    metaFc.write(tmp1, 0);
+//                }catch(IOException ie){
+//                    ie.printStackTrace();
+//                }
+//
+//
+//            }else{
+//                Long metaDataOffset = topicData.get(queueId);
+//                if(metaDataOffset == null){
+//
+//                }else{
+//
+//                }
+//            }
+//
+//    }
 
-                ByteBuffer tmp1 = ByteBuffer.allocate(Integer.BYTES);
-                tmp1.putInt(currentNum.get());
-                tmp1.flip();
-                try{
-                    metaFc.write(tmp, getTopicPostion(idx));
-                    metaFc.write(tmp1, 0);
-                }catch(IOException ie){
-                    ie.printStackTrace();
-                }
-                
-                
-            }else{
-                Long metaDataOffset = topicData.get(queueId);
-                if(metaDataOffset == null){
-                    
-                }else{
-                    
-                }
-            }
-
-    }
-
-    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
-        
-    }
+//    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
+//
+//    }
 }
