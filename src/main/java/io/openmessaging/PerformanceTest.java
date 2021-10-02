@@ -114,7 +114,7 @@ public class PerformanceTest {
 
                         random.nextBytes(bytes);
                         buffer.put(bytes);
-                        // TODO: 在传参之前是否需要 buffer.flip();
+                        buffer.flip();
                         long offset = messageQueue.append(topics.get(i), queueIdArray[j], buffer);
                         queueOffsetOfTopic.get(topics.get(i))[queueIdArray[j]] = offset;
                     }
