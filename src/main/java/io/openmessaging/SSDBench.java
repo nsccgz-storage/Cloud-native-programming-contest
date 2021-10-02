@@ -36,12 +36,15 @@ public class SSDBench {
     public static void main(String[] args) {
         // log.setLevel(Level.DEBUG);
         log.setLevel(Level.INFO);
-        benchLock.lock();
         if (args.length < 1) {
             System.out.println("java SSDBench ${dbPath}");
             return;
         }
         String dbPath = args[0];
+        runBench(dbPath);
+    }
+    public static void runBench(String dbPath){
+        benchLock.lock();
         System.out.println("dbPathDir : " + dbPath);
         // long totalBenchSize = 4L*1024L*1024L*1024L; // 4GiB
         // long totalBenchSize = 256L*1024L*1024L; //256MiB

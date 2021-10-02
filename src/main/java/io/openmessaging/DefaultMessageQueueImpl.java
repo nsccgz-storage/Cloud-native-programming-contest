@@ -59,6 +59,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     }
 
     public DefaultMessageQueueImpl(){
+        SSDBench.runBench("/essd");
         mq = new Test1MessageQueue("/essd");
         // benchFinished = 0;
         // // for SSD Benchmark
