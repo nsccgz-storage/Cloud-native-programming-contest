@@ -1094,7 +1094,7 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 40*1024; // 36 KiB
+                int maxBufLength = 48*1024; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
@@ -1102,7 +1102,7 @@ public class Test1MessageQueue {
                 //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 5;
+                int maxBufNum = 6;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
