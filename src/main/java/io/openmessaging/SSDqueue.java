@@ -166,18 +166,20 @@ public class SSDqueue{
         for(int i=0; i<currentNum.get(); i++){
     
             Long offset = startOffset + i*(Long.BYTES + TOPIC_NAME_SZIE);
+            tmp.clear();
             tmp = ByteBuffer.allocate(Long.BYTES);
             int len = metaFileChannel.read(tmp, offset);
             tmp.flip();
-            //System.out.println("65: " + len);
+
             Long queueMetaOffset = tmp.getLong();
 
+            tmp.clear();
             tmp = ByteBuffer.allocate(TOPIC_NAME_SZIE);
-            metaFileChannel.read(tmp,offset + Long.BYTES);
+            len = metaFileChannel.read(tmp,offset + Long.BYTES);
             tmp.flip();
 
             String topicName = new String(tmp.array()).trim();
-
+            //logger.info("len: " + len + " topicName: " + topicName + " queueMetaOffset: " + queueMetaOffset + " num" + currentNum.get());
             //System.out.println("75： " + queueMetaOffset);
 
             topicNameQueueMetaMap.put(topicName, queueMetaOffset);
@@ -218,24 +220,26 @@ public class SSDqueue{
                 tmp.put(topicName.getBytes(), 0, topicName.length());
                 tmp.flip();
                 // 
-                int cur = currentNum.incrementAndGet();
-                metaFileChannel.write(tmp, this.topicArrayOffset + cur * (TOPIC_NAME_SZIE + Long.BYTES));
-
+                int cur = currentNum.getAndIncrement();
+                metaFileChannel.write(tmp, this.topicArrayOffset + (cur) * (TOPIC_NAME_SZIE + Long.BYTES));
+                metaFileChannel.force(true);
+                
                 tmp.clear();
                 tmp = ByteBuffer.allocate(Integer.BYTES);
-                tmp.putInt(cur);
+                tmp.putInt(currentNum.get());
                 tmp.flip();
                 int len = metaFileChannel.write(tmp, 0L);
+                metaFileChannel.force(true);
 
                 //System.out.println("110: " + len);
-
+                //logger.info("num: "+ cur + " metaQueue: "+ queueArray.getMetaOffset());
                 // 更新 DRAM map
                 topicData = new HashMap<>();
                 topicData.put(queueId, writeData.getMetaOffset());
                 topicNameQueueMetaMap.put(topicName, queueArray.getMetaOffset());
                 queueTopicMap.put(topicName, topicData);
 
-                control.put(topicName + queueId, new ReentrantLock());
+                //control.put(topicName + queueId, new ReentrantLock());
                 //System.out.println("112: w meta: "+ writeData.getMetaOffset());
 
 //                return res;
@@ -309,6 +313,7 @@ public class SSDqueue{
             tmp.putInt(this.currentNum);
             tmp.flip();
             metaFileChannel.write(tmp, metaDataOffset);
+            metaFileChannel.force(true);
 
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
         }
@@ -319,7 +324,7 @@ public class SSDqueue{
 
             // TODO: 恢复 currentNum, should atomic
             ByteBuffer tmp =  ByteBuffer.allocate(Integer.BYTES);
-            metaFileChannel.read(tmp, Integer.BYTES);
+            metaFileChannel.read(tmp, this.metaDataOffset);
             tmp.flip();
             this.currentNum = tmp.getInt();
         }
@@ -331,6 +336,7 @@ public class SSDqueue{
             tmpData.putLong(dataMetaOffset);
             tmpData.flip();
             metaFileChannel.write(tmpData, offset);
+            metaFileChannel.force(true);
             // TODO: 写回 SSD
             // 这个需要原子修改
             currentNum++;
@@ -338,9 +344,10 @@ public class SSDqueue{
             tmp.putInt(this.currentNum);
             tmp.flip();
             metaFileChannel.write(tmp, metaDataOffset);
+            metaFileChannel.force(true);
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
             //System.out.println("w 213: " + this.toString());
-
+            //logger.info(toString());
             return offset;
         }
         public Long getMetaOffset(){
@@ -349,9 +356,10 @@ public class SSDqueue{
         public Map<Integer, Long> readAll() throws IOException{
             Map<Integer, Long> res = new HashMap<>();
             ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
+            //logger.info(toString());
             for(int i=0; i<this.currentNum; ++i){
                 int len2 = metaFileChannel.read(tmp, this.queueIdArray + i*(Integer.BYTES + Long.BYTES));
-
+                //logger.info(toString());
                 //System.out.println("222: " + len2);
                 tmp.flip();
                 res.put(tmp.getInt(), tmp.getLong());
@@ -375,7 +383,7 @@ public class SSDqueue{
         Long metaOffset;
 
         public Data(FileChannel fileChannel) throws IOException{
-            this.metaOffset = FREE_OFFSET.addAndGet(Long.BYTES * 3);
+            this.metaOffset = FREE_OFFSET.getAndAdd(Long.BYTES * 3);
             this.fileChannel = fileChannel;
 
             this.totalNum = 0L;
@@ -388,6 +396,7 @@ public class SSDqueue{
             tmp.putLong(tail);
             tmp.flip();
             fileChannel.write(tmp, this.metaOffset);
+            fileChannel.force(true);
         }
 
         public String toString(){
@@ -410,7 +419,7 @@ public class SSDqueue{
         }
         public Long put(ByteBuffer data) throws IOException{
             int tmpSize = Long.BYTES + Long.BYTES + data.array().length;
-            long startOffset = FREE_OFFSET.addAndGet(tmpSize);
+            long startOffset = FREE_OFFSET.getAndAdd(tmpSize);
 
             long nextOffset = -1L;
             ByteBuffer byteData = ByteBuffer.allocate(tmpSize);
@@ -419,6 +428,7 @@ public class SSDqueue{
             byteData.put(data);
             byteData.flip();
             int lens = fileChannel.write(byteData,startOffset);
+            fileChannel.force(true);
 
             if(tail == -1L){
                 tail = startOffset;
@@ -429,6 +439,7 @@ public class SSDqueue{
                 tmp.putLong(startOffset);
                 tmp.flip();
                 fileChannel.write(tmp, tail + Long.BYTES); // 更新 nextOffset
+                fileChannel.force(true);
                 tail = startOffset;
             }
             
@@ -447,6 +458,7 @@ public class SSDqueue{
             //System.out.println(tmp + " " + new String(tmp.array()));
 
             int len = fileChannel.write(tmp, this.metaOffset);
+            fileChannel.force(true);
             //System.out.println("w: " + this.toString() + " : " + len);
 
             return totalNum;
@@ -467,7 +479,8 @@ public class SSDqueue{
 
             for(int i=0; i<fetchNum && startOffset != -1L; ++i){
                 ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES);
-                fileChannel.read(tmp, startOffset);
+                int len1 = fileChannel.read(tmp, startOffset);
+                //logger.info(len1 + " " + startOffset);
                 tmp.flip();
 
                 Long dataSize = tmp.getLong();
