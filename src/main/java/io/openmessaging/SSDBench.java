@@ -30,6 +30,7 @@ public class SSDBench {
 
 	public static void main(String []args) {
         	log.setLevel(Level.INFO);
+		benchLock.lock();
 		try {
 			if (args.length < 1){
 				System.out.println("java SSDBench ${dbPath}");
@@ -57,6 +58,7 @@ public class SSDBench {
 		} catch(IOException ie) {
 			ie.printStackTrace();
 		}  
+		benchLock.unlock();
 	}
 
 
