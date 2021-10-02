@@ -55,20 +55,20 @@ public class DefaultMessageQueueImpl extends MessageQueue {
 
     public DefaultMessageQueueImpl(){
         // 可以用来藏分？？
-        // SSDBench.runBench("/essd");
+        SSDBench.runBench("/essd");
         mq = new Test1MessageQueue("/essd");
     }
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
-        return mq.append(topic, queueId, data);
-        // return 0;
+        // return mq.append(topic, queueId, data);
+        return 0;
 
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        return mq.getRange(topic, queueId, offset, fetchNum);
-        // return null;
+        // return mq.getRange(topic, queueId, offset, fetchNum);
+        return null;
     }
 }
