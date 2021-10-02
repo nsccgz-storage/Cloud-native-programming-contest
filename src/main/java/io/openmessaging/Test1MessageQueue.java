@@ -209,9 +209,12 @@ public class Test1MessageQueue {
         Long oldEndTime;
         ThreadStat[] stats;
 
+        DataFile[] myDataFiles;
+        DataFile.WriteStat[] oldWriteStat;
+
         // ThreadLocal< HashMap<Integer, Long> >
         // report operation per second
-        TestStat() {
+        TestStat(DataFile[] dataFiles) {
             threadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
             numOfThreads.set(0);
@@ -223,6 +226,8 @@ public class Test1MessageQueue {
             endTime = 0L;
             oldEndTime = 0L;
             opCount = 0L;
+            myDataFiles = dataFiles;
+            oldWriteStat = new DataFile.WriteStat[myDataFiles.length];
         }
 
         void updateThreadId() {
@@ -399,6 +404,23 @@ public class Test1MessageQueue {
             log.info("getRangeStat :"+getRangeStat);
             log.info("csvStat      :"+csvStat);
 
+            // report write stat
+            for (int i = 0; i < dataFiles.length; i++){
+                if (oldWriteStat[i] != null){
+                    // get total write stat and cur write stat
+                    
+                    DataFile.WriteStat curWriteStat = dataFiles[i].writeStat;
+                    String writeReport = "";
+                    writeReport += "[Total ] File " + i;
+                    writeReport += " " + "emptyQueueCount : " + curWriteStat.emptyQueueCount;
+                    writeReport += " " + "exceedBufNumCount : " + curWriteStat.exceedBufNumCount;
+                    writeReport += " " + "exceedBufLengthCount : " + curWriteStat.exceedBufLengthCount;
+                    log.info(writeReport);
+                    log.info("Write Size Dist : "+curWriteStat.toString());
+                }
+                oldWriteStat[i] = dataFiles[i].writeStat.clone();
+            }
+
             // log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
 
             // deep copy
@@ -448,6 +470,65 @@ public class Test1MessageQueue {
             }
         }
 
+        public class WriteStat{
+            public int[] bucketBound;
+            public int[] bucketCount;
+            public int emptyQueueCount;
+            public int exceedBufNumCount;
+            public int exceedBufLengthCount;
+            WriteStat(){
+                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024};
+
+                bucketCount = new int[bucketBound.length-1];
+                for (int i = 0; i < bucketCount.length; i++){
+                    bucketCount[i] = 0;
+                }
+                emptyQueueCount = 0;
+                exceedBufNumCount = 0;
+                exceedBufLengthCount = 0;
+            }
+            public void addSample(int len){
+                for (int i = 0; i < bucketCount.length; i++){
+                    if (len < bucketBound[i+1]){
+                        bucketCount[i]++;
+                        break;
+                    }
+                }
+            }
+            public void incEmptyQueueCount(){
+                emptyQueueCount++;
+            }
+            public void incExceedBufNumCount(){
+                exceedBufNumCount++;
+            }
+            public void incExceedBufLengthCount(){
+                exceedBufLengthCount++;
+            }
+
+            @Override
+            public String toString() {
+                String ret = "";
+                ret += bucketBound[0] + " < ";
+                for (int i = 0; i < bucketCount.length; i++){
+                    ret += "[" + bucketCount[i] + "]";
+                    ret += " < " + bucketBound[i+1];
+                }
+                return ret;
+            }
+            public void report(){
+                log.info(this.toString());
+            }
+            public WriteStat clone(){
+                WriteStat ret = new WriteStat();
+                ret.emptyQueueCount = emptyQueueCount;
+                ret.exceedBufLengthCount = exceedBufLengthCount;
+                ret.exceedBufNumCount = exceedBufNumCount;
+                ret.bucketBound = bucketBound.clone();
+                ret.bucketCount = bucketCount.clone();
+                return ret;
+            }
+        }
+
         public Deque<Writer> writerQueue;
         public Lock writerQueueLock;
         public Condition writerQueueCondition;
@@ -455,6 +536,8 @@ public class Test1MessageQueue {
 
         public int writerQueueBufferCapacity;
         public ThreadLocal<ByteBuffer> writerQueueLocalBuffer;
+
+        public WriteStat writeStat;
 
         DataFile(String dataFileName) {
             // atomicCurPosition = new AtomicLong(0);
@@ -495,6 +578,8 @@ public class Test1MessageQueue {
 
             writerQueueBufferCapacity = 128*1024;
             writerQueueLocalBuffer = new ThreadLocal<>();
+
+            writeStat = new WriteStat();
         }
 
         // public long allocate(long size) {
@@ -936,7 +1021,7 @@ public class Test1MessageQueue {
                 writerBuffer.position(0);
                 writerBuffer.limit(writerBuffer.capacity());
                 Writer lastWriter = null;
-                while ( iter.hasNext() && continueMerge ){
+                while ( continueMerge ){
                     lastWriter = iter.next();
                     dataLength = lastWriter.data.remaining();
                     writeLength = metadataLength + dataLength;
@@ -949,13 +1034,29 @@ public class Test1MessageQueue {
                     bufNum += 1;
                     if (bufNum >= maxBufNum){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
                     }
                     if (bufLength >= maxBufLength){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
                     }
                 }
                 long writePosition = curPosition;
                 curPosition += bufLength;
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
                 {
                     log.debug("need to flush, unlock !");
                     writerQueueLock.unlock();
@@ -1140,7 +1241,7 @@ public class Test1MessageQueue {
 
     private String metadataFileName;
     private FileChannel metadataFileChannel;
-    private ArrayList<DataFile> dataFiles;
+    private DataFile[] dataFiles;
     private int numOfDataFiles;
     private TestStat testStat;
     // private ConcurrentHashMap<String, Integer> topic2queueid;
@@ -1201,11 +1302,11 @@ public class Test1MessageQueue {
 
         // init datafile
         numOfDataFiles = mqConfig.numOfDataFiles;
-        dataFiles = new ArrayList<>();
+        dataFiles = new DataFile[numOfDataFiles];
         for (int i = 0; i < numOfDataFiles; i++) {
             String dataFileName = dbDirPath + "/db" + i;
             log.info("Initializing datafile: " + dataFileName);
-            dataFiles.add(new DataFile(dataFileName));
+            dataFiles[i] = new DataFile(dataFileName);
         }
 
         if (crash) {
@@ -1224,7 +1325,7 @@ public class Test1MessageQueue {
         }
 
         if (mqConfig.useStats){
-            testStat = new TestStat();
+            testStat = new TestStat(dataFiles);
         }
 
         log.info("init ok!");
@@ -1233,8 +1334,8 @@ public class Test1MessageQueue {
     @Override
     protected void finalize() throws Throwable {
         metadataFileChannel.close();
-        for (int i = 0; i < dataFiles.size(); i++) {
-            dataFiles.get(i).close();
+        for (int i = 0; i < dataFiles.length; i++) {
+            dataFiles[i].close();
         }
 
     }
@@ -1266,7 +1367,7 @@ public class Test1MessageQueue {
             log.info(dataFileId);
         }
 
-        DataFile df = dataFiles.get(dataFileId);
+        DataFile df = dataFiles[dataFileId];
         long position = 0;
         switch (mqConfig.writeMethod) {
             case 0:
@@ -1328,7 +1429,7 @@ public class Test1MessageQueue {
         }
         long pos = 0;
         int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
-        DataFile df = dataFiles.get(dataFileId);
+        DataFile df = dataFiles[dataFileId];
 
         for (int i = 0; i < fetchNum; i++) {
             if (q.queueMap.containsKey(offset + i)) {
