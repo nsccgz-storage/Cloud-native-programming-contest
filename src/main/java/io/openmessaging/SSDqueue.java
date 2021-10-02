@@ -164,7 +164,7 @@ public class SSDqueue{
         Long startOffset = 0L + Integer.BYTES;
         
         for(int i=0; i<currentNum.get(); i++){
-    
+
             Long offset = startOffset + i*(Long.BYTES + TOPIC_NAME_SZIE);
             tmp.clear();
             tmp = ByteBuffer.allocate(Long.BYTES);
@@ -276,22 +276,24 @@ public class SSDqueue{
         return result;
     }
     public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
+        Map<Integer, ByteBuffer> result = new HashMap<>();
         try{
             testStat.getRangeStart();
             Map<Integer, Long> topicData = queueTopicMap.get(topicName);
-            if(topicData == null) return null;
+            if(topicData == null) return result;
             Long metaDataOffset = topicData.get(queueId);
-            if(metaDataOffset == null) return null;
+            if(metaDataOffset == null) return result;
 
             //System.out.println("143: r meta: "+ metaDataOffset);
 
             Data resData = new Data(fileChannel, metaDataOffset);
-            testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
-            return resData.getRange(offset, fetchNum);
-        }catch(IOException e){
-            return null;
-        }
 
+            result = resData.getRange(offset, fetchNum);
+            testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
+        }catch(IOException e){
+            logger.error(e);
+        }
+        return result;
     }
 
     private class QueueId{
