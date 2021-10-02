@@ -156,7 +156,7 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 7,56KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 5,40KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
             // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 12,88KiB (64KiB if data > 16KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
@@ -1094,7 +1094,7 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 56*1024; // 36 KiB
+                int maxBufLength = 40*1024; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
@@ -1102,7 +1102,7 @@ public class Test1MessageQueue {
                 //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 7;
+                int maxBufNum = 5;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
