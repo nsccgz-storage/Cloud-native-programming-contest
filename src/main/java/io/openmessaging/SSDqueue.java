@@ -418,7 +418,7 @@ public class SSDqueue{
             this.tail = tmp.getLong();
         }
         public Long put(ByteBuffer data) throws IOException{
-            int tmpSize = Long.BYTES + Long.BYTES + data.array().length;
+            int tmpSize = Long.BYTES + Long.BYTES + data.remaining();
             long startOffset = FREE_OFFSET.getAndAdd(tmpSize);
 
             long nextOffset = -1L;
@@ -489,7 +489,6 @@ public class SSDqueue{
 
                 ByteBuffer tmp1 = ByteBuffer.allocate(dataSize.intValue());
                 int len2 = fileChannel.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
-
                 tmp1.flip();
                 res.put(i, tmp1);
                 startOffset = nextOffset;
