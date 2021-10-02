@@ -66,7 +66,8 @@ public class SSDBench {
                 benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
             }
             // int[] numOfFiles = { 1, 2 };
-            int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+            int[] numOfFiles = {1,2,4,6,8,10,12,14,16};
+            // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
             for (int i = 0; i < numOfFiles.length; i++) {
                 for (int j = 0; j < ioSizes.length; j++) {
@@ -99,7 +100,8 @@ public class SSDBench {
             }
             // int[] numOfFiles = { 1, 2 };
             // int[] numOfFiles = {1,2,3,4,5};
-            int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+            int[] numOfFiles = {1,2,4,6,8,10,12,14,16};
+            // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
             for (int i = 0; i < numOfFiles.length; i++) {
                 for (int j = 0; j < ioSizes.length; j++) {
