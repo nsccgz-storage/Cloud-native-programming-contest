@@ -255,7 +255,7 @@ public class Test1MessageQueue {
             int id = threadId.get();
             stats[id].appendEndTime = System.nanoTime();
             stats[id].appendCount += 1;
-            stats[id].writeBytes += data.capacity();
+            stats[id].writeBytes += data.remaining();
             stats[id].writeBytes += Integer.BYTES; // metadata
             update();
         }
@@ -331,8 +331,8 @@ public class Test1MessageQueue {
                 getRangeLatency += getRangeLatencyPerThread[i];
                 writeBandwidth += bandwidthPerThread[i];
             }
-            appendThroughput /= getNumOfThreads;
-            getRangeThroughput /= getNumOfThreads;
+            // appendThroughput /= getNumOfThreads;
+            // getRangeThroughput /= getNumOfThreads;
             appendLatency /= getNumOfThreads;
             getRangeLatency /= getNumOfThreads;
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
@@ -378,8 +378,8 @@ public class Test1MessageQueue {
                     curGetRangeLatency += getRangeLatencyPerThread[i];
                     curWriteBandwidth += bandwidthPerThread[i];
                 }
-                curAppendThroughput /= getNumOfThreads;
-                curGetRangeThroughput /= getNumOfThreads;
+                // curAppendThroughput /= getNumOfThreads;
+                // curGetRangeThroughput /= getNumOfThreads;
                 curAppendLatency /= getNumOfThreads;
                 curGetRangeLatency /= getNumOfThreads;
             }
@@ -1015,6 +1015,7 @@ public class Test1MessageQueue {
     public long append(String topic, int queueId, ByteBuffer data) {
         if (mqConfig.useStats){
             testStat.appendStart();
+            testStat.appendUpdateStat(topic, queueId, data);
         }
         MQTopic mqTopic;
         MQQueue q;
@@ -1064,9 +1065,6 @@ public class Test1MessageQueue {
         Long ret = q.maxOffset;
         q.maxOffset++;
 
-        if (mqConfig.useStats){
-            testStat.appendUpdateStat(topic, queueId, data);
-        }
         return ret;
     }
 
