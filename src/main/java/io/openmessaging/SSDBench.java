@@ -25,14 +25,14 @@ public class SSDBench {
 				System.out.println("java SSDBench ${dbPath}");
 				return ;
 			}
-			System.out.println("dbPath : " + args[0]);
-			String dbPath = args[0] ;
+			String dbPath = args[0]+"/ssdbench" ;
+			System.out.println("dbPath : " + dbPath);
 			FileChannel fileChannel = new RandomAccessFile(new File(dbPath), "rw").getChannel();
 			// long totalBenchSize = 4L*1024L*1024L*1024L; // 4GiB
 			// long totalBenchSize = 1L*1024L*1024L*1024L; // 1GiB
 			// long totalBenchSize = 256L*1024L*1024L; //256MiB 
-			long totalBenchSize = 64L*1024L*1024L; // 64MiB
-			// long totalBenchSize = 16L*1024L*1024L; // 16MiB
+			// long totalBenchSize = 64L*1024L*1024L; // 64MiB
+			long totalBenchSize = 16L*1024L*1024L; // 16MiB
 
 			System.out.println("type,thread,ioSize,bandwidth,iops");
 			int[] ioSizes = {64, 128, 256, 512, 1*1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024,1024*1024};
@@ -272,12 +272,12 @@ public class SSDBench {
 
 		assert(totalBenchSize % ioSize == 0);
 		long totalBenchCount = totalBenchSize/ioSize;
-		byte[] data = new byte[ioSize];
+		ByteBuffer directBuffer = ByteBuffer.allocateDirect(ioSize);
 		long curPosition = 0L;
 		long maxPosition = totalBenchSize;
 		long startTime = System.nanoTime();    
 		while (curPosition < maxPosition){
-			mappedByteBuffer.put(ByteBuffer.wrap(data));
+			mappedByteBuffer.put(directBuffer);
 			// fileChannel.write(ByteBuffer.wrap(data), curPosition);
 			// fileChannel.force(false);
 			fileChannel.force(true);
