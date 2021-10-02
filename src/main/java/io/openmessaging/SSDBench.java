@@ -53,37 +53,37 @@ public class SSDBench {
         log.info("type,thread,ioSize,bandwidth,iops");
         log.info("small io size in 16MiB");
 
-        // {
-        //     long totalBenchSize = 16L*1024L*1024L; // 16MiB
-        //     int[] ioSizes = {64, 128, 256, 512, 1*1024, 2*1024, 4*1024, 8*1024};
+        {
+            long totalBenchSize = 16L*1024L*1024L; // 16MiB
+            int[] ioSizes = {64, 128, 256, 512, 1*1024, 2*1024, 4*1024, 8*1024};
 
-        //     for (int i = 0; i < ioSizes.length; i++) {
-        //         benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], false);
-        //         benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], true);
-        //     }
-        //     for (int i = 0; i < ioSizes.length; i++) {
-        //         benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false);
-        //         benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
-        //     }
-        //     // int[] numOfFiles = { 1, 2 };
-        //     int[] numOfFiles = {1,2,4,6,8,10,12,14,16};
-        //     // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+            for (int i = 0; i < ioSizes.length; i++) {
+                benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], false);
+                benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], true);
+            }
+            for (int i = 0; i < ioSizes.length; i++) {
+                benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false);
+                benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
+            }
+            // int[] numOfFiles = { 1, 2 };
+            int[] numOfFiles = {1,2,4,6,8,10,12,14,16};
+            // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
-        //     for (int i = 0; i < numOfFiles.length; i++) {
-        //         for (int j = 0; j < ioSizes.length; j++) {
-        //             benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
-        //             benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
-        //         }
-        //     }
-        //     for (int i = 0; i < numOfFiles.length; i++) {
-        //         for (int j = 0; j < ioSizes.length; j++) {
-        //             benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-        //                     false);
-        //             benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-        //                     true);
-        //         }
-        //     }
-        // }
+            for (int i = 0; i < numOfFiles.length; i++) {
+                for (int j = 0; j < ioSizes.length; j++) {
+                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
+                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
+                }
+            }
+            for (int i = 0; i < numOfFiles.length; i++) {
+                for (int j = 0; j < ioSizes.length; j++) {
+                    benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
+                            false);
+                    benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
+                            true);
+                }
+            }
+        }
 
         log.info("large io size in 1GiB");
         {
