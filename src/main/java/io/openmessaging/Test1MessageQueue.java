@@ -128,7 +128,7 @@ public class Test1MessageQueue {
         // boolean fairLock = true;
         // int writeMethod = 4; 
     
-        int numOfDataFiles = 3;
+        int numOfDataFiles = 4;
         int minBufNum = 5;
         int minBufLength = 32768;
         int timeOutMS = 8;
@@ -1094,7 +1094,7 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 72*1024; // 36 KiB
+                int maxBufLength = 48*1024; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
@@ -1102,7 +1102,7 @@ public class Test1MessageQueue {
                 //     maxBufLength = 80*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 9;
+                int maxBufNum = 6;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch

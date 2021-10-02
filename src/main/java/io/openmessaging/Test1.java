@@ -122,12 +122,12 @@ public class Test1 {
 				if (msg.getOffset != msg.offset) {
 					log.error("offset error !");
 				}
-				// Map<Integer, ByteBuffer> result;
-				// result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-				// msg.buf.position(0);
-				// if (result.get(0).compareTo(msg.buf) != 0) {
-				// 	log.error("data error !");
-				// }
+				Map<Integer, ByteBuffer> result;
+				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+				msg.buf.position(0);
+				if (result.get(0).compareTo(msg.buf) != 0) {
+					log.error("data error !");
+				}
 
 			}
 			barrier.await();
