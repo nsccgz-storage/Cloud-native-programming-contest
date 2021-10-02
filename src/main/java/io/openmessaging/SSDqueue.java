@@ -130,8 +130,7 @@ public class SSDqueue{
                 int cur = currentNum.getAndIncrement();
                 metaFileChannel.write(tmp, this.topicArrayOffset + (cur) * (TOPIC_NAME_SZIE + Long.BYTES));
                 metaFileChannel.force(true);
-                metaFileChannel.force(true);
-
+                
                 tmp.clear();
                 tmp = ByteBuffer.allocate(Integer.BYTES);
                 tmp.putInt(currentNum.get());
@@ -147,7 +146,7 @@ public class SSDqueue{
                 topicNameQueueMetaMap.put(topicName, queueArray.getMetaOffset());
                 queueTopicMap.put(topicName, topicData);
 
-                control.put(topicName + queueId, new ReentrantLock());
+                //control.put(topicName + queueId, new ReentrantLock());
                 //System.out.println("112: w meta: "+ writeData.getMetaOffset());
 
                 return res;
@@ -213,6 +212,7 @@ public class SSDqueue{
             tmp.putInt(this.currentNum);
             tmp.flip();
             metaFileChannel.write(tmp, metaDataOffset);
+            metaFileChannel.force(true);
 
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
         }
@@ -235,6 +235,7 @@ public class SSDqueue{
             tmpData.putLong(dataMetaOffset);
             tmpData.flip();
             metaFileChannel.write(tmpData, offset);
+            metaFileChannel.force(true);
             // TODO: 写回 SSD
             // 这个需要原子修改
             currentNum++;
@@ -294,6 +295,7 @@ public class SSDqueue{
             tmp.putLong(tail);
             tmp.flip();
             fileChannel.write(tmp, this.metaOffset);
+            fileChannel.force(true);
         }
 
         public String toString(){
@@ -325,6 +327,7 @@ public class SSDqueue{
             byteData.put(data);
             byteData.flip();
             int lens = fileChannel.write(byteData,startOffset);
+            fileChannel.force(true);
 
             if(tail == -1L){
                 tail = startOffset;
@@ -335,6 +338,7 @@ public class SSDqueue{
                 tmp.putLong(startOffset);
                 tmp.flip();
                 fileChannel.write(tmp, tail + Long.BYTES); // 更新 nextOffset
+                fileChannel.force(true);
                 tail = startOffset;
             }
             
@@ -353,6 +357,7 @@ public class SSDqueue{
             //System.out.println(tmp + " " + new String(tmp.array()));
 
             int len = fileChannel.write(tmp, this.metaOffset);
+            fileChannel.force(true);
             //System.out.println("w: " + this.toString() + " : " + len);
 
             return totalNum;
