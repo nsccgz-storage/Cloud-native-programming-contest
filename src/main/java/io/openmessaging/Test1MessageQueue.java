@@ -1839,8 +1839,9 @@ public class Test1MessageQueue {
 
         public GetDataRetParameters getData(long offset, int fetchNum, Map<Integer, ByteBuffer> results){
             GetDataRetParameters ret = new GetDataRetParameters();
-            log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
-            log.debug("offset : "+offset + "  fetchNum : "+fetchNum);
+            log.info("head : "+head+" tail :"+tail + "  curLength:"+curLength);
+            log.info("headOffset : "+headOffset + "  tailOffset"+tailOffset);
+            log.info("offset : "+offset + "  fetchNum : "+fetchNum);
             ret.offset = offset;
             ret.fetchNum = fetchNum;
 
@@ -1885,6 +1886,7 @@ public class Test1MessageQueue {
                 log.debug(resultIndex);
                 log.debug(datas[bufIndex]);
                 datas[bufIndex].position(0);
+                datas[bufIndex].limit(datas[bufIndex].capacity());
                 log.debug(datas[bufIndex]);
                 results.put(resultIndex, datas[bufIndex]);
             }
@@ -2091,12 +2093,10 @@ public class Test1MessageQueue {
             fetchNum = (int)(q.maxOffset-offset);
         }
         GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
-        log.debug("original offset :  " +offset);
-        log.debug("original fetchNum: " + fetchNum);
+        log.info("original fetchNum: " + fetchNum);
         // offset = changes.offset;
         fetchNum = changes.fetchNum;
-        log.debug("updated offset :  " +offset);
-        log.debug("updated fetchNum: " + fetchNum);
+        log.info("updated fetchNum: " + fetchNum);
 
         long pos = 0;
         Integer queueIdObject = queueId;
