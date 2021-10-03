@@ -29,6 +29,9 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 
 import org.apache.log4j.spi.LoggerFactory;
+
+import io.openmessaging.Test1MessageQueue.MQQueueSegment.GetDataRetParameters;
+
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
@@ -39,6 +42,11 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Condition;
 import java.nio.MappedByteBuffer;
 import java.util.Deque;
+
+
+import com.intel.pmem.llpl.Heap;
+import com.intel.pmem.llpl.MemoryBlock;
+
 
 public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
@@ -1638,6 +1646,110 @@ public class Test1MessageQueue {
 
     }
 
+    public class PMCache{
+        Map<String, Map<Integer, PMQueue> > pmQueueMap;
+        int numOfBlocks;
+		PMMemoryBlock[] pmBlocks;
+		Heap h;
+        public class PMMemoryBlock{
+            long curPosition;
+            long capacity;
+            MemoryBlock block;
+            Lock lock;
+            PMMemoryBlock(Heap h, long blockCapacity){
+                curPosition = 0;
+                capacity = blockCapacity;
+                block = h.allocateMemoryBlock(blockCapacity);
+                lock = new ReentrantLock();
+            }
+            long addData(ByteBuffer data){
+                lock.lock();
+                int dataLength = data.remaining();
+                long addr = curPosition;
+                long dataAddr = curPosition;
+                block.setInt(addr, dataLength);
+                addr += Integer.BYTES;
+                block.copyFromArray(data.array(), 0, addr, dataLength);
+                lock.unlock();
+                return dataAddr;
+            }
+            ByteBuffer readData(long addr){
+                int dataLength = block.getInt(addr);
+                ByteBuffer data = ByteBuffer.allocate(dataLength);
+                addr += Integer.BYTES;
+                block.copyToArray(addr, data.array(), 0, dataLength);
+                return data;
+            }
+        }
+        public class PMQueue{
+            long headAddr;
+            long tailAddr;
+            long coldReadPosition;
+            long hotReadPosition;
+            long minOffset;
+            long maxOffset;
+            PMQueue(){
+                headAddr = 0L;
+                tailAddr = 0L;
+                coldReadPosition = 0L;
+                hotReadPosition = 0L;
+                minOffset = 0L;
+                maxOffset = 0L;
+            }
+        }
+        PMCache(String pmCachePath){
+            long capacity = 60L*1024L*1024L*1024L;
+            h = Heap.createHeap(pmCachePath, capacity);
+            numOfBlocks = 4;
+            pmBlocks = new PMMemoryBlock[numOfBlocks];
+            for (int i = 0; i < numOfBlocks; i++){
+                pmBlocks[i] = new PMMemoryBlock(h, capacity/numOfBlocks);
+            }
+            pmQueueMap = new ConcurrentHashMap<>();
+        }
+        public boolean append(String topic, int queueId, ByteBuffer data){
+            Integer queueIdObject = queueId;
+            int pmBlockId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+            Map<Integer, PMQueue> pmQueue = pmQueueMap.get(topic);
+            if (pmQueue == null){
+                pmQueue = new HashMap<>();
+                pmQueueMap.put(topic, pmQueue);
+            }
+            PMQueue q = pmQueue.get(queueId);
+            if (q == null){
+                q = new PMQueue();
+            }
+
+            // q ??
+
+
+            return false;
+        }
+        public boolean getRange(String topic, int queueId, long offset, int fetchNum, Map<Integer, ByteBuffer> result){
+            Integer queueIdObject = queueId;
+            int pmBlockId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+
+            Map<Integer, PMQueue> pmQueue = pmQueueMap.get(topic);
+            if (pmQueue == null){
+                return false;
+            }
+            PMQueue q = pmQueue.get(queueId);
+            if (q == null){
+                return false;
+            }
+
+            // q ??
+
+
+
+            return false;
+        }
+
+        public boolean getRangeByPmAddr(String topic, int queueId, long pmAddr, int fetchNum, Map<Integer, ByteBuffer> result){
+            return false;
+        }
+    }
+
     private String metadataFileName;
     private FileChannel metadataFileChannel;
     private DataFile[] dataFiles;
@@ -1647,13 +1759,100 @@ public class Test1MessageQueue {
     // private ConcurrentHashMap<String, HashMap<int, > > topic2queueid;
     // private ConcurrentHashMap<String, Long> topic2queueid;
 
+    public class MQQueueSegment {
+        public int curNum;
+        public int maxNum;
+        public int curOffset;
+        public int[] bufOffsets;
+        public ByteBuffer[] datas;
+        MQQueueSegment(){
+            curNum = 0;
+            maxNum = 4;
+            curOffset = 0;
+            bufOffsets = new int[maxNum];
+            datas = new ByteBuffer[maxNum];
+        }
+
+        public void addData(ByteBuffer data){
+            // put data in curOffset + curNum
+            if (curNum == maxNum){
+                curNum = 0;
+                curOffset += maxNum;
+            }
+            datas[curNum] = data;
+            if (curNum > 0){
+                bufOffsets[curNum] = bufOffsets[curNum-1]+data.remaining();
+            }
+            curNum++;
+        }
+
+        public class GetDataRetParameters{
+            long offset;
+            int fetchNum;
+        }
+
+        public GetDataRetParameters getData(long offset, int fetchNum, Map<Integer, ByteBuffer> results){
+            //                               [offset, offset+fetchNum-1]
+            // [curOffset, curOffset+curNum]
+
+            // [offset, offset+fetchNum-1]
+            //                              [curOffset, curOffset+curNum]
+
+            //                 [offset, offset+fetchNum-1]
+            // [curOffset, curOffset+curNum]
+
+            // [offset, offset+fetchNum-1]
+            //              [curOffset, curOffset+curNum]
+
+            // [offset,                                     offset+fetchNum-1]
+            //              [curOffset, curOffset+curNum]
+
+            //                  [offset, offset+fetchNum-1]
+            // [curOffset,                                        curOffset+curNum]
+
+
+
+            GetDataRetParameters ret = new GetDataRetParameters();
+            ret.offset = offset;
+            ret.fetchNum = fetchNum;
+
+            if (offset > curOffset+curNum){
+                ret.fetchNum = 0;
+                return ret;
+            }
+            long startOffset = Math.max(offset, curOffset);
+            long endOffset = Math.min(offset+fetchNum-1, curOffset+curNum);
+            if (startOffset > endOffset){
+                return ret;
+            }
+            long num = endOffset - startOffset + 1;
+            if (endOffset == offset+fetchNum-1){
+                ret.fetchNum -= num;
+            }
+            if (startOffset == offset){
+                ret.offset += num;
+            }
+            for (long i = startOffset; i <= endOffset; i++){
+                long bufIndex = i - curOffset;
+                long resultIndex = startOffset - offset;
+                results.put((int)resultIndex, datas[(int)bufIndex]);
+            }
+
+            return ret;
+
+        }
+
+    }
+
     public class MQQueue {
         public Long maxOffset = 0L;
         public HashMap<Long, Long> queueMap;
+        public MQQueueSegment cacheSegment;
 
         MQQueue() {
             maxOffset = 0L;
             queueMap = new HashMap<>();
+            cacheSegment = new MQQueueSegment();
         }
     }
 
@@ -1759,6 +1958,7 @@ public class Test1MessageQueue {
         } else {
             q = mqTopic.topicMap.get(queueId);
         }
+        q.cacheSegment.addData(data);
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
         // int dataFileId = Math.floorMod(topic.hashCode()+queueId, numOfDataFiles);
@@ -1833,6 +2033,9 @@ public class Test1MessageQueue {
         if (q == null) {
             return ret;
         }
+        GetDataRetParameters changes = q.cacheSegment.getData(offset, fetchNum, ret);
+        offset = changes.offset;
+        fetchNum = changes.fetchNum;
         long pos = 0;
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
