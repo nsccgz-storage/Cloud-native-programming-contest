@@ -1776,7 +1776,7 @@ public class Test1MessageQueue {
         public long tailOffset;
         public ByteBuffer[] datas;
         HotDataCircleBuffer(){
-            maxLength = 8;
+            maxLength = 16;
             curLength = 0;
             head = 0;
             tail = 0;
@@ -1849,6 +1849,13 @@ public class Test1MessageQueue {
 
             //   [offset, offset+fetchNum-1]
             //                  [tailOffset, headOffset]
+
+            //                 [offset, offset+fetchNum-1]
+            // [tailOffset,                                       headOffset]
+
+            //   [offset,                                        offset+fetchNum-1]
+            //                  [tailOffset, headOffset]
+
 
 
             long startOffset = Math.max(offset, tailOffset);
@@ -2067,9 +2074,9 @@ public class Test1MessageQueue {
         if (q == null) {
             return ret;
         }
-        GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
-        offset = changes.offset;
-        fetchNum = changes.fetchNum;
+        // GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
+        // offset = changes.offset;
+        // fetchNum = changes.fetchNum;
         long pos = 0;
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
