@@ -165,7 +165,6 @@ public class Test1 {
 				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 				msg.buf.position(0);
 			}
-			log.info("pass the test, successfully !!!");
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		} catch (BrokenBarrierException e) {
@@ -200,6 +199,8 @@ public class Test1 {
 		}
 		long elapsedTime = System.nanoTime() - startTime;
 		double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+
+		log.info("pass the test, successfully !!!");
 		log.info("time: " + elapsedTimeS);
 	}
 

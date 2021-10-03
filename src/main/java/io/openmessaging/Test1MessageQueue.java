@@ -1787,7 +1787,7 @@ public class Test1MessageQueue {
 
         public void addData(ByteBuffer data){
             if (curLength == 0){
-                datas[head] = data.duplicate();
+                datas[head] = data.slice();
                 curLength = 1;
                 return;
             }
@@ -1864,11 +1864,12 @@ public class Test1MessageQueue {
                 ret.offset += num;
             }
             for (long i = startOffset; i <= endOffset; i++){
-                long bufIndex = (i - tailOffset + tail) % maxLength;
-                long resultIndex = startOffset - offset;
-                log.debug(datas[(int)bufIndex]);
-                // datas[(int)bufIndex].position(0);
-                results.put((int)resultIndex, datas[(int)bufIndex]);
+                int bufIndex = (int)( (i - tailOffset + tail) % maxLength);
+                int resultIndex =(int) (startOffset - offset);
+                log.debug(datas[bufIndex]);
+                datas[bufIndex].position(0);
+                log.debug(datas[bufIndex]);
+                results.put(resultIndex, datas[bufIndex]);
             }
 
             return ret;
