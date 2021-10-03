@@ -25,6 +25,7 @@ import java.util.concurrent.BrokenBarrierException;
 public class Test1 {
 	private static final Logger log = Logger.getLogger(Test1.class);
 	public static Random rand = new Random();
+	public static byte[] sampleData = new byte[17408];
 
 	private static class Message {
 		String topic;
@@ -32,6 +33,8 @@ public class Test1 {
 		long offset;
 		long getOffset;
 		ByteBuffer buf;
+		ByteBuffer checkBuf;
+		int oriPosition;
 
 		Message(String msgTopic, int msgQueueId, long msgOffset) {
 			topic = msgTopic;
@@ -40,12 +43,12 @@ public class Test1 {
 			getOffset = -1;
 			// get size between 100B to 17KiB (17408 B)
 			int size = rand.nextInt(17308); // [0 - 17308]
-			size += 100; // [100-17408]
-			byte[] data = new byte[size];
-			for (int i = 0; i < size; i++) {
-				data[i] = (byte) i;
-			}
-			buf = ByteBuffer.wrap(data);
+			// size += 100; // [100-17408]
+			buf = ByteBuffer.allocate(17408);
+			buf.put(sampleData.clone());
+			buf.position(size);
+			oriPosition = size;
+			checkBuf = buf.duplicate();
 		}
 	}
 
@@ -121,12 +124,15 @@ public class Test1 {
 				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
 				if (msg.getOffset != msg.offset) {
 					log.error("offset error !");
+					System.exit(0);
 				}
 				Map<Integer, ByteBuffer> result;
 				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-				msg.buf.position(0);
+				msg.buf.position(msg.oriPosition);
 				if (result.get(0).compareTo(msg.buf) != 0) {
 					log.error("data error !");
+					barrier.await();
+					System.exit(0);
 				}
 
 			}
@@ -138,10 +144,12 @@ public class Test1 {
 			Map<Integer, ByteBuffer> result;
 			for (int i = 0; i < msgs.size(); i++) {
 				Message msg = msgs.get(i);
+
 				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-				msg.buf.position(0);
-				if (result.get(0).compareTo(msg.buf) != 0) {
+				msg.buf.position(msg.oriPosition);
+				if (result.get(0).compareTo(msg.checkBuf) != 0) {
 					log.error("data error !");
+					System.exit(0);
 				}
 			}
 
@@ -157,6 +165,7 @@ public class Test1 {
 				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 				msg.buf.position(0);
 			}
+			log.info("pass the test, successfully !!!");
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		} catch (BrokenBarrierException e) {
@@ -167,6 +176,7 @@ public class Test1 {
 
 	public static void testThreadPool(String dbPath) {
 		Test1MessageQueue mq = new Test1MessageQueue(dbPath);
+		// int numOfThreads = 1;
 		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -193,7 +203,13 @@ public class Test1 {
 		log.info("time: " + elapsedTimeS);
 	}
 
+	public static void init(){
+		for (int i = 0; i < 17408; i++){
+			sampleData[i] = (byte)i;
+		}
+	}
 	public static void main(String[] args) {
+		init();
 		if (args.length < 1){
 			System.out.println("java SSDBench ${dbPath}");
 			return ;

@@ -1272,7 +1272,12 @@ public class Test1MessageQueue {
                     writeLength = metadataLength + dataLength;
                     log.debug(lastWriter);
                     writerBuffer.putInt(dataLength);
+                    // log.debug(lastWriter.data);
+                    // int oriPos = lastWriter.data.position();
                     writerBuffer.put(lastWriter.data);
+                    // log.debug(lastWriter.data);
+                    // lastWriter.data.position(oriPos);
+                    // log.debug(lastWriter.data);
                     lastWriter.position = position;
                     position += writeLength;
                     bufLength += writeLength;
@@ -1791,7 +1796,10 @@ public class Test1MessageQueue {
             head = head % maxLength;
             
             // method 1
-            datas[head] = data.duplicate();
+            log.debug(data);
+            datas[head] = data.slice();
+            // datas[head] = data.duplicate();
+            log.debug(datas[head]);
 
             // method 2
             // datas[head] = ByteBuffer.allocate(data.remaining());
@@ -1806,6 +1814,7 @@ public class Test1MessageQueue {
             // log.debug(data);
 
             // method 3
+            // datas[head] = data;
 
 
             if (curLength < 8){
@@ -1858,7 +1867,7 @@ public class Test1MessageQueue {
                 long bufIndex = (i - tailOffset + tail) % maxLength;
                 long resultIndex = startOffset - offset;
                 log.debug(datas[(int)bufIndex]);
-                datas[(int)bufIndex].position(0);
+                // datas[(int)bufIndex].position(0);
                 results.put((int)resultIndex, datas[(int)bufIndex]);
             }
 
