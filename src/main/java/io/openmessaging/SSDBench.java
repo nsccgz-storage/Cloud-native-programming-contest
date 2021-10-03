@@ -161,6 +161,36 @@ public class SSDBench {
         benchLock.unlock();
     }
 
+    public static void runBench1(String dbPath){
+
+        benchLock.lock();
+        System.out.println("dbPathDir : " + dbPath);
+
+        log.info("type,thread,ioSize,bandwidth,iops");
+
+
+        log.info("test");
+        {
+            long totalBenchSize = 512L * 1024L * 1024L; // 1GiB
+            int[] ioSizes = {32 * 1024, 48*1024, 64 * 1024, 80*1024, 128 * 1024, 256 * 1024, 512 * 1024, 1024*1024};
+            int[] numOfFiles = {3,4};
+
+            for (int i = 0; i < numOfFiles.length; i++) {
+                for (int j = 0; j < ioSizes.length; j++) {
+                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
+                            false);
+                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
+                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
+                            // false);
+                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
+                            // true);
+ 
+                }
+            }
+        }
+        benchLock.unlock();
+    }
+
     public static void benchFileChannelWrite(String dbPath, long totalBenchSize, int ioSize, boolean isDirect) {
         try {
             dbPath = dbPath + "/ssdbench";
@@ -263,8 +293,9 @@ public class SSDBench {
     public static void benchFileChannelWriteMultiFile(String dbPath, long totalBenchSize, int thread, int ioSize,
             boolean isDirect) {
         CyclicBarrier barrier = new CyclicBarrier(thread);
-        assert (totalBenchSize % ioSize == 0);
         long totalBenchCount = totalBenchSize / ioSize;
+        final long curTotalBenchSize = totalBenchSize - totalBenchSize % ioSize;
+        totalBenchSize = curTotalBenchSize;
 
         ThreadStat[] stats = new ThreadStat[thread];
         for (int i = 0; i < stats.length; i++) {
@@ -279,7 +310,7 @@ public class SSDBench {
         for (int i = 0; i < thread; i++) {
             final int threadId = i;
             executor.execute(() -> {
-                threadRunSeqWrite(stats[threadId], barrier, dbPath, threadId, totalBenchSize, ioSize,
+                threadRunSeqWrite(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize, ioSize,
                         isDirect);
             });
 
@@ -296,7 +327,7 @@ public class SSDBench {
             ie.printStackTrace();
         }
         long endTime = System.nanoTime();
-        long elapsedTime = endTime - stats[0].startTime;
+        long elapsedTime = stats[0].endTime - stats[0].startTime;
         double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
         double totalBenchSizeMiB = (double) totalBenchSize * thread / (1024 * 1024);
         double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
@@ -320,10 +351,10 @@ public class SSDBench {
             } else {
                 buf = ByteBuffer.allocate(ioSize);
             }
-            barrier.await();
             log.debug("begin bench !!");
             long curPosition = 0L;
             long maxPosition = totalBenchSize;
+            barrier.await();
             long startTime = System.nanoTime();
             while (curPosition < maxPosition) {
                 buf.position(0);
@@ -332,6 +363,7 @@ public class SSDBench {
                 curPosition += ioSize;
             }
             long endTime = System.nanoTime();
+            barrier.await();
             stat.startTime = startTime;
             stat.endTime = endTime;
             fileChannel.close();
@@ -348,8 +380,9 @@ public class SSDBench {
     public static void benchFileChannelWriteMappedMultiFile(String dbPath, long totalBenchSize, int thread,
             int ioSize, boolean isDirect) {
         CyclicBarrier barrier = new CyclicBarrier(thread);
-        assert (totalBenchSize % ioSize == 0);
         long totalBenchCount = totalBenchSize / ioSize;
+        final long curTotalBenchSize = totalBenchSize - totalBenchSize % ioSize;
+        totalBenchSize = curTotalBenchSize;
 
         ThreadStat[] stats = new ThreadStat[thread];
         for (int i = 0; i < stats.length; i++) {
@@ -364,7 +397,7 @@ public class SSDBench {
         for (int i = 0; i < thread; i++) {
             final int threadId = i;
             executor.execute(() -> {
-                threadRunSeqWriteMapped(stats[threadId], barrier, dbPath, threadId, totalBenchSize,
+                threadRunSeqWriteMapped(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize,
                         ioSize, isDirect);
             });
 
@@ -381,7 +414,7 @@ public class SSDBench {
             ie.printStackTrace();
         }
         long endTime = System.nanoTime();
-        long elapsedTime = endTime - stats[0].startTime;
+        long elapsedTime = stats[0].endTime - stats[0].startTime;
         double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
         double totalBenchSizeMiB = (double) totalBenchSize * thread / (1024 * 1024);
         double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
@@ -407,10 +440,10 @@ public class SSDBench {
             } else {
                 buf = ByteBuffer.allocate(ioSize);
             }
-            barrier.await();
             log.debug("begin bench !!");
             long curPosition = 0L;
             long maxPosition = totalBenchSize;
+            barrier.await();
             long startTime = System.nanoTime();
             while (curPosition < maxPosition) {
                 buf.position(0);
@@ -418,6 +451,7 @@ public class SSDBench {
                 mappedByteBuffer.force();
                 curPosition += ioSize;
             }
+            barrier.await();
             long endTime = System.nanoTime();
             stat.startTime = startTime;
             stat.endTime = endTime;
