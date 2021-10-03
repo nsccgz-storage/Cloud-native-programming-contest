@@ -21,6 +21,7 @@ public class PerformanceTest {
         DefaultMessageQueueImpl messageQueue = new DefaultMessageQueueImpl();
 
         int threadNum = (int)(Math.random() * (50 - 10 + 1)) + 10;
+        threadNum = 40; // just for test
         System.out.println("Write thread number is "+ threadNum);
 
         long startTime = System.nanoTime();
