@@ -53,8 +53,8 @@ public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
         boolean useStats = true; // 实测，对性能影响不大，挺神奇
-        // Level logLevel = Level.DEBUG;
-        Level logLevel = Level.INFO;
+        Level logLevel = Level.DEBUG;
+        // Level logLevel = Level.INFO;
 
         // // version 0: local SSD: 70 MiB/s   
         // int numOfDataFiles = 10;
