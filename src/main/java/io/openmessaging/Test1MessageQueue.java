@@ -1793,6 +1793,8 @@ public class Test1MessageQueue {
         }
 
         public void addData(ByteBuffer data){
+            log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
+            log.debug("original data: " + data);
             if (curLength == 0){
                 datas[head] = data.slice();
                 curLength = 1;
@@ -1835,6 +1837,8 @@ public class Test1MessageQueue {
 
         public GetDataRetParameters getData(long offset, int fetchNum, Map<Integer, ByteBuffer> results){
             GetDataRetParameters ret = new GetDataRetParameters();
+            log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
+            log.debug("offset : "+offset + "  fetchNum : "+fetchNum);
             ret.offset = offset;
             ret.fetchNum = fetchNum;
 
@@ -1890,9 +1894,11 @@ public class Test1MessageQueue {
             if (startOffset == offset){
                 ret.offset += num;
             }
+
             for (long i = startOffset; i <= endOffset; i++){
                 int bufIndex = (int)( (i - tailOffset + tail) % maxLength);
-                int resultIndex =(int) (startOffset - offset);
+                int resultIndex =(int) (i - offset);
+                log.debug(resultIndex);
                 log.debug(datas[bufIndex]);
                 datas[bufIndex].position(0);
                 log.debug(datas[bufIndex]);
@@ -2095,8 +2101,13 @@ public class Test1MessageQueue {
             return ret;
         }
         GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
-        // offset = changes.offset;
-        // fetchNum = changes.fetchNum;
+        log.debug("original offset :  " +offset);
+        log.debug("original fetchNum: " + fetchNum);
+        offset = changes.offset;
+        fetchNum = changes.fetchNum;
+        log.debug("updated offset :  " +offset);
+        log.debug("updated fetchNum: " + fetchNum);
+
         long pos = 0;
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
