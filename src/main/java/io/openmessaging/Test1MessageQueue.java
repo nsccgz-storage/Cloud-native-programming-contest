@@ -133,7 +133,7 @@ public class Test1MessageQueue {
         int minBufLength = 32768;
         int timeOutMS = 8;
         boolean fairLock = true;
-        int writeMethod = 7; 
+        int writeMethod = 6; 
  
 
         // version just for test
@@ -1238,12 +1238,16 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 36*1024; // 36 KiB
+                int maxBufLength = 48*1024; // 36 KiB
                 // if (w.data.remaining() < 1024){
-                //     maxBufLength = 8192;
+                //     maxBufLength = 32*1024;
+                // }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
                 int maxBufNum = 6;
+
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
@@ -1269,11 +1273,28 @@ public class Test1MessageQueue {
                     bufNum += 1;
                     if (bufNum >= maxBufNum){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
                     }
                     if (bufLength >= maxBufLength){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
                     }
                 }
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+
                 long writePosition = curPosition;
                 curPosition += bufLength;
                 {
