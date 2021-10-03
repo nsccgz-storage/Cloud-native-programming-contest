@@ -33,6 +33,9 @@ import org.apache.log4j.spi.LoggerFactory;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
 import java.lang.Math;
 import java.text.Format;
 import java.util.concurrent.TimeoutException;
@@ -177,6 +180,7 @@ public class Test1MessageQueue {
         Long opCount;
         AtomicBoolean reported;
         int[] oldTotalWriteBucketCount;
+        MemoryUsage memoryUsage;
 
         private class ThreadStat {
             Long appendStartTime;
@@ -210,6 +214,8 @@ public class Test1MessageQueue {
                 for (int i = 0; i < bucketCount.length; i++){
                     bucketCount[i] = 0;
                 }
+                MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
+                memoryUsage = memory.getHeapMemoryUsage();
             }
 
             public ThreadStat clone() {
@@ -474,6 +480,7 @@ public class Test1MessageQueue {
             log.info("appendStat   :"+appendStat);
             log.info("getRangeStat :"+getRangeStat);
             log.info("csvStat      :"+csvStat);
+            log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
 
             // report write stat
             for (int i = 0; i < dataFiles.length; i++){
@@ -1837,15 +1844,35 @@ public class Test1MessageQueue {
 
             //                               [offset, offset+fetchNum-1]
             // [tailOffset, headOffset]
-
-
             if (offset > headOffset){
                 ret.fetchNum = 0;
                 return ret;
             }
 
+            // [offset, offset+fetchNum-1]
+            //                                  [tailOffset, headOffset]
+            if (offset+fetchNum-1 < tailOffset){
+                return ret;
+            }
+
+
+            //   [offset,                                        offset+fetchNum-1]
+            //                  [tailOffset, headOffset]
+
+            //                      [offset,                  offset+fetchNum-1]
+            //        [tailOffset,     headOffset]
+            if (offset + fetchNum-1 > headOffset){
+                ret.fetchNum = (int)(headOffset - offset + 1);
+                fetchNum = ret.fetchNum;
+            }
+
+            //              [offset,    offset+fetchNum-1]
+            //                    [tailOffset, headOffset]
+
             //                 [offset, offset+fetchNum-1]
-            // [tailOffset, headOffset]
+            //             [tailOffset,        headOffset]
+
+
 
             //   [offset, offset+fetchNum-1]
             //                  [tailOffset, headOffset]
@@ -1853,17 +1880,10 @@ public class Test1MessageQueue {
             //                 [offset, offset+fetchNum-1]
             // [tailOffset,                                       headOffset]
 
-            //   [offset,                                        offset+fetchNum-1]
-            //                  [tailOffset, headOffset]
-
-
 
             long startOffset = Math.max(offset, tailOffset);
             long endOffset = Math.min(offset+fetchNum-1, headOffset);
-            if (startOffset > endOffset){
-                return ret;
-            }
-            long num = endOffset - startOffset + 1;
+            long num = endOffset - startOffset + 1; // 能够在缓冲区中找到多少个数据？
             if (endOffset == offset+fetchNum-1){
                 ret.fetchNum -= num;
             }
@@ -2074,7 +2094,7 @@ public class Test1MessageQueue {
         if (q == null) {
             return ret;
         }
-        // GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
+        GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
         // offset = changes.offset;
         // fetchNum = changes.fetchNum;
         long pos = 0;
