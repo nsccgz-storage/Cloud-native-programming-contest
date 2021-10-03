@@ -2100,11 +2100,11 @@ public class Test1MessageQueue {
         if (q == null) {
             return ret;
         }
-        if (offset > q.maxOffset){
+        if (offset >= q.maxOffset){
             return ret;
         }
-        if (offset + fetchNum-1 > q.maxOffset){
-            fetchNum = (int)(q.maxOffset-offset+1);
+        if (offset + fetchNum-1 >= q.maxOffset){
+            fetchNum = (int)(q.maxOffset-offset);
         }
         GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
         log.debug("original offset :  " +offset);
