@@ -983,12 +983,12 @@ public class Test1MessageQueue {
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = 48*1024; // 36 KiB
-                if (w.data.remaining() < 1024){
-                    maxBufLength = 32*1024;
-                }
-                if (w.data.remaining() > 16*1024){
-                    maxBufLength = 64*1024;
-                }
+                // if (w.data.remaining() < 1024){
+                //     maxBufLength = 32*1024;
+                // }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
+                // }
                 int bufNum = 0;
                 int maxBufNum = 6;
                 boolean continueMerge = true;
@@ -1000,7 +1000,7 @@ public class Test1MessageQueue {
                 position = curPosition;
                 Writer lastWriter = null;
                 int metadataLength = Integer.BYTES;
-                while ( iter.hasNext() && continueMerge ){
+                while (continueMerge ){
                     lastWriter = iter.next();
                     int dataLength = lastWriter.data.remaining();
                     int writeLength =  metadataLength + dataLength;
@@ -1021,11 +1021,28 @@ public class Test1MessageQueue {
                     bufNum += 1;
                     if (bufNum >= maxBufNum){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
                     }
                     if (bufLength >= maxBufLength){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
                     }
                 }
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+
                 curPosition = position;
                 {
                     log.debug("need to flush, unlock !");
