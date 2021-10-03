@@ -197,17 +197,17 @@ public class Test1 {
 						log.error("offset error !");
 						System.exit(0);
 					}
-					// result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
-					// for (int j = 0; j <= i; j++){
-					// 	log.debug(result.get(j));
-					// 	log.debug(getRangeMsgs.get(j).checkBuf);
+					result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
+					for (int j = 0; j <= i; j++){
+						log.debug(result.get(j));
+						log.debug(getRangeMsgs.get(j).checkBuf);
 
-					// 	if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
-					// 		log.error("data error !");
-					// 		System.exit(0);
-					// 	}
+						if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
+							log.error("data error !");
+							System.exit(0);
+						}
 					
-					// }
+					}
 					for (int k = 0; k <= 40 && k <= i; k++){
 						log.debug("k : " + k);
 						log.debug("i-k : " + (i-k));
@@ -277,8 +277,8 @@ public class Test1 {
 	}
 	public static void main(String[] args) {
 		init();
-		log.setLevel(Level.DEBUG);
-		// log.setLevel(Level.INFO);
+		// log.setLevel(Level.DEBUG);
+		log.setLevel(Level.INFO);
 		if (args.length < 1){
 			System.out.println("java SSDBench ${dbPath}");
 			return ;

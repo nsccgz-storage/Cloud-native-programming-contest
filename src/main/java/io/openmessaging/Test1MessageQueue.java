@@ -1234,17 +1234,17 @@ public class Test1MessageQueue {
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
  
-                log.debug("try to new a writer to queue");
+                // log.debug("try to new a writer to queue");
                 Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
-                log.debug(writerQueue);
-                log.debug(writerQueue.getFirst());
+                // log.debug(writerQueue);
+                // log.debug(writerQueue.getFirst());
                 while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
-                    log.debug("wait for the leader of queue");
+                    // log.debug("wait for the leader of queue");
                     w.cv.await();
                 }
                 if (w.done == 1){
-                    log.debug(w.position);
+                    // log.debug(w.position);
                     return w.position;
                 }
                 log.debug("I am the head");
@@ -1277,7 +1277,7 @@ public class Test1MessageQueue {
                     lastWriter = iter.next();
                     dataLength = lastWriter.data.remaining();
                     writeLength = metadataLength + dataLength;
-                    log.debug(lastWriter);
+                    // log.debug(lastWriter);
                     writerBuffer.putInt(dataLength);
                     // log.debug(lastWriter.data);
                     // int oriPos = lastWriter.data.position();
@@ -1316,14 +1316,14 @@ public class Test1MessageQueue {
                 long writePosition = curPosition;
                 curPosition += bufLength;
                 {
-                    log.debug("need to flush, unlock !");
+                    // log.debug("need to flush, unlock !");
                     writerQueueLock.unlock();
                     writerBuffer.position(0);
                     writerBuffer.limit(bufLength);
                     dataFileChannel.write(writerBuffer, writePosition);
                     dataFileChannel.force(true);
                     writerQueueLock.lock();
-                    log.debug("flush ok , get the lock again!");
+                    // log.debug("flush ok , get the lock again!");
                 }
 
                 while(true){
@@ -1340,7 +1340,7 @@ public class Test1MessageQueue {
                 if (!writerQueue.isEmpty()){
                     writerQueue.getFirst().cv.signal();
                 }
-                log.debug(w.position);
+                // log.debug(w.position);
                 position = w.position;
 
             } catch (IOException ie) {
@@ -1372,16 +1372,16 @@ public class Test1MessageQueue {
                 Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
                 log.debug(writerQueue);
-                log.debug(writerQueue.getFirst());
+                // log.debug(writerQueue.getFirst());
                 while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
-                    log.debug("wait for the leader of queue");
+                    // log.debug("wait for the leader of queue");
                     w.cv.await();
                 }
                 if (w.done == 1){
-                    log.debug(w.position);
+                    // log.debug(w.position);
                     return w.position;
                 }
-                log.debug("I am the head");
+                // log.debug("I am the head");
                 
                 // TODO: 调参
                 int bufLength = 0;
@@ -1411,7 +1411,7 @@ public class Test1MessageQueue {
                     lastWriter = iter.next();
                     dataLength = lastWriter.data.remaining();
                     writeLength = metadataLength + dataLength;
-                    log.debug(lastWriter);
+                    // log.debug(lastWriter);
                     lastWriter.position = position;
                     batchWriters[bufNum] = lastWriter;
                     position += writeLength;
@@ -1443,7 +1443,7 @@ public class Test1MessageQueue {
                     writeStat.addSample(bufLength);
                 }
                 {
-                    log.debug("need to flush, unlock !");
+                    // log.debug("need to flush, unlock !");
                     writerQueueLock.unlock();
                     writerBuffer.position(0);
                     writerBuffer.limit(writerBuffer.capacity());
@@ -1456,7 +1456,7 @@ public class Test1MessageQueue {
                     dataFileChannel.write(writerBuffer, writePosition);
                     dataFileChannel.force(true);
                     writerQueueLock.lock();
-                    log.debug("flush ok , get the lock again!");
+                    // log.debug("flush ok , get the lock again!");
                 }
 
                 while(true){
@@ -1473,7 +1473,7 @@ public class Test1MessageQueue {
                 if (!writerQueue.isEmpty()){
                     writerQueue.getFirst().cv.signal();
                 }
-                log.debug(w.position);
+                // log.debug(w.position);
                 position = w.position;
 
             } catch (IOException ie) {
@@ -1500,20 +1500,20 @@ public class Test1MessageQueue {
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
  
-                log.debug("try to add a new writer to queue");
+                // log.debug("try to add a new writer to queue");
                 Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
-                log.debug(writerQueue);
-                log.debug(writerQueue.getFirst());
+                // log.debug(writerQueue);
+                // log.debug(writerQueue.getFirst());
                 while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
-                    log.debug("wait for the leader of queue");
+                    // log.debug("wait for the leader of queue");
                     w.cv.await();
                 }
                 if (w.done == 1){
-                    log.debug(w.position);
+                    // log.debug(w.position);
                     return w.position;
                 }
-                log.debug("I am the head");
+                // log.debug("I am the head");
                 
                 // TODO: 调参
                 int bufLength = 0;
@@ -1543,7 +1543,7 @@ public class Test1MessageQueue {
                     lastWriter = iter.next();
                     dataLength = lastWriter.data.remaining();
                     writeLength = metadataLength + dataLength;
-                    log.debug(lastWriter);
+                    // log.debug(lastWriter);
                     lastWriter.position = position;
                     batchWriters[bufNum] = lastWriter;
                     position += writeLength;
@@ -1575,7 +1575,7 @@ public class Test1MessageQueue {
                     writeStat.addSample(bufLength);
                 }
                 {
-                    log.debug("need to flush, unlock !");
+                    // log.debug("need to flush, unlock !");
                     writerQueueLock.unlock();
                     writerBuffer.position(0);
                     writerBuffer.limit(writerBuffer.capacity());
@@ -1588,7 +1588,7 @@ public class Test1MessageQueue {
                     dataFileChannel.write(writerBuffer, writePosition);
                     dataFileChannel.force(true);
                     writerQueueLock.lock();
-                    log.debug("flush ok , get the lock again!");
+                    // log.debug("flush ok , get the lock again!");
                 }
 
                 while(true){
@@ -1605,7 +1605,7 @@ public class Test1MessageQueue {
                 if (!writerQueue.isEmpty()){
                     writerQueue.getFirst().cv.signal();
                 }
-                log.debug(w.position);
+                // log.debug(w.position);
                 position = w.position;
 
             } catch (IOException ie) {
@@ -1627,7 +1627,7 @@ public class Test1MessageQueue {
             }
             ByteBuffer readMeta = threadLocalReadMetaBuf.get();
 
-            log.debug("read from position : " + position);
+            // log.debug("read from position : " + position);
             readMeta.clear();
             try {
                 int ret;
@@ -1637,7 +1637,7 @@ public class Test1MessageQueue {
                 int dataLength = readMeta.getInt();
                 ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + readMeta.capacity());
-                log.debug(ret);
+                // log.debug(ret);
                 return tmp;
             } catch (IOException ie) {
                 ie.printStackTrace();
