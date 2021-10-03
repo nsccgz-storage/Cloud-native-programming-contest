@@ -133,7 +133,7 @@ public class Test1MessageQueue {
         int minBufLength = 32768;
         int timeOutMS = 8;
         boolean fairLock = true;
-        int writeMethod = 8; 
+        int writeMethod = 6; 
  
 
         // version just for test
