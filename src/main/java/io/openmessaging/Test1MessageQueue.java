@@ -1796,6 +1796,8 @@ public class Test1MessageQueue {
             log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
             log.debug("original data: " + data);
             if (curLength == 0){
+                headOffset = 0L;
+                tailOffset = 0L;
                 datas[head] = data.slice();
                 curLength = 1;
                 return;
@@ -1846,12 +1848,6 @@ public class Test1MessageQueue {
                 return ret;
             }
 
-            //                               [offset, offset+fetchNum-1]
-            // [tailOffset, headOffset]
-            if (offset > headOffset){
-                ret.fetchNum = 0;
-                return ret;
-            }
 
             // [offset, offset+fetchNum-1]
             //                                  [tailOffset, headOffset]
@@ -1860,15 +1856,6 @@ public class Test1MessageQueue {
             }
 
 
-            //   [offset,                                        offset+fetchNum-1]
-            //                  [tailOffset, headOffset]
-
-            //                      [offset,                  offset+fetchNum-1]
-            //        [tailOffset,     headOffset]
-            if (offset + fetchNum-1 > headOffset){
-                ret.fetchNum = (int)(headOffset - offset + 1);
-                fetchNum = ret.fetchNum;
-            }
 
             //              [offset,    offset+fetchNum-1]
             //                    [tailOffset, headOffset]
@@ -1886,13 +1873,10 @@ public class Test1MessageQueue {
 
 
             long startOffset = Math.max(offset, tailOffset);
-            long endOffset = Math.min(offset+fetchNum-1, headOffset);
+            long endOffset = offset+fetchNum-1;
             long num = endOffset - startOffset + 1; // 能够在缓冲区中找到多少个数据？
             if (endOffset == offset+fetchNum-1){
                 ret.fetchNum -= num;
-            }
-            if (startOffset == offset){
-                ret.offset += num;
             }
 
             for (long i = startOffset; i <= endOffset; i++){
@@ -2109,7 +2093,7 @@ public class Test1MessageQueue {
         GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
         log.debug("original offset :  " +offset);
         log.debug("original fetchNum: " + fetchNum);
-        offset = changes.offset;
+        // offset = changes.offset;
         fetchNum = changes.fetchNum;
         log.debug("updated offset :  " +offset);
         log.debug("updated fetchNum: " + fetchNum);
