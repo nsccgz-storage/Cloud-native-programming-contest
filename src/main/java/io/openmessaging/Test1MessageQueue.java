@@ -53,8 +53,8 @@ public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
         boolean useStats = true; // 实测，对性能影响不大，挺神奇
-        Level logLevel = Level.DEBUG;
-        // Level logLevel = Level.INFO;
+        // Level logLevel = Level.DEBUG;
+        Level logLevel = Level.INFO;
 
         // // version 0: local SSD: 70 MiB/s   
         // int numOfDataFiles = 10;
@@ -2100,11 +2100,17 @@ public class Test1MessageQueue {
         if (q == null) {
             return ret;
         }
+        if (offset > q.maxOffset){
+            return ret;
+        }
+        if (offset + fetchNum-1 > q.maxOffset){
+            fetchNum = (int)(q.maxOffset-offset+1);
+        }
         GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
         log.debug("original offset :  " +offset);
         log.debug("original fetchNum: " + fetchNum);
-        offset = changes.offset;
-        fetchNum = changes.fetchNum;
+        // offset = changes.offset;
+        // fetchNum = changes.fetchNum;
         log.debug("updated offset :  " +offset);
         log.debug("updated fetchNum: " + fetchNum);
 
@@ -2114,14 +2120,12 @@ public class Test1MessageQueue {
         DataFile df = dataFiles[dataFileId];
 
         for (int i = 0; i < fetchNum; i++) {
-            if (q.queueMap.containsKey(offset + i)) {
-                pos = q.queueMap.get(offset + i);
-                ByteBuffer bbf = df.read(pos);
-                if (bbf != null) {
-                    bbf.position(0);
-                    bbf.limit(bbf.capacity());
-                    ret.put(i, bbf);
-                }
+            pos = q.queueMap.get(offset + i);
+            ByteBuffer bbf = df.read(pos);
+            if (bbf != null) {
+                bbf.position(0);
+                bbf.limit(bbf.capacity());
+                ret.put(i, bbf);
             }
         }
 
