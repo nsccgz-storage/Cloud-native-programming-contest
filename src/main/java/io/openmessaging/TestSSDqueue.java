@@ -69,7 +69,7 @@ public class TestSSDqueue {
 	}
 
 	public static void testOne() {
-		Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
+		Test1MessageQueue mq = new Test1MessageQueue("/mnt/ssd/wxr");
 		Vector<Message> msgs = generateOne();
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
@@ -148,14 +148,14 @@ public class TestSSDqueue {
 
 	public static void testThreadPool() {
 
-		String metaPath = "/mnt/nvme/mq/MetaData";
-		String dataPath = "/mnt/nvme/mq/Data";
+		String metaPath = "/mnt/ssd/wxr/MetaData";
+		String dataPath = "/mnt/ssd/wxr/Data";
 		// System.out.println(" 28 ");
 
 		try {
 			FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
 			FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-			SSDqueue mq = new SSDqueue(fileChannel, metaFileChannel, false);
+			SSDqueue mq = new SSDqueue(fileChannel, metaFileChannel);
 			int numOfThreads = 1;
 			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
