@@ -155,7 +155,7 @@ public class TestSSDqueue {
 		try {
 			FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
 			FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-			SSDqueue mq = new SSDqueue(fileChannel, metaFileChannel);
+			SSDqueue mq = new SSDqueue("/mnt/ssd/wyk/");
 			int numOfThreads = 1;
 			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);

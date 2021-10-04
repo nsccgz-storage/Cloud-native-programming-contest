@@ -1,6 +1,7 @@
 package io.openmessaging;
 
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
@@ -40,15 +41,15 @@ public class DataSpace {
         byteData.put(data);
         byteData.flip();
         int len = fc.write(byteData,offset);
-        updata();
+        update();
         fc.force(true);
         return offset;
     }
-    /*
-    public ByteBuffer read(Long offset) throws IOException{
-        
+    public int read(ByteBuffer res, long offset) throws IOException{
+        return fc.read(res, offset);
     }
-    */
+
+
     public long readHandle(long offset) throws IOException{
         ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
         int len = fc.read(tmp, offset + Long.BYTES);
@@ -69,7 +70,20 @@ public class DataSpace {
         tmp1.flip();
         return tmp1;
     }
-    void updata(){
+    public long updateLink(long tail, long newTail)throws IOException{
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+        buffer.putLong(newTail);
+        buffer.flip();
+        fc.write(buffer, tail + Long.BYTES);
+        fc.force(true);
+        return -1L;
+    }
+    public long createLink(){
+        long res = FREE_OFFSET.getAndAdd(Long.BYTES * 3);
+        return res;
+    }
+
+    void update(){
         try {
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 1);
             tmp.putLong(FREE_OFFSET.get());

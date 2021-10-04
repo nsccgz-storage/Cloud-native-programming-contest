@@ -37,30 +37,9 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     
     private SSDqueue ssdQueue;
     public DefaultMessageQueueImpl(){
-        try{
-            String dir = "/mnt/ssd/wyk";
-            String metaPath = dir + "/MetaData";
-            String dataPath = dir + "/data";
-            String dataSpacePath = dir + "/space";
-//            String metaPath = "/essd/MetaData";
-//            String dataPath = "/essd/data";
-            boolean flag = new File(metaPath).exists();
-            if(false){
-                //System.out.println(" 28 ");
-                
-                FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
-                FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-                ssdQueue = new SSDqueue(fileChannel, metaFileChannel, false);
-                
-            }else{
-                FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
-                FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-                ssdQueue = new SSDqueue(fileChannel, metaFileChannel);
-            }
-
-        }catch(IOException e){
-            e.printStackTrace();
-        }
+        
+        String dirPath = "/home/ubuntu/test";
+        ssdQueue = new SSDqueue(dirPath);
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
