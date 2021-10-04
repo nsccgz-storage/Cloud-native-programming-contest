@@ -448,10 +448,16 @@ public class SSDqueue{
             long offset = ds.write(data);
             if(tail == -1L){
                 head = offset;
+                tail = offset;
+                // update head
+            }else{
+                ds.updateLink(tail, offset); //
+                tail = offset;
             }
-            ds.updateLink(tail, offset); //
-            tail = offset;
-            return totalNum++;
+            
+            Long res = totalNum;
+            totalNum++;
+            return res;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
             Long startOffset = head;
