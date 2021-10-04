@@ -2095,7 +2095,7 @@ public class Test1MessageQueue {
         GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
         log.debug("original fetchNum: " + fetchNum);
         // offset = changes.offset;
-        fetchNum = changes.fetchNum;
+        // fetchNum = changes.fetchNum;
         log.debug("updated fetchNum: " + fetchNum);
 
         long pos = 0;
