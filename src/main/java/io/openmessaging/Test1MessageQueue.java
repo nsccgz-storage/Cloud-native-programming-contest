@@ -1839,9 +1839,9 @@ public class Test1MessageQueue {
 
         public GetDataRetParameters getData(long offset, int fetchNum, Map<Integer, ByteBuffer> results){
             GetDataRetParameters ret = new GetDataRetParameters();
-            log.info("head : "+head+" tail :"+tail + "  curLength:"+curLength);
-            log.info("headOffset : "+headOffset + "  tailOffset"+tailOffset);
-            log.info("offset : "+offset + "  fetchNum : "+fetchNum);
+            log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
+            log.debug("headOffset : "+headOffset + "  tailOffset"+tailOffset);
+            log.debug("offset : "+offset + "  fetchNum : "+fetchNum);
             ret.offset = offset;
             ret.fetchNum = fetchNum;
 
@@ -2093,10 +2093,10 @@ public class Test1MessageQueue {
             fetchNum = (int)(q.maxOffset-offset);
         }
         GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
-        log.info("original fetchNum: " + fetchNum);
+        log.debug("original fetchNum: " + fetchNum);
         // offset = changes.offset;
         fetchNum = changes.fetchNum;
-        log.info("updated fetchNum: " + fetchNum);
+        log.debug("updated fetchNum: " + fetchNum);
 
         long pos = 0;
         Integer queueIdObject = queueId;
@@ -2109,6 +2109,13 @@ public class Test1MessageQueue {
             if (bbf != null) {
                 bbf.position(0);
                 bbf.limit(bbf.capacity());
+                if (i >= changes.fetchNum){
+                    if (ret.get(i).compareTo(bbf) != 0){
+                        log.error("hot data circle buffer data error !");
+                        System.exit(0);
+                    }
+                }
+ 
                 ret.put(i, bbf);
             }
         }
