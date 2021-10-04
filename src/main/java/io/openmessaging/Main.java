@@ -10,8 +10,10 @@ import java.util.Map;
 public class Main {
     public static void main(String args[]) throws IOException{
         System.out.println("Hello World!");
-        String metaPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/MetaData";
-        String dataPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/data";
+//        String metaPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/MetaData";
+//        String dataPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/data";
+        String metaPath = "/home/wangxr/桌面/pmem_test/MetaData";
+        String dataPath = "/home/wangxr/桌面/pmem_test/data";
         
         boolean flag = new File(metaPath).exists();
         SSDqueue ssdQueue;

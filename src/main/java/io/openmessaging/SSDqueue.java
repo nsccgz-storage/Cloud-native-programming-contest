@@ -4,13 +4,12 @@ import java.io.IOException;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Vector;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -62,6 +61,13 @@ public class SSDqueue{
             appendCount = new ThreadLocal<>();
             getRangeCount = new ThreadLocal<>();
             opCount = new ThreadLocal<>();
+
+            appendStartTime.set(0L);
+            appendEndTime.set(0L);
+            getRangeStartTime.set(0L);
+            getRangeEndTime.set(0L);
+            appendCount.set(0L);
+            getRangeCount.set(0L);
         }
         void appendStart(){
             if(appendStartTime.get() == null || appendStartTime.get() == 0L){
@@ -128,6 +134,25 @@ public class SSDqueue{
         // report topic stat per second
     }
 
+    public ThreadLocal<ByteBuffer> writerQueueLocalBuffer;
+    final int writerQueueBufferCapacity = 1024 * 128;
+    public Lock lock; // 写队列的锁
+    public Condition queueCondition;
+    public Deque<Writer> writerQueue;
+
+    private class Writer{
+        ByteBuffer data;
+        boolean done;
+        long offset;
+        Condition cv;
+        Writer(ByteBuffer d, Condition c){
+            data = d;
+            done = false;
+            cv = c;
+            offset = 0L;
+        }
+    }
+
     public SSDqueue(FileChannel fileChannel, FileChannel metaFileChannel){
         this.fileChannel = fileChannel;
         this.metaFileChannel = metaFileChannel;
@@ -145,6 +170,11 @@ public class SSDqueue{
 
         testStat = new TestStat();
         logger.info("initialize new SSDqueue, num: "+currentNum.get());
+
+        writerQueueLocalBuffer = new ThreadLocal<>();
+        lock = new ReentrantLock(false); // false 非公平锁
+        queueCondition = lock.newCondition();
+        writerQueue = new ArrayDeque<>();
     }
     public SSDqueue(FileChannel fileChannel, FileChannel metaFileChannel, Boolean t)throws IOException{
         // 读盘，建表 
@@ -191,6 +221,11 @@ public class SSDqueue{
 
         testStat = new TestStat();
         logger.info("recover a SSDqueue, num: "+currentNum.get());
+
+        writerQueueLocalBuffer = new ThreadLocal<>();
+        lock = new ReentrantLock(false); // false 非公平锁
+        queueCondition = lock.newCondition();
+        writerQueue = new ArrayDeque<>();
     }
     public Map<Integer, Long> readQueue(Long queueMetaOffset) throws IOException{
         QueueId resData = new QueueId(metaFileChannel, queueMetaOffset);
@@ -417,29 +452,103 @@ public class SSDqueue{
             this.head = tmp.getLong();
             this.tail = tmp.getLong();
         }
+        public long writeAgg(ByteBuffer data){
+            if (writerQueueLocalBuffer.get() == null) {
+                writerQueueLocalBuffer.set(ByteBuffer.allocateDirect(writerQueueBufferCapacity)); // 分配堆外内存
+            }
+            ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
+
+            long offset = -1;
+            lock.lock();
+            try {
+                Writer w = new Writer(data, queueCondition);
+                writerQueue.addLast(w);
+                while (!w.done && !w.equals(writerQueue.getFirst())) {
+                    w.cv.await();
+                }
+                if (w.done) {
+                    return w.offset;
+                }
+
+                // 设置参数
+                int maxBufNum = 6;
+                int maxBufLength = 36 * 1024; // 36KiB
+
+                // 执行批量写操作
+                long writeStartOffset = FREE_OFFSET.get();
+                int bufLength = 0;
+                int bufNum = 0;
+                boolean continueMerge = true;
+                Iterator<Writer> iter = writerQueue.iterator();
+                Writer lastWriter = w;
+                writerBuffer.clear();
+
+                while (iter.hasNext() && continueMerge) {
+                    lastWriter = iter.next();
+
+                    int writeLength = lastWriter.data.remaining() + 2 * Long.BYTES;
+                    lastWriter.offset = FREE_OFFSET.getAndAdd(writeLength);
+                    writerBuffer.putLong(lastWriter.data.remaining());
+                    writerBuffer.putLong(-1L); // next block
+                    writerBuffer.put(lastWriter.data);
+
+                    bufLength += writeLength;
+                    bufNum += 1;
+                    if (bufNum >= maxBufNum) {
+                        continueMerge = false;
+                    }
+                    if (bufLength >= maxBufLength) {
+                        continueMerge = false;
+                    }
+                }
+
+                // do write work
+                // 写期间 unlock 使得其他 writer 可以被加入 writerQueue
+                {
+                    lock.unlock();
+                    writerBuffer.flip();
+                    this.fileChannel.write(writerBuffer, writeStartOffset);
+                    this.fileChannel.force(true);
+                    lock.lock();
+                }
+
+                while (true) {
+                    Writer ready = writerQueue.pop();
+                    if (!ready.equals(w)) {
+                        ready.done = true;
+                        ready.cv.signal();
+                    }
+                    if (ready.equals(lastWriter)){
+                        break;
+                    }
+                }
+
+                // Notify new head of write queue
+                if (!writerQueue.isEmpty()) {
+                    writerQueue.getFirst().cv.signal();
+                }
+                offset = w.offset;
+            } catch (InterruptedException | IOException e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock();
+            }
+            return offset;
+        }
+
         public Long put(ByteBuffer data) throws IOException{
-            int tmpSize = Long.BYTES + Long.BYTES + data.remaining();
-            long startOffset = FREE_OFFSET.getAndAdd(tmpSize);
+            long startOffset = writeAgg(data);
 
-            long nextOffset = -1L;
-            ByteBuffer byteData = ByteBuffer.allocate(tmpSize);
-            byteData.putLong(tmpSize - (Long.BYTES + Long.BYTES));
-            byteData.putLong(nextOffset);
-            byteData.put(data);
-            byteData.flip();
-            int lens = fileChannel.write(byteData,startOffset);
-            //fileChannel.force(true);
-
-            if(tail == -1L){
+            // TODO： 上一个 block 指向当前 block 的指针更新如何优化
+            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
+            if(tail == -1L){ // update an empty data queue
                 tail = startOffset;
                 head = tail;
-
             }else{
-                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
-                tmp.putLong(startOffset);
-                tmp.flip();
-                fileChannel.write(tmp, tail + Long.BYTES); // 更新 nextOffset
-                //fileChannel.force(true);
+                buffer.putLong(startOffset);
+                buffer.flip();
+                fileChannel.write(buffer, tail + Long.BYTES); // 更新 nextOffset
+//                fileChannel.force(true);
                 tail = startOffset;
             }
             
@@ -484,10 +593,10 @@ public class SSDqueue{
                 //logger.info(len1 + " " + startOffset);
                 tmp.flip();
 
-                Long dataSize = tmp.getLong();
-                Long nextOffset = tmp.getLong();
+                long dataSize = tmp.getLong();
+                long nextOffset = tmp.getLong();
 
-                ByteBuffer tmp1 = ByteBuffer.allocate(dataSize.intValue());
+                ByteBuffer tmp1 = ByteBuffer.allocate((int) dataSize);
                 int len2 = fileChannel.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
                 tmp1.flip();
                 res.put(i, tmp1);
