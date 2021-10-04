@@ -1916,7 +1916,7 @@ public class Test1MessageQueue {
         MQQueue() {
             maxOffset = 0L;
             queueMap = new HashMap<>();
-            hotDataCache = new HotDataCircleBuffer();
+            // hotDataCache = new HotDataCircleBuffer();
         }
     }
 
@@ -2022,7 +2022,7 @@ public class Test1MessageQueue {
         } else {
             q = mqTopic.topicMap.get(queueId);
         }
-        q.hotDataCache.addData(data);
+        // q.hotDataCache.addData(data);
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
         // int dataFileId = Math.floorMod(topic.hashCode()+queueId, numOfDataFiles);
@@ -2103,11 +2103,11 @@ public class Test1MessageQueue {
         if (offset + fetchNum-1 >= q.maxOffset){
             fetchNum = (int)(q.maxOffset-offset);
         }
-        GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
-        log.debug("original fetchNum: " + fetchNum);
-        // offset = changes.offset;
-        // fetchNum = changes.fetchNum;
-        log.debug("updated fetchNum: " + fetchNum);
+        // GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
+        // log.debug("original fetchNum: " + fetchNum);
+        // // offset = changes.offset;
+        // // fetchNum = changes.fetchNum;
+        // log.debug("updated fetchNum: " + fetchNum);
 
         long pos = 0;
         Integer queueIdObject = queueId;
@@ -2120,14 +2120,14 @@ public class Test1MessageQueue {
             if (bbf != null) {
                 bbf.position(0);
                 bbf.limit(bbf.capacity());
-                if (i >= changes.fetchNum){
-                    if (ret.get(i).compareTo(bbf) != 0){
-                        log.info(ret.get(i));
-                        log.info(bbf);
-                        log.error("hot data circle buffer data error !");
-                        System.exit(0);
-                    }
-                }
+                // if (i >= changes.fetchNum){
+                //     if (ret.get(i).compareTo(bbf) != 0){
+                //         log.info(ret.get(i));
+                //         log.info(bbf);
+                //         log.error("hot data circle buffer data error !");
+                //         System.exit(0);
+                //     }
+                // }
  
                 ret.put(i, bbf);
             }
