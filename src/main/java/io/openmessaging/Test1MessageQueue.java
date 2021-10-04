@@ -1680,6 +1680,7 @@ public class Test1MessageQueue {
                 block.setInt(addr, dataLength);
                 addr += Integer.BYTES;
                 block.copyFromArray(data.array(), 0, addr, dataLength);
+                curPosition += Integer.BYTES + dataLength;
                 lock.unlock();
                 return dataAddr;
             }
@@ -1698,6 +1699,7 @@ public class Test1MessageQueue {
             long hotReadPosition;
             long minOffset;
             long maxOffset;
+            HashMap<Long, Long> addrMap;
             PMQueue(){
                 headAddr = 0L;
                 tailAddr = 0L;
@@ -1705,6 +1707,7 @@ public class Test1MessageQueue {
                 hotReadPosition = 0L;
                 minOffset = 0L;
                 maxOffset = 0L;
+                addrMap = new HashMap<>();
             }
         }
         PMCache(String pmCachePath){
@@ -1731,6 +1734,13 @@ public class Test1MessageQueue {
             }
 
             // q ??
+            // FIXME: 
+            long addr = pmBlocks[pmBlockId].addData(data);
+            if (addr != -1){
+                q.addrMap.put(q.maxOffset, addr);
+                q.maxOffset++;
+                return true;
+            }
 
 
             return false;
@@ -2105,7 +2115,6 @@ public class Test1MessageQueue {
         }
         // GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
         // log.debug("original fetchNum: " + fetchNum);
-        // // offset = changes.offset;
         // // fetchNum = changes.fetchNum;
         // log.debug("updated fetchNum: " + fetchNum);
 
