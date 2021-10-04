@@ -471,8 +471,8 @@ public class SSDqueue{
                 }
 
                 // 设置参数
-                int maxBufNum = 6;
-                int maxBufLength = 36 * 1024; // 36KiB
+                int maxBufNum = 12;
+                int maxBufLength = 88 * 1024; // 88KiB
 
                 // 执行批量写操作
                 long writeStartOffset = FREE_OFFSET.get();
@@ -522,7 +522,6 @@ public class SSDqueue{
                         break;
                     }
                 }
-
                 // Notify new head of write queue
                 if (!writerQueue.isEmpty()) {
                     writerQueue.getFirst().cv.signal();
@@ -593,10 +592,13 @@ public class SSDqueue{
                 //logger.info(len1 + " " + startOffset);
                 tmp.flip();
 
-                long dataSize = tmp.getLong();
-                long nextOffset = tmp.getLong();
+                Long dataSize = tmp.getLong();
+                Long nextOffset = tmp.getLong();
+                logger.info(this.toString() +" len1 "+len1 + " datasize = "+dataSize);
+                logger.info(this.toString() +" nextOffset "+nextOffset + " startOffset = "+startOffset);
 
-                ByteBuffer tmp1 = ByteBuffer.allocate((int) dataSize);
+
+                ByteBuffer tmp1 = ByteBuffer.allocate(dataSize.intValue());
                 int len2 = fileChannel.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
                 tmp1.flip();
                 res.put(i, tmp1);

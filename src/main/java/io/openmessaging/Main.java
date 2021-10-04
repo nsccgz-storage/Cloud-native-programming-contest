@@ -14,7 +14,7 @@ public class Main {
 //        String dataPath = "/home/ubuntu/ContestForAli/pmem_test_llpl/data";
         String metaPath = "/home/wangxr/桌面/pmem_test/MetaData";
         String dataPath = "/home/wangxr/桌面/pmem_test/data";
-        
+
         boolean flag = new File(metaPath).exists();
         SSDqueue ssdQueue;
         if(flag){
@@ -22,14 +22,14 @@ public class Main {
             FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
             FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
             ssdQueue = new SSDqueue(fileChannel, metaFileChannel, false);
-            
+
         }else{
             FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
             FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
             ssdQueue = new SSDqueue(fileChannel, metaFileChannel);
 
         }
-        
+
         String t = "1234545";
         ByteBuffer tmp = ByteBuffer.wrap(t.getBytes());
         // ssdQueue.setTopic("12345", 123, tmp);
@@ -44,7 +44,6 @@ public class Main {
         for(Map.Entry<Integer, ByteBuffer> entry: res.entrySet()){
             System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
         }
-        
     }
 
 }
