@@ -189,7 +189,7 @@ public class SSDqueue{
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 for(int i=0; i < numOfDataFileChannels; i++){
                     String dbPath = dirPath + "/db" + i;
-                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel(), 0L);
+                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel(), Long.BYTES);
                 }
                 currentNum.set(0);
                 META_FREE_OFFSET.set(TOPIC_NUM * (TOPIC_NAME_SZIE + Long.BYTES) + Integer.BYTES);
@@ -307,7 +307,7 @@ public class SSDqueue{
                     queueTopicMap.put(topicName, topicData);
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-                    Data writeData = new Data(dataSpaces[fcId]);
+                    Data writeData = new Data(dataSpaces[fcId], metaDataOffset);
                     result = writeData.put(data);
                 }
             }
@@ -445,18 +445,18 @@ public class SSDqueue{
             this.tail = tmp.getLong();
         }
         public Long put(ByteBuffer data) throws IOException{
+            //logger.info(toString());
             long offset = ds.write(data);
             if(tail == -1L){
                 head = offset;
                 tail = offset;
-                // update head
             }else{
                 ds.updateLink(tail, offset); //
                 tail = offset;
             }
-            
-            Long res = totalNum;
+            long res = totalNum;
             totalNum++;
+            ds.updateMeta(metaOffset, totalNum, head, tail);
             return res;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
@@ -472,6 +472,7 @@ public class SSDqueue{
             }
             ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
             for(int i=0; i<fetchNum && startOffset != -1L; ++i){
+                
                 buffer.clear();
                 int len1 = ds.read(buffer, startOffset);
                 buffer.flip();
@@ -484,6 +485,7 @@ public class SSDqueue{
                 tmp1.flip();
                 res.put(i, tmp1);
                 startOffset = nextOffset;
+                //logger.info(this.toString() + "offset: " + startOffset);
             }
             return res;
         }

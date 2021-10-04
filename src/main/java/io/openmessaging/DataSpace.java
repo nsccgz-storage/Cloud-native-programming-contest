@@ -70,13 +70,23 @@ public class DataSpace {
         tmp1.flip();
         return tmp1;
     }
-    public long updateLink(long tail, long newTail)throws IOException{
+    public int updateLink(long tail, long newTail)throws IOException{
         ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
         buffer.putLong(newTail);
         buffer.flip();
-        fc.write(buffer, tail + Long.BYTES);
+        int size = fc.write(buffer, tail + Long.BYTES);
         fc.force(true);
-        return -1L;
+        return size;
+    }
+    public int updateMeta(long offset, long totalNum, long head, long tail)throws IOException{
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
+        buffer.putLong(totalNum);
+        buffer.putLong(head);
+        buffer.putLong(tail);
+        buffer.flip();
+        int size = fc.write(buffer, offset);
+        fc.force(true);
+        return size;
     }
     public long createLink(){
         long res = FREE_OFFSET.getAndAdd(Long.BYTES * 3);
