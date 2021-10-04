@@ -10,28 +10,12 @@ import java.util.Map;
 public class Main {
     public static void main(String args[]) throws IOException{
         System.out.println("Hello World!");
-        String dir = "/home/ubuntu/ContestForAli/pmem_test_llpl";
-        String metaPath = dir + "/MetaData";
-        String dataPath =  dir + "/data";
+        String dirPath = "/home/ubuntu/test";
+        SSDqueue ssdQueue = new SSDqueue(dirPath);
         
-        boolean flag = new File(metaPath).exists();
-        SSDqueue ssdQueue;
-        if(flag){
-            //System.out.println(" 28 ");
-            FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
-            FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-            ssdQueue = new SSDqueue(fileChannel, metaFileChannel, false);
-            
-        }else{
-            FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
-            FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-            ssdQueue = new SSDqueue(fileChannel, metaFileChannel);
-
-        }
-
 
         String t = "1234567890123456789012345678901234567890";
-         ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
+        ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
 //         ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
 //         ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
         ssdQueue.setTopic("dsfsf", 123, ByteBuffer.wrap(t.getBytes()));
