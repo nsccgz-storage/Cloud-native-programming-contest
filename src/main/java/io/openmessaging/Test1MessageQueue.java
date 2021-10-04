@@ -1790,6 +1790,25 @@ public class Test1MessageQueue {
             headOffset = 0L;
             tailOffset = 0L;
             datas = new ByteBuffer[maxLength];
+            for (int i = 0; i < maxLength; i++){
+                datas[i] = ByteBuffer.allocate(17408);
+            }
+        }
+
+        public void copyData(int thisHead, ByteBuffer data){
+            int pos = data.position();
+            log.debug(pos);
+            // log.info(datas[head]);
+            log.debug(data);
+            log.debug(datas[head]);
+            datas[thisHead].position(0);
+            datas[thisHead].limit(17408);
+            datas[thisHead].put(data);
+            datas[thisHead].flip();
+            log.debug(datas[thisHead]);
+            log.debug(data);
+            data.position(pos);
+            log.debug(data);
         }
 
         public void addData(ByteBuffer data){
@@ -1798,7 +1817,8 @@ public class Test1MessageQueue {
             if (curLength == 0){
                 headOffset = 0L;
                 tailOffset = 0L;
-                datas[head] = data.slice();
+                copyData(head, data);
+                // datas[head] = data.slice();
                 curLength = 1;
                 return;
             }
@@ -1807,22 +1827,13 @@ public class Test1MessageQueue {
             head = head % maxLength;
             
             // method 1
-            log.debug(data);
-            datas[head] = data.slice();
-            // datas[head] = data.duplicate();
-            log.debug(datas[head]);
+            // log.debug(data);
+            // datas[head] = data.slice();
+            // // datas[head] = data.duplicate();
+            // log.debug(datas[head]);
 
             // method 2
-            // datas[head] = ByteBuffer.allocate(data.remaining());
-            // int pos = data.position();
-            // log.debug(pos);
-            // // log.info(datas[head]);
-            // log.debug(data);
-            // datas[head].put(data);
-            // datas[head].position(0);
-            // log.debug(data);
-            // data.position(pos);
-            // log.debug(data);
+            copyData(head, data);
 
             // method 3
             // datas[head] = data;
@@ -1886,7 +1897,7 @@ public class Test1MessageQueue {
                 log.debug(resultIndex);
                 log.debug(datas[bufIndex]);
                 datas[bufIndex].position(0);
-                datas[bufIndex].limit(datas[bufIndex].capacity());
+                // datas[bufIndex].limit(datas[bufIndex].capacity());
                 log.debug(datas[bufIndex]);
                 results.put(resultIndex, datas[bufIndex]);
             }
