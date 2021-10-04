@@ -2111,6 +2111,8 @@ public class Test1MessageQueue {
                 bbf.limit(bbf.capacity());
                 if (i >= changes.fetchNum){
                     if (ret.get(i).compareTo(bbf) != 0){
+                        log.info(ret.get(i));
+                        log.info(bbf);
                         log.error("hot data circle buffer data error !");
                         System.exit(0);
                     }
