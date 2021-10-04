@@ -15,6 +15,6 @@ ls -l /mnt/nvme/mq/
 
 #/usr/bin/env /usr/lib/jvm/java-11-openjdk-11.0.12.0.7-0.el7_9.x86_64/bin/java -Dfile.encoding=UTF-8 @/tmp/cp_9zzf273crprs1fknagj5ly7kh.argfile -Xmx32g  -Xss1g io.openmessaging.Test1
 
-/usr/bin/env /usr/lib/jvm/java-11-openjdk-11.0.12.0.7-0.el7_9.x86_64/bin/java -Dfile.encoding=UTF-8 @/tmp/cp_9zzf273crprs1fknagj5ly7kh.argfile -Xmx32g  -Xss1g io.openmessaging.TestSSDqueue 
+/usr/bin/env /usr/lib/jvm/java-11-openjdk-11.0.12.0.7-0.el7_9.x86_64/bin/java -Dfile.encoding=UTF-8 @/tmp/cp_9zzf273crprs1fknagj5ly7kh.argfile -Xmx32g  -Xss1g io.openmessaging.Test1
 
 ls -l /mnt/nvme/mq/

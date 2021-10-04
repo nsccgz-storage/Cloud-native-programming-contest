@@ -107,7 +107,7 @@ public class Test1 {
 		return msgs;
 	}
 
-	public static void threadRun(int threadId, Test1MessageQueue mq, CyclicBarrier barrier) {
+	public static void threadRun(int threadId, DefaultMessageQueueImpl mq, CyclicBarrier barrier) {
 		try {
 			Vector<Message> msgs = generateTopic(threadId);
 			if (threadId == 0){
@@ -168,7 +168,7 @@ public class Test1 {
 	}
 
 	public static void testThreadPool(String dbPath) {
-		Test1MessageQueue mq = new Test1MessageQueue(dbPath);
+		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
 		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -196,6 +196,7 @@ public class Test1 {
 	}
 
 	public static void main(String[] args) {
+		System.out.println("hello!!!!************************");
 		if (args.length < 1){
 			System.out.println("java SSDBench ${dbPath}");
 			return ;

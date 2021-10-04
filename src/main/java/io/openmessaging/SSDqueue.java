@@ -150,7 +150,7 @@ public class SSDqueue{
     }
     void init(){
         try {
-            this.spaceMetaFc = new RandomAccessFile(new File("/home/ubuntu/space"), "rw").getChannel();
+            this.spaceMetaFc = new RandomAccessFile(new File("/mnt/ssd/wyk/space"), "rw").getChannel();
         } catch (Exception e) {
             //TODO: handle exception
             e.printStackTrace();
@@ -214,7 +214,7 @@ public class SSDqueue{
 
         }
         testStat = new TestStat();
-        logger.info("recover a SSDqueue, num: "+currentNum.get());
+        //logger.info("recover a SSDqueue, num: "+currentNum.get());
     }
     public Map<Integer, Long> readQueue(Long queueMetaOffset) throws IOException{
         QueueId resData = new QueueId(metaFileChannel, queueMetaOffset);
@@ -479,7 +479,7 @@ public class SSDqueue{
             int len = fileChannel.write(buffer, this.metaOffset);
             fileChannel.force(true);
 
-            logger.info("startOffset: "+ startOffset + " tail: " + tail);
+            //logger.info("startOffset: "+ startOffset + " tail: " + tail);
             return totalNum-1;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
