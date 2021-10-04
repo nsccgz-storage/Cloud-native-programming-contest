@@ -16,12 +16,14 @@ public class SSDqueue2 {
         // data append
 
         // update data -> meta data
+        return 0L;
     }
     
-    public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) 
+    public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum){
         // get meta
 
         // read data
+        return null;
     }
 
 

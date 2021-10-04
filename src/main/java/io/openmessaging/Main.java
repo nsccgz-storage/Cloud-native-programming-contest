@@ -10,8 +10,9 @@ import java.util.Map;
 public class Main {
     public static void main(String args[]) throws IOException{
         System.out.println("Hello World!");
-        String metaPath = "/home/wangxr/桌面/pmem_test/MetaData";
-        String dataPath = "/home/wangxr/桌面/pmem_test/data";
+        String dir = "/home/ubuntu/ContestForAli/pmem_test_llpl";
+        String metaPath = dir + "/MetaData";
+        String dataPath =  dir + "/data";
         
         boolean flag = new File(metaPath).exists();
         SSDqueue ssdQueue;
@@ -35,9 +36,9 @@ public class Main {
 //         ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
         ssdQueue.setTopic("dsfsf", 123, ByteBuffer.wrap(t.getBytes()));
 
-         ssdQueue.setTopic("32424", 256, ByteBuffer.wrap(t.getBytes()));
+        ssdQueue.setTopic("32424", 256, ByteBuffer.wrap(t.getBytes()));
 
-        Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, 0L, 100);
+        Map<Integer, ByteBuffer> res = ssdQueue.getRange("32424", 123, 0L, 100);
 
         for(Map.Entry<String, Long> entry: ssdQueue.topicNameQueueMetaMap.entrySet()){
             System.out.println("" + entry.getKey() + " : " + entry.getValue());
