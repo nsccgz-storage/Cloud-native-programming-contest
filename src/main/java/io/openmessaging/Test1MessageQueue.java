@@ -138,11 +138,11 @@ public class Test1MessageQueue {
         // int writeMethod = 4; 
     
         int numOfDataFiles = 4;
-        int minBufNum = 5;
-        int minBufLength = 32768;
+        int minBufNum = 6;
+        int minBufLength = 48*1024;
         int timeOutMS = 8;
-        boolean fairLock = true;
-        int writeMethod = 6; 
+        boolean fairLock = false;
+        int writeMethod = 4; 
  
 
         // version just for test
@@ -165,7 +165,8 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,48KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | ",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,48KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
             // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 12,88KiB (64KiB if data > 16KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
@@ -995,7 +996,7 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 48*1024; // 36 KiB
+                int maxBufLength = mqConfig.minBufLength; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
@@ -1003,7 +1004,7 @@ public class Test1MessageQueue {
                 //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 6;
+                int maxBufNum = mqConfig.minBufNum;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
