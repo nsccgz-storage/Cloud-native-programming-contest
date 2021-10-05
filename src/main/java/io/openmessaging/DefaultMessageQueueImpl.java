@@ -10,11 +10,6 @@ import java.io.File;
 
 import io.openmessaging.SSDBench;
 
-<<<<<<< HEAD
-//import org.slf4j.LoggerFactory;
-//import org.slf4j.Logger;
-=======
->>>>>>> wyf-test1
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
