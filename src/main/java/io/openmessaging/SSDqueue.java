@@ -417,10 +417,11 @@ public class SSDqueue{
     }
 
     public SSDqueue(String dirPath){
-        //testStat = new TestStat();
+        testStat = new TestStat();
+        this.numOfDataFileChannels = 64;
         try {
             //init(dirPath);
-            this.numOfDataFileChannels = 8;
+            
             dataSpaces = new DataSpace[numOfDataFileChannels];
             boolean flag = new File(dirPath + "/meta").exists();
             if(flag){
@@ -480,13 +481,13 @@ public class SSDqueue{
                 //this.queueTopicMap = new ConcurrentHashMap<>();
                 this.qTopicDataMap = new ConcurrentHashMap<>();
 
-                //testStat = new TestStat();
+                testStat = new TestStat();
                 logger.info("initialize new SSDqueue, num: "+currentNum.get());
             }
         // 划分起始的 Long.BYTES * 来存元数据
         } catch (Exception e) {
             //TODO: handle exception
-            logger.info("error ");
+            logger.info("error 201777");
             e.printStackTrace();
         }
         
@@ -559,7 +560,6 @@ public class SSDqueue{
                     qTopicDataMap.put(topicName, topicData);
 
                     //logger.info(writeData.toString());
-                    //logger.info("topic: " + topicName + "queueId: " + queueId + "writeData: " + writeData.toString());
 
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);

@@ -19,7 +19,7 @@ public class DataSpace {
     public DataSpace(FileChannel fc, long startSpace) {
         this.fc = fc;
         this.FREE_OFFSET = new AtomicLong(startSpace);
-        update();
+        //update();
     }   
     public DataSpace(FileChannel fc) throws IOException{
         this.fc = fc;
@@ -44,7 +44,7 @@ public class DataSpace {
         byteData.put(data);
         byteData.flip();
         int len = fc.write(byteData,offset);
-        update();
+        //update();
         fc.force(true);
         return offset;
     }
@@ -78,7 +78,7 @@ public class DataSpace {
         buffer.putLong(newTail);
         buffer.flip();
         int size = fc.write(buffer, tail + Long.BYTES);
-        fc.force(true);
+        //fc.force(true);
         return size;
     }
     public int updateMeta(long offset, long totalNum, long head, long tail)throws IOException{
