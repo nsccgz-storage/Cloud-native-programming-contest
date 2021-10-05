@@ -38,7 +38,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
-        return ssdQueue.setTopic(topic, queueId, data);
+        return ssdQueue.append(topic, queueId, data);
     }
 
     @Override

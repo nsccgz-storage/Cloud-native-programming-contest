@@ -33,12 +33,12 @@ public class DataSpace {
     }
 
     public long write(ByteBuffer data) throws IOException{
-        int size = data.remaining() + Long.BYTES * 2;
+        long size = data.remaining() + Long.BYTES * 2;
 
         long offset = FREE_OFFSET.getAndAdd(size);
 
         long nextOffset = -1L;
-        ByteBuffer byteData = ByteBuffer.allocate(size);
+        ByteBuffer byteData = ByteBuffer.allocate((int)size);
         byteData.putLong(size - (Long.BYTES + Long.BYTES));
         byteData.putLong(nextOffset);
         byteData.put(data);

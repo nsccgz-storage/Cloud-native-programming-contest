@@ -2,6 +2,8 @@ package io.openmessaging;
 
 
 import org.apache.log4j.Logger;
+
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -415,7 +417,7 @@ public class SSDqueue{
     }
 
     public SSDqueue(String dirPath){
-        testStat = new TestStat();
+        //testStat = new TestStat();
         try {
             //init(dirPath);
             this.numOfDataFileChannels = 8;
@@ -443,12 +445,12 @@ public class SSDqueue{
                 metaFileChannel.read(tmp);
                 tmp.flip();
                 this.currentNum.set(tmp.getInt());
-                logger.info(this.toString() + " " + this.currentNum.get()) ;
+                //logger.info(this.toString() + " " + this.currentNum.get()) ;
                 Long offset = 0L + Integer.BYTES;
                 tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE);
                 for(int i=0; i<currentNum.get(); i++, offset += Long.BYTES + TOPIC_NAME_SZIE){
                     int len = metaFileChannel.read(tmp, offset);
-                    logger.info("len: " + len + " " + this.toString());
+                    //logger.info("len: " + len + " " + this.toString());
                     tmp.flip();
                     Long queueMetaOffset = tmp.getLong();
 
@@ -510,8 +512,9 @@ public class SSDqueue{
     //         e.printStackTrace();
     //     }
     // }
-    public Long setTopic(String topicName, int queueId, ByteBuffer data){
-        testStat.appendStart();
+    
+    public Long append(String topicName, int queueId, ByteBuffer data){
+        //testStat.appendStart();
         Long result;
         try{
             Map<Integer, DataMeta> topicData = qTopicDataMap.get(topicName);
@@ -534,6 +537,8 @@ public class SSDqueue{
                 topicNameQueueMetaMap.put(topicName, q.getMetaOffset());
                 qTopicDataMap.put(topicName, topicData);
                 
+                //logger.info("topic: " + topicName + "queueId: " + queueId + "writeData: " + writeData.toString());
+
             }else{
                 DataMeta meta = topicData.get(queueId);
                 if(meta == null){
@@ -541,7 +546,7 @@ public class SSDqueue{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                     Data writeData = new Data(dataSpaces[fcId]);
 
-                    logger.info(writeData.toString());
+                    //logger.info(writeData.toString());
 
                     result = writeData.put(data);
 
@@ -553,7 +558,8 @@ public class SSDqueue{
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
 
-                    logger.info(writeData.toString());
+                    //logger.info(writeData.toString());
+                    //logger.info("topic: " + topicName + "queueId: " + queueId + "writeData: " + writeData.toString());
 
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
@@ -567,7 +573,7 @@ public class SSDqueue{
 
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
-
+                    // logger.info("topic: " + topicName + "queueId: " + queueId + "writeData: " + writeData.toString());
                     // logger.info(writeData.toString());
                 }
             }
@@ -576,13 +582,13 @@ public class SSDqueue{
             e.printStackTrace();
             return null;
         }
-        testStat.appendUpdateStat(topicName, queueId, data);
+        //testStat.appendUpdateStat(topicName, queueId, data);
         return result;
     }
     public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
         Map<Integer, ByteBuffer> result = new HashMap<>();
         try{
-            testStat.getRangeStart();
+            //testStat.getRangeStart();
             Map<Integer, DataMeta> topicData = qTopicDataMap.get(topicName);
             if(topicData == null) return result;
 
@@ -593,7 +599,7 @@ public class SSDqueue{
             Data resData = new Data(dataSpaces[fcId], meta.metaOffset);
             //Data resData = new Data(fileChannel, metaDataOffset);
             result = resData.getRange(offset, fetchNum);
-            testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
+            //testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
         }catch(IOException e){
             logger.error(e);
         }
@@ -734,7 +740,7 @@ public class SSDqueue{
            
             this.totalNum = 0L;
             this.tail = -1L;
-            this.head = this.tail;
+            this.head = -1L;
         }
         public Data(DataSpace ds, Long metaOffset) throws IOException{
             this.ds = ds;
@@ -783,12 +789,17 @@ public class SSDqueue{
             Map<Integer, ByteBuffer> res = new HashMap<>();
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
 
+            logger.info(this.toString());
+
             for(int i=0; i<offset && startOffset != -1L; ++i){
-                if(startOffset == tail){
-                    startOffset = -1L;
-                    break;
-                }
+                // if(startOffset == tail){
+                //     startOffset = -1L;
+                //     break;
+                // }
+                logger.info(this.toString());
+
                 Long nextOffset = startOffset + Long.BYTES;
+                tmp.clear();
                 int len = ds.read(tmp, nextOffset);
                 tmp.flip();        
                 startOffset = tmp.getLong(); 
@@ -807,9 +818,17 @@ public class SSDqueue{
                 int len2 = ds.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
                 tmp1.flip();
                 res.put(i, tmp1);
-                if(startOffset == tail) break;
+                // if(startOffset == tail) break;
                 startOffset = nextOffset;
-                //logger.info(this.toString() + "offset: " + startOffset);
+                logger.info(this.toString() + "offset: " + startOffset);
+
+                byte[] p = tmp1.array();
+                logger.info("read res");
+                for(int k=0; k<p.length; ++k){
+                    System.out.print(" " + p[k]);
+                }
+                System.out.println(" ");
+                
             }
             return res;
         }
