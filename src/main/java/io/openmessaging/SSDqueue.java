@@ -69,25 +69,36 @@ public class SSDqueue{
             appendCount.set(0L);
             getRangeCount.set(0L);
         }
-        void appendStart(){
+        void appendStart(String topic, int queueId, ByteBuffer data){
             if(appendStartTime.get() == null || appendStartTime.get() == 0L){
                 appendStartTime.set(System.nanoTime());
                 logger.info("init append time");
             }
+
+            // has started read&write state
+            if(getRangeStartTime.get() != 0L){
+                logger.info("[append] topic = " + topic + " queueId = " + queueId + " dataSize = " + data.remaining());
+            }
         }
-        void getRangeStart(){
+        void getRangeStart(String topic, int queueId, long offset, int fetchNum){
             if(getRangeStartTime.get() == null || getRangeStartTime.get() == 0L){
                 getRangeStartTime.set(System.nanoTime());
                 logger.info("init getRange time");
             }
+
+            logger.info("[getRange] topic = " + topic + " queueId = " + queueId + " offset = " + offset + " fetchNum = " + fetchNum);
         }
 
-        void appendUpdateStat(String topic, int queueId, ByteBuffer data){
+        void appendUpdateStat(String topic, int queueId, ByteBuffer data, long tail){
             if (appendCount.get() == null){
                 appendCount.set(0L);
             }
             appendEndTime.set(System.nanoTime());
             appendCount.set(appendCount.get()+1);
+
+            if(getRangeStartTime.get() != 0L) {
+                logger.info("[append  ] tail = " + topic + " queueId = " + queueId + " tail = " + tail);
+            }
             update();
         }
         void getRangeUpdateStat(String topic, int queueId, long offset, int fetchNum){
@@ -235,7 +246,7 @@ public class SSDqueue{
 
     }
     public Long setTopic(String topicName, int queueId, ByteBuffer data){
-        testStat.appendStart();
+        testStat.appendStart(topicName, queueId, data);
         Long result;
         try{
 
@@ -269,7 +280,7 @@ public class SSDqueue{
                 //System.out.println("110: " + len);
                 //logger.info("num: "+ cur + " metaQueue: "+ queueArray.getMetaOffset());
                 // 更新 DRAM map
-                topicData = new HashMap<>();
+                topicData = new ConcurrentHashMap<>(); // TODO: check if HashMap is ok
                 topicData.put(queueId, writeData.getMetaOffset());
                 topicNameQueueMetaMap.put(topicName, queueArray.getMetaOffset());
                 queueTopicMap.put(topicName, topicData);
@@ -278,7 +289,7 @@ public class SSDqueue{
                 //System.out.println("112: w meta: "+ writeData.getMetaOffset());
 
 //                return res;
-            
+                testStat.appendUpdateStat(topicName, queueId, data, writeData.tail);
             }else{
                 Long metaDataOffset = topicData.get(queueId);
                 if(metaDataOffset == null){
@@ -297,10 +308,12 @@ public class SSDqueue{
                     //control.put(topicName + queueId, new ReentrantLock());
                     
 //                    return res;
+                    testStat.appendUpdateStat(topicName, queueId, data, writeData.tail);
                 }else{
                     Data writeData = new Data(fileChannel, metaDataOffset);
                     result = writeData.put(data);
 //                    return writeData.put(data);
+                    testStat.appendUpdateStat(topicName, queueId, data, writeData.tail);
                 }
             }
 
@@ -309,13 +322,13 @@ public class SSDqueue{
             e.printStackTrace();
             return null;
         }
-        testStat.appendUpdateStat(topicName, queueId, data);
+
         return result;
     }
     public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
         Map<Integer, ByteBuffer> result = new HashMap<>();
         try{
-            testStat.getRangeStart();
+            testStat.getRangeStart(topicName,queueId, offset, fetchNum);
             Map<Integer, Long> topicData = queueTopicMap.get(topicName);
             if(topicData == null) return result;
             Long metaDataOffset = topicData.get(queueId);
@@ -558,9 +571,6 @@ public class SSDqueue{
 
         public Long put(ByteBuffer data) throws IOException{
             long startOffset = writeAgg(data, this);
-
-
-
 //            fileChannel.force(true);
             //System.out.println("w: " + this.toString() + " : " + len);
             totalNum++;
@@ -588,7 +598,7 @@ public class SSDqueue{
 
                 Long dataSize = tmp.getLong();
                 Long nextOffset = tmp.getLong();
-                logger.info(this.toString() +"i = "+ i + " datasize = "+dataSize);
+                logger.info(this.toString() +" i = "+ i + " datasize = "+dataSize);
                 logger.info(this.toString() +" nextOffset "+nextOffset + " startOffset = "+startOffset);
 
 
