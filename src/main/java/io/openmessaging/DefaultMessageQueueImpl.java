@@ -43,10 +43,12 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     private SSDqueue ssdQueue;
     public DefaultMessageQueueImpl(){
         try{
+            String metaPath = "/mnt/ssd/wxr/MetaData";
+            String dataPath = "/mnt/ssd/wxr/Data";
 //            String metaPath = "/home/wangxr/桌面/pmem_test/MetaData";
 //            String dataPath = "/home/wangxr/桌面/pmem_test/data";
-            String metaPath = "/essd/MetaData";
-            String dataPath = "/essd/data";
+//            String metaPath = "/essd/MetaData";
+//            String dataPath = "/essd/data";
             boolean flag = new File(metaPath).exists();
             if(flag){
                 //System.out.println(" 28 ");

@@ -74,19 +74,12 @@ public class SSDqueue{
                 appendStartTime.set(System.nanoTime());
                 logger.info("init append time");
             }
-
-            // has started read&write state
-            if(getRangeStartTime.get() != null && getRangeStartTime.get() != 0L){
-                logger.info("[append] topic = " + topic + " queueId = " + queueId + " dataSize = " + data.remaining());
-            }
         }
         void getRangeStart(String topic, int queueId, long offset, int fetchNum){
             if(getRangeStartTime.get() == null || getRangeStartTime.get() == 0L){
                 getRangeStartTime.set(System.nanoTime());
                 logger.info("init getRange time");
             }
-
-            logger.info("[getRange] topic = " + topic + " queueId = " + queueId + " offset = " + offset + " fetchNum = " + fetchNum);
         }
 
         void appendUpdateStat(String topic, int queueId, ByteBuffer data, long tail){
@@ -95,10 +88,6 @@ public class SSDqueue{
             }
             appendEndTime.set(System.nanoTime());
             appendCount.set(appendCount.get()+1);
-
-            if(getRangeStartTime.get() != null && getRangeStartTime.get() != 0L) {
-                logger.info("[append  ] tail = " + topic + " queueId = " + queueId + " tail = " + tail);
-            }
             update();
         }
         void getRangeUpdateStat(String topic, int queueId, long offset, int fetchNum){
@@ -141,7 +130,6 @@ public class SSDqueue{
             logger.info("[getRange] elapsed time (ms) : " + getRangeElapsedTimeMS);
             logger.info("[getRange] Throughput (op/ms): " + getRangeThroughput);
         }
-
         // report topic stat per second
     }
 
@@ -606,9 +594,6 @@ public class SSDqueue{
 
                 Long dataSize = tmp.getLong();
                 Long nextOffset = tmp.getLong();
-                logger.info(this.toString() +" i = "+ i + " datasize = "+dataSize);
-                logger.info(this.toString() +" nextOffset "+nextOffset + " startOffset = "+startOffset);
-
 
                 ByteBuffer tmp1 = ByteBuffer.allocate(dataSize.intValue());
                 int len2 = fileChannel.read(tmp1, startOffset + Long.BYTES + Long.BYTES);

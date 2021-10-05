@@ -19,7 +19,8 @@ public class CorrectTest {
     static String messagePath = "./message.txt";
     static final int MAX_DATA_SIZE = 17*1024;
     static final int MAX_QUEUE_NUM = 1000; // just for test 缩小QueueId的范围
-    static ArrayList<String> topicList;
+    static ArrayList<ArrayList<String>> topicList;
+    static int maxTopicNum = 0;
 //    static ConcurrentHashMap<String, long[]> queueOffsetOfTopic = new ConcurrentHashMap<>();
     static BufferedWriter writer;
     final static String str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -28,46 +29,41 @@ public class CorrectTest {
 
     public static void main(String[] args) {
         // just for test
-//        try {
-//            Files.delete(Paths.get("/home/wangxr/桌面/pmem_test/MetaData"));
-//            Files.delete(Paths.get("/home/wangxr/桌面/pmem_test/data"));
-////            Files.delete(Paths.get("/home/wangxr/桌面/pmem_test/space"));
-//            Files.delete(Paths.get(messagePath));
-//        }catch (IOException e){e.printStackTrace();}
-
-        DefaultMessageQueueImpl messageQueue = new DefaultMessageQueueImpl();
+        String localPath = "/home/wangxr/桌面/pmem_test/";
+        try {
+            if(Files.exists(Paths.get(messagePath)))
+                Files.delete(Paths.get(messagePath));
+            if(Files.exists(Paths.get(localPath+"MetaData")))
+                Files.delete(Paths.get(localPath+"MetaData"));
+            if(Files.exists(Paths.get(localPath+"data")))
+                Files.delete(Paths.get(localPath+"data"));
+        }catch (IOException e){e.printStackTrace();}
 
         try {
-            if(!Files.exists(Paths.get(messagePath))){
-                Files.createFile(Paths.get(messagePath));
-                System.out.println("Stage 1: write data");
-                writer = new BufferedWriter(new FileWriter(messagePath));
-                writeTest(10, 10L*1024L*1024L, messageQueue); // 40 thread, 10 MiB test data
-                writer.close();
-            }
-            else{
-                System.out.println("Stage 2: check recovery data");
-                BufferedReader reader= new BufferedReader(new FileReader(messagePath));
-                ArrayList<Message> msgs = loadMessage(reader);
+            System.out.println("===== Stage 1: write data =====");
+            Files.createFile(Paths.get(messagePath));
+            writer = new BufferedWriter(new FileWriter(messagePath));
+            writeTest(10, 10L*1024L*1024L, new DefaultMessageQueueImpl()); // 40 thread, 10 MiB test data
+            writer.close();
 
-                int count = 0, errorCount = 0;
-                for(Message msg:msgs){
-                    Map<Integer, ByteBuffer> mp = messageQueue.getRange(msg.topic, msg.queueId, msg.offset, 1);
-                    ByteBuffer buffer = mp.get(0);
-                    if(buffer != null && !msg.compare(buffer)){
-                        System.out.println("error");
-//                        System.out.println(new String(buffer.array()));
-                        errorCount++;
-                    }
-//                    else{
-//                        System.out.println("correct");
-//                    }
-                    count++;
+            /////////////////////////////////////////////////////////////
+            System.out.println("===== Stage 2: check recovery data =====");
+            BufferedReader reader= new BufferedReader(new FileReader(messagePath));
+            ArrayList<Message> msgs = loadMessage(reader);
+
+            int count = 0, errorCount = 0;
+            DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
+            for(Message msg:msgs){
+                Map<Integer, ByteBuffer> mp = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+                ByteBuffer buffer = mp.get(0);
+                if(buffer != null && !msg.compare(buffer)){
+                    System.out.println("error");
+                    errorCount++;
                 }
-                System.out.println("count = "+count+" errorCount = "+errorCount);
-
-                reader.close();
+                count++;
             }
+            System.out.println("count = "+count+" errorCount = "+errorCount);
+            reader.close();
         }
         catch (IOException e){
             e.printStackTrace();
@@ -131,36 +127,13 @@ public class CorrectTest {
         }
     }
 
-    private static ArrayList<String> getRandomTopicList(int threadNum){
-//        String str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        final int MAX_TOPIC_SIZE = 64;
-        Random random = new Random();
-        int topicNum = threadNum * (random.nextInt(100) + 1); // 随机生成topic总数
-        ArrayList<String> topicList_ = new ArrayList<>(topicNum);
-
-        for (int i = 0; i < topicNum; i++) {
-            StringBuilder sb = new StringBuilder();
-            int len = random.nextInt(MAX_TOPIC_SIZE) + 1;
-            for (int j = 0; j < len; j++) {
-                sb.append(str.charAt(random.nextInt(str.length())));
-            }
-            topicList_.add(sb.toString());
-            long [] queueOffset = new long[MAX_QUEUE_NUM];
-            for(int j = 0;j <  MAX_QUEUE_NUM;j++){
-                queueOffset[j] = -1L;
-            }
-//            queueOffsetOfTopic.put(sb.toString(), queueOffset);
-        }
-        return topicList_;
-    }
-
     public static void writeTest(int threadNum, long totalSize, DefaultMessageQueueImpl messageQueue){
         topicList = getRandomTopicList(threadNum);
 
         ExecutorService executorService = Executors.newFixedThreadPool(threadNum);
         List<Callable<Object>> tasks = new ArrayList<Callable<Object>>(threadNum);
         for(int i = 0;i < threadNum;i++){
-            tasks.add(Executors.callable(new WriteThread(totalSize / threadNum, messageQueue)));
+            tasks.add(Executors.callable(new WriteThread(totalSize / threadNum, messageQueue, topicList.get(i))));
         }
         try {
             executorService.invokeAll(tasks);
@@ -177,19 +150,16 @@ public class CorrectTest {
         private long writeSize;
         private DefaultMessageQueueImpl messageQueue;
 
-        public WriteThread(long writeSize, DefaultMessageQueueImpl messageQueue){
+        public WriteThread(long writeSize, DefaultMessageQueueImpl messageQueue, ArrayList<String>t){
             this.writeSize = writeSize; // 需写入数据的大小
             random = new Random();
             this.messageQueue = messageQueue;
+            topics = t;
         }
 
         @Override
         public void run(){
-            int topicNum = random.nextInt(100) + 1;
-            topics = new ArrayList<String>(topicNum);
-            for(int i = 0;i < topicNum;i++){
-                topics.add(topicList.get(random.nextInt(topicList.size())));
-            }
+            int topicNum = topics.size();
 
             long[] topicSizeList = randomAllocate(writeSize/100, topicNum);
             for(int i = 0;i < topicNum;i++){
@@ -219,13 +189,11 @@ public class CorrectTest {
                         buffer.put(bytes);
                         buffer.flip();
                         long offset = messageQueue.append(topics.get(i), queueIdArray[j], buffer);
-//
                         try {
                             saveMessage(topics.get(i), queueIdArray[j], offset, bytes);
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
-//                        queueOffsetOfTopic.get(topics.get(i))[queueIdArray[j]] = offset;
                     }
                 }
             }
@@ -235,8 +203,6 @@ public class CorrectTest {
     private static void saveMessage(String t, int q, long o, byte[] b) throws IOException {
         lock.lock();
         Message msg = new Message(t, q, o, b);
-//        System.out.println(msg);
-
         writer.write(msg.toString()+"\n");
         lock.unlock();
     }
@@ -278,6 +244,21 @@ public class CorrectTest {
         }
         results[count-1] = remain;
         return results;
+    }
+
+    private static ArrayList<ArrayList<String>> getRandomTopicList(int threadNum){
+        Random random = new Random();
+        ArrayList<ArrayList<String>> res = new ArrayList<>(threadNum);
+        for(int i = 0;i < threadNum;i++){
+            int topicNum = random.nextInt(100) + 1;
+            ArrayList<String> topics = new ArrayList<>(topicNum);
+            for(int j = 0;j < topicNum;j++){
+                topics.add("topic"+maxTopicNum);
+                maxTopicNum++;
+            }
+            res.add(topics);
+        }
+        return res;
     }
 
     private static byte[] getRandomBytes(int size, Random random){
