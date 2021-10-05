@@ -267,9 +267,8 @@ public class SSDqueue{
                     Long queueOffset = queueArray.put(queueId, writeData.getMetaOffset());
 
                     // 插入 DRAM 哈希表
-                    Map<Integer, DataMeta> tData  = new HashMap<>();
-                    tData.put(queueId, writeData.getMeta());
-                    qTopicDataMap.put(topicName, tData);
+                    topicData.put(queueId, writeData.getMeta());
+                    qTopicDataMap.put(topicName, topicData);
 
                     logger.info(writeData.toString());
 
