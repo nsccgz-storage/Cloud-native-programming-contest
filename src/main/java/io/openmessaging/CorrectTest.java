@@ -42,7 +42,7 @@ public class CorrectTest {
                 Files.createFile(Paths.get(messagePath));
                 System.out.println("Stage 1: write data");
                 writer = new BufferedWriter(new FileWriter(messagePath));
-                writeTest(10, 1L*1024L*1024L, messageQueue); // 40 thread, 1 MiB test data
+                writeTest(10, 10L*1024L*1024L, messageQueue); // 40 thread, 10 MiB test data
                 writer.close();
             }
             else{

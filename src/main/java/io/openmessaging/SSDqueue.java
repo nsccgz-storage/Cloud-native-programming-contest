@@ -76,7 +76,7 @@ public class SSDqueue{
             }
 
             // has started read&write state
-            if(getRangeStartTime.get() != 0L){
+            if(getRangeStartTime.get() != null && getRangeStartTime.get() != 0L){
                 logger.info("[append] topic = " + topic + " queueId = " + queueId + " dataSize = " + data.remaining());
             }
         }
@@ -96,7 +96,7 @@ public class SSDqueue{
             appendEndTime.set(System.nanoTime());
             appendCount.set(appendCount.get()+1);
 
-            if(getRangeStartTime.get() != 0L) {
+            if(getRangeStartTime.get() != null && getRangeStartTime.get() != 0L) {
                 logger.info("[append  ] tail = " + topic + " queueId = " + queueId + " tail = " + tail);
             }
             update();
