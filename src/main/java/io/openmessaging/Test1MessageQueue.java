@@ -29,9 +29,13 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 
 import org.apache.log4j.spi.LoggerFactory;
+
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
 import java.lang.Math;
 import java.text.Format;
 import java.util.concurrent.TimeoutException;
@@ -39,6 +43,11 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Condition;
 import java.nio.MappedByteBuffer;
 import java.util.Deque;
+
+
+import com.intel.pmem.llpl.Heap;
+import com.intel.pmem.llpl.MemoryBlock;
+
 
 public class Test1MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
@@ -129,11 +138,11 @@ public class Test1MessageQueue {
         // int writeMethod = 4; 
     
         int numOfDataFiles = 4;
-        int minBufNum = 5;
-        int minBufLength = 32768;
+        int minBufNum = 6;
+        int minBufLength = 48*1024;
         int timeOutMS = 8;
-        boolean fairLock = true;
-        int writeMethod = 5; 
+        boolean fairLock = false;
+        int writeMethod = 4; 
  
 
         // version just for test
@@ -156,8 +165,9 @@ public class Test1MessageQueue {
         // boolean useWriteAgg = false;
         @Override
         public String toString() {
-            // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 16,128KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,48KiB (64KiB if data > 16KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | ",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 6,48KiB",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
+            // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | minBufLength=%d | minBufNum=%d | timeOutMS=%d | 12,88KiB (64KiB if data > 16KiB)",useStats,writeMethod,numOfDataFiles,minBufLength,minBufNum,timeOutMS);
         }
     }
     private static MQConfig mqConfig = new MQConfig();
@@ -170,6 +180,8 @@ public class Test1MessageQueue {
         Long endTime;
         Long opCount;
         AtomicBoolean reported;
+        int[] oldTotalWriteBucketCount;
+        MemoryUsage memoryUsage;
 
         private class ThreadStat {
             Long appendStartTime;
@@ -179,6 +191,8 @@ public class Test1MessageQueue {
             Long getRangeEndTime;
             int getRangeCount;
             Long writeBytes;
+            public int[] bucketBound;
+            public int[] bucketCount;
 
             ThreadStat() {
                 appendStartTime = 0L;
@@ -190,6 +204,19 @@ public class Test1MessageQueue {
                 writeBytes = 0L;
                 reported = new AtomicBoolean();
                 reported.set(false);
+
+                bucketBound = new int[19];
+                bucketBound[0] = 100;
+                bucketBound[1] = 512;
+                for (int i = 1; i <= 17; i++){
+                    bucketBound[i+1] = i*1024;
+                }
+                bucketCount = new int[bucketBound.length-1];
+                for (int i = 0; i < bucketCount.length; i++){
+                    bucketCount[i] = 0;
+                }
+                MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
+                memoryUsage = memory.getHeapMemoryUsage();
             }
 
             public ThreadStat clone() {
@@ -201,7 +228,17 @@ public class Test1MessageQueue {
                 ret.getRangeEndTime = this.getRangeEndTime;
                 ret.getRangeCount = this.getRangeCount;
                 ret.writeBytes = this.writeBytes;
+                ret.bucketBound = this.bucketBound.clone();
+                ret.bucketCount = this.bucketCount.clone();
                 return ret;
+            }
+            public void addSample(int len){
+                for (int i = 0; i < bucketCount.length; i++){
+                    if (len < bucketBound[i+1]){
+                        bucketCount[i]++;
+                        break;
+                    }
+                }
             }
         }
 
@@ -258,6 +295,7 @@ public class Test1MessageQueue {
 
         void appendUpdateStat(String topic, int queueId, ByteBuffer data) {
             int id = threadId.get();
+            stats[id].addSample(data.remaining());
             stats[id].appendEndTime = System.nanoTime();
             stats[id].appendCount += 1;
             stats[id].writeBytes += data.remaining();
@@ -303,6 +341,7 @@ public class Test1MessageQueue {
             double[] getRangeLatencyPerThread = new double[getNumOfThreads];
             double[] bandwidthPerThread = new double[getNumOfThreads];
 
+
             double appendThroughput = 0;
             double getRangeThroughput = 0;
             double appendLatency = 0;
@@ -341,6 +380,45 @@ public class Test1MessageQueue {
             appendLatency /= getNumOfThreads;
             getRangeLatency /= getNumOfThreads;
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
+            
+            // 报告总的写入大小分布
+            int[] totalWriteBucketCount = new int[100];
+            int[] myBucketBound = stats[0].bucketBound;
+            for (int i = 0; i < 100; i++){
+                totalWriteBucketCount[i] = 0;
+            }
+            int numOfBucket = stats[0].bucketCount.length;
+            for (int i = 0; i < getNumOfThreads; i++){
+                for (int j = 0; j < numOfBucket; j++){
+                    totalWriteBucketCount[j] += stats[i].bucketCount[j];
+                }
+            }
+
+            String totalWriteBucketReport = "";
+            totalWriteBucketReport += myBucketBound[0] + " < ";
+            for (int i = 0; i < numOfBucket; i++){
+                totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
+                totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
+            }
+            log.info("[Total Append Data Dist]" + totalWriteBucketReport);
+
+            if (oldTotalWriteBucketCount != null) {
+                int[] curWriteBucketCount = new int[100];
+                for (int i = 0; i < numOfBucket; i++) {
+                    curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
+                }
+                String curWriteBucketReport = "";
+                curWriteBucketReport += myBucketBound[0] + " < ";
+                for (int i = 0; i < numOfBucket; i++) {
+                    curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
+                    curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
+                }
+
+                log.info("[Current Append Data Dist]" + curWriteBucketReport);
+
+            }
+
+            oldTotalWriteBucketCount = totalWriteBucketCount;
 
             double curAppendThroughput = 0;
             double curGetRangeThroughput = 0;
@@ -403,6 +481,7 @@ public class Test1MessageQueue {
             log.info("appendStat   :"+appendStat);
             log.info("getRangeStat :"+getRangeStat);
             log.info("csvStat      :"+csvStat);
+            log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
 
             // report write stat
             for (int i = 0; i < dataFiles.length; i++){
@@ -498,7 +577,8 @@ public class Test1MessageQueue {
             public int exceedBufNumCount;
             public int exceedBufLengthCount;
             WriteStat(){
-                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 128*1024};
+                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024};
+                // bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024, 256*1024, 512*1024};
 
                 bucketCount = new int[bucketBound.length-1];
                 for (int i = 0; i < bucketCount.length; i++){
@@ -594,7 +674,8 @@ public class Test1MessageQueue {
             writeAggDirectBuffer.position(0);
 
             writerQueue = new ArrayDeque<>();
-            writerQueueLock = new ReentrantLock(false);
+            writerQueueLock = new ReentrantLock(true);
+            // writerQueueLock = new ReentrantLock(false);
             writerQueueCondition = writerQueueLock.newCondition();
 
             writerQueueBufferCapacity = 128*1024;
@@ -915,15 +996,15 @@ public class Test1MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 48*1024; // 36 KiB
-                if (w.data.remaining() < 1024){
-                    maxBufLength = 32*1024;
-                }
-                if (w.data.remaining() > 16*1024){
-                    maxBufLength = 64*1024;
-                }
+                int maxBufLength = mqConfig.minBufLength; // 36 KiB
+                // if (w.data.remaining() < 1024){
+                //     maxBufLength = 32*1024;
+                // }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
+                // }
                 int bufNum = 0;
-                int maxBufNum = 6;
+                int maxBufNum = mqConfig.minBufNum;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
@@ -933,7 +1014,7 @@ public class Test1MessageQueue {
                 position = curPosition;
                 Writer lastWriter = null;
                 int metadataLength = Integer.BYTES;
-                while ( iter.hasNext() && continueMerge ){
+                while (continueMerge ){
                     lastWriter = iter.next();
                     int dataLength = lastWriter.data.remaining();
                     int writeLength =  metadataLength + dataLength;
@@ -954,11 +1035,28 @@ public class Test1MessageQueue {
                     bufNum += 1;
                     if (bufNum >= maxBufNum){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
                     }
                     if (bufLength >= maxBufLength){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
                     }
                 }
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+
                 curPosition = position;
                 {
                     log.debug("need to flush, unlock !");
@@ -1031,9 +1129,9 @@ public class Test1MessageQueue {
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
-                if (w.data.remaining() > 16*1024){
-                    maxBufLength = 64*1024;
-                }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
+                // }
                 int bufNum = 0;
                 int maxBufNum = 6;
                 boolean continueMerge = true;
@@ -1137,29 +1235,33 @@ public class Test1MessageQueue {
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
  
-                log.debug("try to new a writer to queue");
+                // log.debug("try to new a writer to queue");
                 Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
-                log.debug(writerQueue);
-                log.debug(writerQueue.getFirst());
+                // log.debug(writerQueue);
+                // log.debug(writerQueue.getFirst());
                 while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
-                    log.debug("wait for the leader of queue");
+                    // log.debug("wait for the leader of queue");
                     w.cv.await();
                 }
                 if (w.done == 1){
-                    log.debug(w.position);
+                    // log.debug(w.position);
                     return w.position;
                 }
                 log.debug("I am the head");
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 36*1024; // 36 KiB
+                int maxBufLength = 48*1024; // 36 KiB
                 // if (w.data.remaining() < 1024){
-                //     maxBufLength = 8192;
+                //     maxBufLength = 32*1024;
+                // }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
                 int maxBufNum = 6;
+
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
@@ -1176,31 +1278,53 @@ public class Test1MessageQueue {
                     lastWriter = iter.next();
                     dataLength = lastWriter.data.remaining();
                     writeLength = metadataLength + dataLength;
-                    log.debug(lastWriter);
+                    // log.debug(lastWriter);
                     writerBuffer.putInt(dataLength);
+                    // log.debug(lastWriter.data);
+                    // int oriPos = lastWriter.data.position();
                     writerBuffer.put(lastWriter.data);
+                    // log.debug(lastWriter.data);
+                    // lastWriter.data.position(oriPos);
+                    // log.debug(lastWriter.data);
                     lastWriter.position = position;
                     position += writeLength;
                     bufLength += writeLength;
                     bufNum += 1;
                     if (bufNum >= maxBufNum){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
                     }
                     if (bufLength >= maxBufLength){
                         continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
                     }
                 }
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+
                 long writePosition = curPosition;
                 curPosition += bufLength;
                 {
-                    log.debug("need to flush, unlock !");
+                    // log.debug("need to flush, unlock !");
                     writerQueueLock.unlock();
                     writerBuffer.position(0);
                     writerBuffer.limit(bufLength);
                     dataFileChannel.write(writerBuffer, writePosition);
                     dataFileChannel.force(true);
                     writerQueueLock.lock();
-                    log.debug("flush ok , get the lock again!");
+                    // log.debug("flush ok , get the lock again!");
                 }
 
                 while(true){
@@ -1217,7 +1341,272 @@ public class Test1MessageQueue {
                 if (!writerQueue.isEmpty()){
                     writerQueue.getFirst().cv.signal();
                 }
-                log.debug(w.position);
+                // log.debug(w.position);
+                position = w.position;
+
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            } catch (InterruptedException ie){
+                ie.printStackTrace();
+            } finally {
+                writerQueueLock.unlock();
+            }
+            return position;
+
+        }
+    
+        public long syncSeqWritePushQueueDirectBatchBuffer(ByteBuffer data){
+            if (writerQueueLocalBuffer.get() == null){
+                writerQueueLocalBuffer.set(ByteBuffer.allocateDirect(writerQueueBufferCapacity));
+            }
+            ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
+
+            long position = 0L;
+            try {
+                writerQueueLock.lock();
+                // only for debug
+                // fileLock.lock();
+                // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
+                // fileLock.unlock();
+ 
+                log.debug("try to add a new writer to queue");
+                Writer w = new Writer(data, writerQueueCondition);
+                writerQueue.addLast(w);
+                log.debug(writerQueue);
+                // log.debug(writerQueue.getFirst());
+                while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
+                    // log.debug("wait for the leader of queue");
+                    w.cv.await();
+                }
+                if (w.done == 1){
+                    // log.debug(w.position);
+                    return w.position;
+                }
+                // log.debug("I am the head");
+                
+                // TODO: 调参
+                int bufLength = 0;
+                int maxBufLength = 48*1024; // 36 KiB
+                // if (w.data.remaining() < 1024){
+                //     maxBufLength = 32*1024;
+                // }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
+                // }
+                int bufNum = 0;
+                int maxBufNum = 6;
+
+                Writer[] batchWriters = new Writer[maxBufNum];
+
+                boolean continueMerge = true;
+                // I am the head of the queue and need to write buffer to SSD
+                // build write batch
+                Iterator<Writer> iter = writerQueue.iterator();
+                Writer lastWriter = null;
+                int dataLength = 0;
+                int metadataLength = Integer.BYTES;
+                int writeLength = 0;
+
+                position = curPosition;
+                while ( continueMerge ){
+                    lastWriter = iter.next();
+                    dataLength = lastWriter.data.remaining();
+                    writeLength = metadataLength + dataLength;
+                    // log.debug(lastWriter);
+                    lastWriter.position = position;
+                    batchWriters[bufNum] = lastWriter;
+                    position += writeLength;
+                    bufLength += writeLength;
+                    bufNum += 1;
+                    if (bufNum >= maxBufNum){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
+                    }
+                    if (bufLength >= maxBufLength){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
+                    }
+                }
+                long writePosition = curPosition;
+                curPosition += bufLength;
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+                {
+                    // log.debug("need to flush, unlock !");
+                    writerQueueLock.unlock();
+                    writerBuffer.position(0);
+                    writerBuffer.limit(writerBuffer.capacity());
+                    for (int i = 0; i < bufNum; i++){
+                        writerBuffer.putInt(batchWriters[i].data.remaining());
+                        writerBuffer.put(batchWriters[i].data);
+                    }
+                    writerBuffer.position(0);
+                    writerBuffer.limit(bufLength);
+                    dataFileChannel.write(writerBuffer, writePosition);
+                    dataFileChannel.force(true);
+                    writerQueueLock.lock();
+                    // log.debug("flush ok , get the lock again!");
+                }
+
+                while(true){
+                    Writer ready = writerQueue.removeFirst();
+                    if (!ready.equals(w)){
+                        ready.done = 1;
+                        ready.cv.signal();
+                    }
+                    if (ready.equals(lastWriter)){
+                        break;
+                    }
+                }
+
+                if (!writerQueue.isEmpty()){
+                    writerQueue.getFirst().cv.signal();
+                }
+                // log.debug(w.position);
+                position = w.position;
+
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            } catch (InterruptedException ie){
+                ie.printStackTrace();
+            } finally {
+                writerQueueLock.unlock();
+            }
+            return position;
+
+        }
+        public long syncSeqWritePushQueueHeapBatchBuffer(ByteBuffer data){
+            if (writerQueueLocalBuffer.get() == null){
+                writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
+            }
+            ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
+
+            long position = 0L;
+            try {
+                writerQueueLock.lock();
+                // only for debug
+                // fileLock.lock();
+                // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
+                // fileLock.unlock();
+ 
+                // log.debug("try to add a new writer to queue");
+                Writer w = new Writer(data, writerQueueCondition);
+                writerQueue.addLast(w);
+                // log.debug(writerQueue);
+                // log.debug(writerQueue.getFirst());
+                while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
+                    // log.debug("wait for the leader of queue");
+                    w.cv.await();
+                }
+                if (w.done == 1){
+                    // log.debug(w.position);
+                    return w.position;
+                }
+                // log.debug("I am the head");
+                
+                // TODO: 调参
+                int bufLength = 0;
+                int maxBufLength = 48*1024; // 36 KiB
+                // if (w.data.remaining() < 1024){
+                //     maxBufLength = 32*1024;
+                // }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
+                // }
+                int bufNum = 0;
+                int maxBufNum = 6;
+
+                Writer[] batchWriters = new Writer[maxBufNum];
+
+                boolean continueMerge = true;
+                // I am the head of the queue and need to write buffer to SSD
+                // build write batch
+                Iterator<Writer> iter = writerQueue.iterator();
+                Writer lastWriter = null;
+                int dataLength = 0;
+                int metadataLength = Integer.BYTES;
+                int writeLength = 0;
+
+                position = curPosition;
+                while ( continueMerge ){
+                    lastWriter = iter.next();
+                    dataLength = lastWriter.data.remaining();
+                    writeLength = metadataLength + dataLength;
+                    // log.debug(lastWriter);
+                    lastWriter.position = position;
+                    batchWriters[bufNum] = lastWriter;
+                    position += writeLength;
+                    bufLength += writeLength;
+                    bufNum += 1;
+                    if (bufNum >= maxBufNum){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
+                    }
+                    if (bufLength >= maxBufLength){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
+                    }
+                }
+                long writePosition = curPosition;
+                curPosition += bufLength;
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+                {
+                    // log.debug("need to flush, unlock !");
+                    writerQueueLock.unlock();
+                    writerBuffer.position(0);
+                    writerBuffer.limit(writerBuffer.capacity());
+                    for (int i = 0; i < bufNum; i++){
+                        writerBuffer.putInt(batchWriters[i].data.remaining());
+                        writerBuffer.put(batchWriters[i].data);
+                    }
+                    writerBuffer.position(0);
+                    writerBuffer.limit(bufLength);
+                    dataFileChannel.write(writerBuffer, writePosition);
+                    dataFileChannel.force(true);
+                    writerQueueLock.lock();
+                    // log.debug("flush ok , get the lock again!");
+                }
+
+                while(true){
+                    Writer ready = writerQueue.removeFirst();
+                    if (!ready.equals(w)){
+                        ready.done = 1;
+                        ready.cv.signal();
+                    }
+                    if (ready.equals(lastWriter)){
+                        break;
+                    }
+                }
+
+                if (!writerQueue.isEmpty()){
+                    writerQueue.getFirst().cv.signal();
+                }
+                // log.debug(w.position);
                 position = w.position;
 
             } catch (IOException ie) {
@@ -1231,13 +1620,15 @@ public class Test1MessageQueue {
 
         }
 
+
+
         public ByteBuffer read(long position) {
             if (threadLocalReadMetaBuf.get() == null) {
                 threadLocalReadMetaBuf.set(ByteBuffer.allocate(readMetaLength));
             }
             ByteBuffer readMeta = threadLocalReadMetaBuf.get();
 
-            log.debug("read from position : " + position);
+            // log.debug("read from position : " + position);
             readMeta.clear();
             try {
                 int ret;
@@ -1247,7 +1638,7 @@ public class Test1MessageQueue {
                 int dataLength = readMeta.getInt();
                 ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + readMeta.capacity());
-                log.debug(ret);
+                // log.debug(ret);
                 return tmp;
             } catch (IOException ie) {
                 ie.printStackTrace();
@@ -1266,6 +1657,120 @@ public class Test1MessageQueue {
 
     }
 
+    public class PMCache{
+        Map<String, Map<Integer, PMQueue> > pmQueueMap;
+        int numOfBlocks;
+		PMMemoryBlock[] pmBlocks;
+		Heap h;
+        public class PMMemoryBlock{
+            long curPosition;
+            long capacity;
+            MemoryBlock block;
+            Lock lock;
+            PMMemoryBlock(Heap h, long blockCapacity){
+                curPosition = 0;
+                capacity = blockCapacity;
+                block = h.allocateMemoryBlock(blockCapacity);
+                lock = new ReentrantLock();
+            }
+            long addData(ByteBuffer data){
+                lock.lock();
+                int dataLength = data.remaining();
+                long addr = curPosition;
+                long dataAddr = curPosition;
+                block.setInt(addr, dataLength);
+                addr += Integer.BYTES;
+                block.copyFromArray(data.array(), 0, addr, dataLength);
+                curPosition += Integer.BYTES + dataLength;
+                lock.unlock();
+                return dataAddr;
+            }
+            ByteBuffer readData(long addr){
+                int dataLength = block.getInt(addr);
+                ByteBuffer data = ByteBuffer.allocate(dataLength);
+                addr += Integer.BYTES;
+                block.copyToArray(addr, data.array(), 0, dataLength);
+                return data;
+            }
+        }
+        public class PMQueue{
+            long headAddr;
+            long tailAddr;
+            long coldReadPosition;
+            long hotReadPosition;
+            long minOffset;
+            long maxOffset;
+            HashMap<Long, Long> addrMap;
+            PMQueue(){
+                headAddr = 0L;
+                tailAddr = 0L;
+                coldReadPosition = 0L;
+                hotReadPosition = 0L;
+                minOffset = 0L;
+                maxOffset = 0L;
+                addrMap = new HashMap<>();
+            }
+        }
+        PMCache(String pmCachePath){
+            long capacity = 60L*1024L*1024L*1024L;
+            h = Heap.createHeap(pmCachePath, capacity);
+            numOfBlocks = 4;
+            pmBlocks = new PMMemoryBlock[numOfBlocks];
+            for (int i = 0; i < numOfBlocks; i++){
+                pmBlocks[i] = new PMMemoryBlock(h, capacity/numOfBlocks);
+            }
+            pmQueueMap = new ConcurrentHashMap<>();
+        }
+        public boolean append(String topic, int queueId, ByteBuffer data){
+            Integer queueIdObject = queueId;
+            int pmBlockId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+            Map<Integer, PMQueue> pmQueue = pmQueueMap.get(topic);
+            if (pmQueue == null){
+                pmQueue = new HashMap<>();
+                pmQueueMap.put(topic, pmQueue);
+            }
+            PMQueue q = pmQueue.get(queueId);
+            if (q == null){
+                q = new PMQueue();
+            }
+
+            // q ??
+            // FIXME: 
+            long addr = pmBlocks[pmBlockId].addData(data);
+            if (addr != -1){
+                q.addrMap.put(q.maxOffset, addr);
+                q.maxOffset++;
+                return true;
+            }
+
+
+            return false;
+        }
+        public boolean getRange(String topic, int queueId, long offset, int fetchNum, Map<Integer, ByteBuffer> result){
+            Integer queueIdObject = queueId;
+            int pmBlockId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+
+            Map<Integer, PMQueue> pmQueue = pmQueueMap.get(topic);
+            if (pmQueue == null){
+                return false;
+            }
+            PMQueue q = pmQueue.get(queueId);
+            if (q == null){
+                return false;
+            }
+
+            // q ??
+
+
+
+            return false;
+        }
+
+        public boolean getRangeByPmAddr(String topic, int queueId, long pmAddr, int fetchNum, Map<Integer, ByteBuffer> result){
+            return false;
+        }
+    }
+
     private String metadataFileName;
     private FileChannel metadataFileChannel;
     private DataFile[] dataFiles;
@@ -1274,14 +1779,155 @@ public class Test1MessageQueue {
     // private ConcurrentHashMap<String, Integer> topic2queueid;
     // private ConcurrentHashMap<String, HashMap<int, > > topic2queueid;
     // private ConcurrentHashMap<String, Long> topic2queueid;
+    public class GetDataRetParameters{
+        long offset;
+        int fetchNum;
+    }
+
+
+    public class HotDataCircleBuffer {
+        public int head;
+        public int tail;
+        public int maxLength;
+        public int curLength;
+        public long headOffset;
+        public long tailOffset;
+        public ByteBuffer[] datas;
+        HotDataCircleBuffer(){
+            maxLength = 16;
+            curLength = 0;
+            head = 0;
+            tail = 0;
+            headOffset = 0L;
+            tailOffset = 0L;
+            datas = new ByteBuffer[maxLength];
+            for (int i = 0; i < maxLength; i++){
+                datas[i] = ByteBuffer.allocate(17408);
+            }
+        }
+
+        public void copyData(int thisHead, ByteBuffer data){
+            int pos = data.position();
+            log.debug(pos);
+            // log.info(datas[head]);
+            log.debug(data);
+            log.debug(datas[head]);
+            datas[thisHead].position(0);
+            datas[thisHead].limit(17408);
+            datas[thisHead].put(data);
+            datas[thisHead].flip();
+            log.debug(datas[thisHead]);
+            log.debug(data);
+            data.position(pos);
+            log.debug(data);
+        }
+
+        public void addData(ByteBuffer data){
+            log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
+            log.debug("original data: " + data);
+            if (curLength == 0){
+                headOffset = 0L;
+                tailOffset = 0L;
+                copyData(head, data);
+                // datas[head] = data.slice();
+                curLength = 1;
+                return;
+            }
+            headOffset++;
+            head++;
+            head = head % maxLength;
+            
+            // method 1
+            // log.debug(data);
+            // datas[head] = data.slice();
+            // // datas[head] = data.duplicate();
+            // log.debug(datas[head]);
+
+            // method 2
+            copyData(head, data);
+
+            // method 3
+            // datas[head] = data;
+
+
+            if (curLength < 8){
+                curLength++;
+            } else {
+                tailOffset++;
+                tail++;
+                tail = tail % maxLength;
+            }
+        }
+
+        public GetDataRetParameters getData(long offset, int fetchNum, Map<Integer, ByteBuffer> results){
+            GetDataRetParameters ret = new GetDataRetParameters();
+            log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
+            log.debug("headOffset : "+headOffset + "  tailOffset"+tailOffset);
+            log.debug("offset : "+offset + "  fetchNum : "+fetchNum);
+            ret.offset = offset;
+            ret.fetchNum = fetchNum;
+
+            if (curLength == 0){
+                return ret;
+            }
+
+
+            // [offset, offset+fetchNum-1]
+            //                                  [tailOffset, headOffset]
+            if (offset+fetchNum-1 < tailOffset){
+                return ret;
+            }
+
+
+
+            //              [offset,    offset+fetchNum-1]
+            //                    [tailOffset, headOffset]
+
+            //                 [offset, offset+fetchNum-1]
+            //             [tailOffset,        headOffset]
+
+
+
+            //   [offset, offset+fetchNum-1]
+            //                  [tailOffset, headOffset]
+
+            //                 [offset, offset+fetchNum-1]
+            // [tailOffset,                                       headOffset]
+
+
+            long startOffset = Math.max(offset, tailOffset);
+            long endOffset = offset+fetchNum-1;
+            long num = endOffset - startOffset + 1; // 能够在缓冲区中找到多少个数据？
+            if (endOffset == offset+fetchNum-1){
+                ret.fetchNum -= num;
+            }
+
+            for (long i = startOffset; i <= endOffset; i++){
+                int bufIndex = (int)( (i - tailOffset + tail) % maxLength);
+                int resultIndex =(int) (i - offset);
+                log.debug(resultIndex);
+                log.debug(datas[bufIndex]);
+                datas[bufIndex].position(0);
+                // datas[bufIndex].limit(datas[bufIndex].capacity());
+                log.debug(datas[bufIndex]);
+                results.put(resultIndex, datas[bufIndex]);
+            }
+
+            return ret;
+
+        }
+
+    }
 
     public class MQQueue {
         public Long maxOffset = 0L;
         public HashMap<Long, Long> queueMap;
+        public HotDataCircleBuffer hotDataCache;
 
         MQQueue() {
             maxOffset = 0L;
             queueMap = new HashMap<>();
+            // hotDataCache = new HotDataCircleBuffer();
         }
     }
 
@@ -1387,8 +2033,10 @@ public class Test1MessageQueue {
         } else {
             q = mqTopic.topicMap.get(queueId);
         }
-
-        int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+        // q.hotDataCache.addData(data);
+        Integer queueIdObject = queueId;
+        int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+        // int dataFileId = Math.floorMod(topic.hashCode()+queueId, numOfDataFiles);
         // log.info(dataFileId);
         if (dataFileId < 0) {
             log.info(dataFileId);
@@ -1417,6 +2065,12 @@ public class Test1MessageQueue {
                 break;
             case 6:
                 position = df.syncSeqWritePushQueueHeapBuffer(data);
+                break;
+            case 7:
+                position = df.syncSeqWritePushQueueDirectBatchBuffer(data);
+                break;
+            case 8:
+                position = df.syncSeqWritePushQueueHeapBatchBuffer(data);
                 break;
  
             default:
@@ -1454,19 +2108,38 @@ public class Test1MessageQueue {
         if (q == null) {
             return ret;
         }
+        if (offset >= q.maxOffset){
+            return ret;
+        }
+        if (offset + fetchNum-1 >= q.maxOffset){
+            fetchNum = (int)(q.maxOffset-offset);
+        }
+        // GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
+        // log.debug("original fetchNum: " + fetchNum);
+        // // fetchNum = changes.fetchNum;
+        // log.debug("updated fetchNum: " + fetchNum);
+
         long pos = 0;
-        int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+        Integer queueIdObject = queueId;
+        int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
         DataFile df = dataFiles[dataFileId];
 
         for (int i = 0; i < fetchNum; i++) {
-            if (q.queueMap.containsKey(offset + i)) {
-                pos = q.queueMap.get(offset + i);
-                ByteBuffer bbf = df.read(pos);
-                if (bbf != null) {
-                    bbf.position(0);
-                    bbf.limit(bbf.capacity());
-                    ret.put(i, bbf);
-                }
+            pos = q.queueMap.get(offset + i);
+            ByteBuffer bbf = df.read(pos);
+            if (bbf != null) {
+                bbf.position(0);
+                bbf.limit(bbf.capacity());
+                // if (i >= changes.fetchNum){
+                //     if (ret.get(i).compareTo(bbf) != 0){
+                //         log.info(ret.get(i));
+                //         log.info(bbf);
+                //         log.error("hot data circle buffer data error !");
+                //         System.exit(0);
+                //     }
+                // }
+ 
+                ret.put(i, bbf);
             }
         }
 
