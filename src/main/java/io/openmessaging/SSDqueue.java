@@ -145,11 +145,13 @@ public class SSDqueue{
         boolean done;
         long offset;
         Condition cv;
-        Writer(ByteBuffer d, Condition c){
+        Data block;
+        Writer(ByteBuffer d, Condition c, Data b){
             data = d;
             done = false;
             cv = c;
             offset = 0L;
+            block = b;
         }
     }
 
@@ -452,7 +454,7 @@ public class SSDqueue{
             this.head = tmp.getLong();
             this.tail = tmp.getLong();
         }
-        public long writeAgg(ByteBuffer data){
+        public long writeAgg(ByteBuffer data, Data dataBlock){
             if (writerQueueLocalBuffer.get() == null) {
                 writerQueueLocalBuffer.set(ByteBuffer.allocateDirect(writerQueueBufferCapacity)); // 分配堆外内存
             }
@@ -461,7 +463,7 @@ public class SSDqueue{
             long offset = -1;
             lock.lock();
             try {
-                Writer w = new Writer(data, queueCondition);
+                Writer w = new Writer(data, queueCondition, dataBlock);
                 writerQueue.addLast(w);
                 while (!w.done && !w.equals(writerQueue.getFirst())) {
                     w.cv.await();
@@ -483,6 +485,7 @@ public class SSDqueue{
                 Writer lastWriter = w;
                 writerBuffer.clear();
 
+                ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
                 while (iter.hasNext() && continueMerge) {
                     lastWriter = iter.next();
 
@@ -500,6 +503,24 @@ public class SSDqueue{
                     if (bufLength >= maxBufLength) {
                         continueMerge = false;
                     }
+
+
+                    if(lastWriter.block.tail == -1L){ // update an empty data queue
+                        lastWriter.block.tail = lastWriter.offset;
+                        lastWriter.block.head = lastWriter.block.tail;
+                    }else{
+                        buffer.clear();
+                        buffer.putLong(lastWriter.offset);
+                        buffer.flip();
+                        fileChannel.write(buffer, lastWriter.block.tail + Long.BYTES); // 更新 nextOffset
+                        lastWriter.block.tail = lastWriter.offset;
+                    }
+                    buffer.clear();
+                    buffer.putLong(lastWriter.block.totalNum+1);
+                    buffer.putLong(lastWriter.block.head);
+                    buffer.putLong(lastWriter.block.tail);
+                    buffer.flip();
+                    int len = fileChannel.write(buffer, lastWriter.block.metaOffset);
                 }
 
                 // do write work
@@ -536,40 +557,13 @@ public class SSDqueue{
         }
 
         public Long put(ByteBuffer data) throws IOException{
-            long startOffset = writeAgg(data);
+            long startOffset = writeAgg(data, this);
 
-            // TODO： 上一个 block 指向当前 block 的指针更新如何优化
-            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
-            if(tail == -1L){ // update an empty data queue
-                tail = startOffset;
-                head = tail;
-            }else{
-                buffer.putLong(startOffset);
-                buffer.flip();
-                fileChannel.write(buffer, tail + Long.BYTES); // 更新 nextOffset
-//                fileChannel.force(true);
-                tail = startOffset;
-            }
-            
-            // 更新 totalNum, tail, head 进 SSD
-            //System.out.println("275: "+ startOffset);
-            totalNum++;
-            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 3);
-            tmp.putLong(totalNum);
-            //System.out.println(tmp + " " + new String(tmp.array()));
-            tmp.putLong(head);
-            //System.out.println(tmp + " " + new String(tmp.array()));
-            tmp.putLong(tail);
-            //System.out.println(tmp + " " + new String(tmp.array()));
-            tmp.flip();
 
-            //System.out.println(tmp + " " + new String(tmp.array()));
 
-            int len = fileChannel.write(tmp, this.metaOffset);
-
-            fileChannel.force(true);
+//            fileChannel.force(true);
             //System.out.println("w: " + this.toString() + " : " + len);
-
+            totalNum++;
             return totalNum-1;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
@@ -594,7 +588,7 @@ public class SSDqueue{
 
                 Long dataSize = tmp.getLong();
                 Long nextOffset = tmp.getLong();
-                logger.info(this.toString() +" len1 "+len1 + " datasize = "+dataSize);
+                logger.info(this.toString() +"i = "+ i + " datasize = "+dataSize);
                 logger.info(this.toString() +" nextOffset "+nextOffset + " startOffset = "+startOffset);
 
 
