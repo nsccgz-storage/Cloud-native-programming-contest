@@ -789,6 +789,7 @@ public class SSDqueue{
                     break;
                 }
                 Long nextOffset = startOffset + Long.BYTES;
+                tmp.clear();
                 int len = ds.read(tmp, nextOffset);
                 tmp.flip();        
                 startOffset = tmp.getLong(); 
