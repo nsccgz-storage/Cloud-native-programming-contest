@@ -257,6 +257,9 @@ public class SSDqueue{
                     // 增加 queueIdArray
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                     Data writeData = new Data(dataSpaces[fcId]);
+
+                    logger.info(writeData.toString());
+
                     result = writeData.put(data);
 
                     Long queueMetaOffset = topicNameQueueMetaMap.get(topicName);
@@ -268,16 +271,22 @@ public class SSDqueue{
                     tData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, tData);
 
+                    logger.info(writeData.toString());
+
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                     //Data writeData = new Data(dataSpaces[fcId], metaDataOffset);
 
                     Data writeData = new Data(dataSpaces[fcId], meta);
 
+                    logger.info(writeData.toString());
+
                     result = writeData.put(data);
 
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
+
+                    logger.info(writeData.toString());
                 }
             }
 
