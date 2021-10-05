@@ -462,7 +462,7 @@ public class SSDqueue{
         this.queueTopicMap = new ConcurrentHashMap<>();
         this.topicArrayOffset = 0L + Integer.BYTES;
 
-        ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
+        ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES+TOPIC_NAME_SZIE);
         metaFileChannel.read(tmp);
         tmp.flip();
 
@@ -474,14 +474,14 @@ public class SSDqueue{
 
             Long offset = startOffset + i*(Long.BYTES + TOPIC_NAME_SZIE);
             tmp.clear();
-            tmp = ByteBuffer.allocate(Long.BYTES);
+//            tmp = ByteBuffer.allocate(Long.BYTES);
             int len = metaFileChannel.read(tmp, offset);
             tmp.flip();
 
             Long queueMetaOffset = tmp.getLong();
 
             tmp.clear();
-            tmp = ByteBuffer.allocate(TOPIC_NAME_SZIE);
+//            tmp = ByteBuffer.allocate(TOPIC_NAME_SZIE);
             len = metaFileChannel.read(tmp,offset + Long.BYTES);
             tmp.flip();
 
@@ -631,19 +631,20 @@ public class SSDqueue{
         public Long put(int queueId, Long dataMetaOffset)throws IOException{
             Long offset = queueIdArray + currentNum * (Integer.BYTES + Long.BYTES);
 
-            ByteBuffer tmpData = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
-            tmpData.putInt(queueId);
-            tmpData.putLong(dataMetaOffset);
-            tmpData.flip();
-            metaFileChannel.write(tmpData, offset);
+            ByteBuffer buffer = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
+            buffer.putInt(queueId);
+            buffer.putLong(dataMetaOffset);
+            buffer.flip();
+            metaFileChannel.write(buffer, offset);
 //            metaFileChannel.force(true);// 在setTopic函数中有 metaFile的force，故省略此步骤
             // TODO: 写回 SSD
             // 这个需要原子修改
             currentNum++;
-            ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
-            tmp.putInt(this.currentNum);
-            tmp.flip();
-            metaFileChannel.write(tmp, metaDataOffset);
+            buffer.clear();
+//            ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
+            buffer.putInt(this.currentNum);
+            buffer.flip();
+            metaFileChannel.write(buffer, metaDataOffset);
 //            metaFileChannel.force(true);// 在setTopic函数中有 metaFile的force，故省略此步骤
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
             return offset;
@@ -764,6 +765,7 @@ public class SSDqueue{
                         continueMerge = false;
                     }
                 }
+                writerBuffer.flip();
 
                 long writeStartOffset = FREE_OFFSET.getAndAdd(bufLength);
                 ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
@@ -795,7 +797,6 @@ public class SSDqueue{
                 // 写期间 unlock 使得其他 writer 可以被加入 writerQueue
                 {
                     lock.unlock();
-                    writerBuffer.flip();
                     testStat.stats[testStat.threadId.get()].addSample(writerBuffer.remaining());
                     this.fileChannel.write(writerBuffer, writeStartOffset);
                     this.fileChannel.force(true);
@@ -837,18 +838,19 @@ public class SSDqueue{
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
             Long startOffset = head;
             Map<Integer, ByteBuffer> res = new HashMap<>();
-            //ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
+            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES);
             for(int i=0; i<offset && startOffset != -1; ++i){
                 Long nextOffset = startOffset + Long.BYTES;
-
-                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
+                tmp.clear();
+//                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
                 int len = fileChannel.read(tmp, nextOffset);
                 tmp.flip();    
                 startOffset = tmp.getLong();
             }
 
             for(int i=0; i<fetchNum && startOffset != -1L; ++i){
-                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES);
+//                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES);
+                tmp.clear();
                 int len1 = fileChannel.read(tmp, startOffset);
                 tmp.flip();
 
