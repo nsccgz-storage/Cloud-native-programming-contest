@@ -415,7 +415,7 @@ public class SSDqueue{
     }
 
     public SSDqueue(String dirPath){
-        testStat = new TestStat();
+        //testStat = new TestStat();
         try {
             //init(dirPath);
             this.numOfDataFileChannels = 8;
@@ -511,7 +511,7 @@ public class SSDqueue{
     //     }
     // }
     public Long setTopic(String topicName, int queueId, ByteBuffer data){
-        testStat.appendStart();
+        //testStat.appendStart();
         Long result;
         try{
             Map<Integer, DataMeta> topicData = qTopicDataMap.get(topicName);
@@ -541,7 +541,7 @@ public class SSDqueue{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                     Data writeData = new Data(dataSpaces[fcId]);
 
-                    logger.info(writeData.toString());
+                    //logger.info(writeData.toString());
 
                     result = writeData.put(data);
 
@@ -553,7 +553,7 @@ public class SSDqueue{
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
 
-                    logger.info(writeData.toString());
+                    //logger.info(writeData.toString());
 
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
@@ -576,13 +576,13 @@ public class SSDqueue{
             e.printStackTrace();
             return null;
         }
-        testStat.appendUpdateStat(topicName, queueId, data);
+        //testStat.appendUpdateStat(topicName, queueId, data);
         return result;
     }
     public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
         Map<Integer, ByteBuffer> result = new HashMap<>();
         try{
-            testStat.getRangeStart();
+            //testStat.getRangeStart();
             Map<Integer, DataMeta> topicData = qTopicDataMap.get(topicName);
             if(topicData == null) return result;
 
@@ -593,7 +593,7 @@ public class SSDqueue{
             Data resData = new Data(dataSpaces[fcId], meta.metaOffset);
             //Data resData = new Data(fileChannel, metaDataOffset);
             result = resData.getRange(offset, fetchNum);
-            testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
+            //testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
         }catch(IOException e){
             logger.error(e);
         }

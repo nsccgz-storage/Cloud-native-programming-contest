@@ -201,8 +201,8 @@ public class Test1 {
 					}
 					result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
 					for (int j = 0; j <= i; j++){
-						log.debug(result.get(j));
-						log.debug(getRangeMsgs.get(j).checkBuf);
+						log.info(result.get(j));
+						log.info(getRangeMsgs.get(j).checkBuf);
 
 						if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
 							log.error("data error !");
@@ -242,7 +242,7 @@ public class Test1 {
 	}
 
 	public static void testThreadPool(String dbPath) {
-		Test1MessageQueue mq = new Test1MessageQueue(dbPath);
+		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
 		int numOfThreads = 1;
 		// int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
