@@ -499,9 +499,13 @@ public class SSDqueue{
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
 
             for(int i=0; i<offset && startOffset != -1L; ++i){
+                if(startOffset == tail){
+                    startOffset = -1L;
+                    break;
+                }
                 Long nextOffset = startOffset + Long.BYTES;
                 int len = ds.read(tmp, nextOffset);
-                tmp.flip();    
+                tmp.flip();        
                 startOffset = tmp.getLong(); 
             }
             ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
@@ -518,6 +522,7 @@ public class SSDqueue{
                 int len2 = ds.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
                 tmp1.flip();
                 res.put(i, tmp1);
+                if(startOffset == tail) break;
                 startOffset = nextOffset;
                 //logger.info(this.toString() + "offset: " + startOffset);
             }
