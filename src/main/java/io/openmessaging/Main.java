@@ -15,27 +15,31 @@ public class Main {
 
         DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
         String t = "1234567890123456789012345678901234567890";
-        // mq.append("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // mq.append("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // mq.append("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // mq.append("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // mq.append("12345", 123, ByteBuffer.wrap(t.getBytes()));
+        System.out.println(mq.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(mq.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(mq.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(mq.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(mq.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
 
         Map<Integer, ByteBuffer> res = mq.getRange("12345", 123, 0L, 100);
         for(Map.Entry<Integer, ByteBuffer> entry: res.entrySet()){
             System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
         }
+
+        
+        // String dirPath = "/home/ubuntu/test";
         // SSDqueue ssdQueue = new SSDqueue(dirPath);
         // String t = "1234567890123456789012345678901234567890";
         // System.out.println( t.hashCode());
-        // // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // // ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes()));
-        // // ssdQueue.setTopic("dsfsf", 123, ByteBuffer.wrap(t.getBytes()));
-        // // ssdQueue.setTopic("32424", 256, ByteBuffer.wrap(t.getBytes()));
+        // System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        // System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        // System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        // System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        // System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        // System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        // System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        // System.out.println(ssdQueue.setTopic("dsfsf", 123, ByteBuffer.wrap(t.getBytes())));
+        // System.out.println(ssdQueue.setTopic("32424", 256, ByteBuffer.wrap(t.getBytes())));
 
         // Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, 0L, 100);
 
