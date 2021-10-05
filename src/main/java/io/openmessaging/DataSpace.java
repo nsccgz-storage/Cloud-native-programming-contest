@@ -19,14 +19,17 @@ public class DataSpace {
     public DataSpace(FileChannel fc, long startSpace) {
         this.fc = fc;
         this.FREE_OFFSET = new AtomicLong(startSpace);
+        update();
     }   
     public DataSpace(FileChannel fc) throws IOException{
         this.fc = fc;
         // read metaData
         ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
-        fc.read(tmp, 0L);
+        int size = fc.read(tmp, 0L);
+        //logger.info(size);
         tmp.flip();
         this.FREE_OFFSET = new AtomicLong(tmp.getLong());
+        
     }
 
     public long write(ByteBuffer data) throws IOException{
@@ -79,17 +82,22 @@ public class DataSpace {
         return size;
     }
     public int updateMeta(long offset, long totalNum, long head, long tail)throws IOException{
-        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
-        buffer.putLong(totalNum);
+        // ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
+        // buffer.putLong(totalNum);
+        // buffer.putLong(head);
+        // buffer.putLong(tail);
+        // buffer.flip();
+        // int size = fc.write(buffer, offset);
+        // fc.force(true);
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
         buffer.putLong(head);
-        buffer.putLong(tail);
         buffer.flip();
         int size = fc.write(buffer, offset);
         fc.force(true);
         return size;
     }
     public long createLink(){
-        long res = FREE_OFFSET.getAndAdd(Long.BYTES * 3);
+        long res = FREE_OFFSET.getAndAdd(Long.BYTES * 1);
         return res;
     }
 
@@ -103,6 +111,7 @@ public class DataSpace {
         } catch (Exception e) {
             //TODO: handle exception
             e.printStackTrace();
+            logger.error("err!!!!!!!!!!!!!!!!!");
         }
     }
 }
