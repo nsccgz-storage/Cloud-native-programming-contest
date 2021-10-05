@@ -10,8 +10,6 @@ import java.io.File;
 
 import io.openmessaging.SSDBench;
 
-//import org.slf4j.LoggerFactory;
-//import org.slf4j.Logger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
