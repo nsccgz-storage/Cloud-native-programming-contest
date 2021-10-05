@@ -34,11 +34,11 @@ public class SSDqueue{
 
     ConcurrentHashMap<String, Long> topicNameQueueMetaMap;
     ConcurrentHashMap<String, Map<Integer, Long>> queueTopicMap;
-    
-    ConcurrentHashMap<String, Lock> control; // topicName + topicId clip
 
     FileChannel fileChannel;
     FileChannel metaFileChannel;
+
+    ConcurrentHashMap<String, long[]> lastAccessOffset;
 
     TestStat testStat;
 
@@ -408,7 +408,7 @@ public class SSDqueue{
     }
 
     public ThreadLocal<ByteBuffer> writerQueueLocalBuffer;
-    final int writerQueueBufferCapacity = 1024 * 128;
+    final int writerQueueBufferCapacity = 1024 * 256;
     public Lock lock; // 写队列的锁
     public Condition queueCondition;
     public Deque<Writer> writerQueue;
@@ -443,12 +443,13 @@ public class SSDqueue{
         this.queueTopicMap = new ConcurrentHashMap<>();
         FREE_OFFSET.set(0L);
 
-        control = new ConcurrentHashMap<>();
 
         writerQueueLocalBuffer = new ThreadLocal<>();
         lock = new ReentrantLock(false); // false 非公平锁
         queueCondition = lock.newCondition();
         writerQueue = new ArrayDeque<>();
+
+        lastAccessOffset = new ConcurrentHashMap<>();
     }
 
     public SSDqueue(FileChannel fileChannel, FileChannel metaFileChannel, Boolean t)throws IOException{
@@ -500,6 +501,8 @@ public class SSDqueue{
         lock = new ReentrantLock(false); // false 非公平锁
         queueCondition = lock.newCondition();
         writerQueue = new ArrayDeque<>();
+
+        lastAccessOffset = new ConcurrentHashMap<>();
     }
 
     public Map<Integer, Long> readQueue(Long queueMetaOffset) throws IOException{
@@ -588,7 +591,7 @@ public class SSDqueue{
 
             Data resData = new Data(fileChannel, metaDataOffset);
 
-            result = resData.getRange(offset, fetchNum);
+            result = resData.getRange(topicName+"& "+queueId, offset, fetchNum);
         }catch(IOException e){
             logger.error(e);
         }
@@ -733,7 +736,7 @@ public class SSDqueue{
 
                 // 设置参数
                 int maxBufNum = 12;
-                int maxBufLength = 90 * 1024; // 90KiB + 17KiB < writerQueueBufferCapacity = 128KiB
+                int maxBufLength = 238 * 1024; // 90KiB + 17KiB < writerQueueBufferCapacity = 128KiB
 
                 // 执行批量写操作
                 int bufLength = 0;
@@ -835,18 +838,41 @@ public class SSDqueue{
 //            return totalNum-1;
             return totalNum++;
         }
-        public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
-            Long startOffset = head;
-            Map<Integer, ByteBuffer> res = new HashMap<>();
-            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES);
-            for(int i=0; i<offset && startOffset != -1; ++i){
-                Long nextOffset = startOffset + Long.BYTES;
+        public long iterDataLink(long beginHandle, long beginOffset, long maxOffset) throws IOException {
+            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
+            long targetHandle = beginHandle;
+            for(long i=beginOffset; i<maxOffset && targetHandle != -1; ++i){
+                Long nextOffset = targetHandle + Long.BYTES;
                 tmp.clear();
 //                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
                 int len = fileChannel.read(tmp, nextOffset);
-                tmp.flip();    
-                startOffset = tmp.getLong();
+                tmp.flip();
+                targetHandle = tmp.getLong();
             }
+            return targetHandle;
+        }
+        public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
+            long[] recordOffset = lastAccessOffset.get(key);
+            long startOffset;
+            if(recordOffset == null){
+                recordOffset = new long[]{0, head};
+                lastAccessOffset.put(key, recordOffset);
+                startOffset = iterDataLink(head, 0, offset);
+            }else if(recordOffset[0] > offset){
+                startOffset = iterDataLink(head, 0, offset);
+            }else{
+                startOffset = iterDataLink(recordOffset[1], recordOffset[0], offset);
+            }
+
+            Map<Integer, ByteBuffer> res = new HashMap<>();
+            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES);
+//            for(int i=0; i<offset && startOffset != -1; ++i){
+//                Long nextOffset = startOffset + Long.BYTES;
+//                tmp.clear();
+//                int len = fileChannel.read(tmp, nextOffset);
+//                tmp.flip();
+//                startOffset = tmp.getLong();
+//            }
 
             for(int i=0; i<fetchNum && startOffset != -1L; ++i){
 //                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES);
@@ -862,6 +888,10 @@ public class SSDqueue{
                 tmp1.flip();
                 res.put(i, tmp1);
                 startOffset = nextOffset;
+            }
+            if(offset+fetchNum > recordOffset[0] && startOffset != -1){
+                recordOffset[0] = offset+fetchNum;
+                recordOffset[1] = startOffset;
             }
             return res;
         }
