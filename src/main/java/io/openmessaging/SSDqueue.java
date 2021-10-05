@@ -487,10 +487,10 @@ public class SSDqueue{
 
                 // 设置参数
                 int maxBufNum = 12;
-                int maxBufLength = 88 * 1024; // 88KiB
+                int maxBufLength = 90 * 1024; // 90KiB + 17KiB < writerQueueBufferCapacity = 128KiB
 
                 // 执行批量写操作
-                long writeStartOffset = FREE_OFFSET.get();
+//
                 int bufLength = 0;
                 int bufNum = 0;
                 boolean continueMerge = true;
@@ -498,12 +498,15 @@ public class SSDqueue{
                 Writer lastWriter = w;
                 writerBuffer.clear();
 
-                ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
+                long position = 0;
+
                 while (iter.hasNext() && continueMerge) {
                     lastWriter = iter.next();
 
                     int writeLength = lastWriter.data.remaining() + 2 * Long.BYTES;
-                    lastWriter.offset = FREE_OFFSET.getAndAdd(writeLength);
+//                    lastWriter.offset = FREE_OFFSET.getAndAdd(writeLength);
+                    lastWriter.offset = position;
+                    position += writeLength;
                     writerBuffer.putLong(lastWriter.data.remaining());
                     writerBuffer.putLong(-1L); // next block
                     writerBuffer.put(lastWriter.data);
@@ -516,31 +519,15 @@ public class SSDqueue{
                     if (bufLength >= maxBufLength) {
                         continueMerge = false;
                     }
-
-
-                    if(lastWriter.block.tail == -1L){ // update an empty data queue
-                        lastWriter.block.tail = lastWriter.offset;
-                        lastWriter.block.head = lastWriter.block.tail;
-                    }else{
-                        buffer.clear();
-                        buffer.putLong(lastWriter.offset);
-                        buffer.flip();
-                        fileChannel.write(buffer, lastWriter.block.tail + Long.BYTES); // 更新 nextOffset
-                        lastWriter.block.tail = lastWriter.offset;
-                    }
-                    buffer.clear();
-                    buffer.putLong(lastWriter.block.totalNum+1);
-                    buffer.putLong(lastWriter.block.head);
-                    buffer.putLong(lastWriter.block.tail);
-                    buffer.flip();
-                    int len = fileChannel.write(buffer, lastWriter.block.metaOffset);
                 }
 
+                long writeStartOffset = FREE_OFFSET.getAndAdd(bufLength);
                 // do write work
                 // 写期间 unlock 使得其他 writer 可以被加入 writerQueue
                 {
                     lock.unlock();
                     writerBuffer.flip();
+
                     this.fileChannel.write(writerBuffer, writeStartOffset);
                     this.fileChannel.force(true);
                     lock.lock();
@@ -551,6 +538,7 @@ public class SSDqueue{
                     if (!ready.equals(w)) {
                         ready.done = true;
                         ready.cv.signal();
+                        ready.offset += writeStartOffset;
                     }
                     if (ready.equals(lastWriter)){
                         break;
@@ -560,6 +548,8 @@ public class SSDqueue{
                 if (!writerQueue.isEmpty()) {
                     writerQueue.getFirst().cv.signal();
                 }
+
+                w.offset += writeStartOffset;
                 offset = w.offset;
             } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
@@ -571,8 +561,26 @@ public class SSDqueue{
 
         public Long put(ByteBuffer data) throws IOException{
             long startOffset = writeAgg(data, this);
-//            fileChannel.force(true);
+
             //System.out.println("w: " + this.toString() + " : " + len);
+            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
+            if(tail == -1L){ // update an empty data queue
+                tail = startOffset;
+                head = tail;
+            }else{
+                buffer.clear();
+                buffer.putLong(startOffset);
+                buffer.flip();
+                fileChannel.write(buffer, tail + Long.BYTES); // 更新 nextOffset
+                tail = startOffset;
+            }
+            buffer.clear();
+            buffer.putLong(totalNum+1);
+            buffer.putLong(head);
+            buffer.putLong(tail);
+            buffer.flip();
+            int len = fileChannel.write(buffer, metaOffset);
+            fileChannel.force(true);
             totalNum++;
             return totalNum-1;
         }
