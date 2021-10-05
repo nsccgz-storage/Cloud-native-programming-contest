@@ -27,14 +27,10 @@ public class Main {
         // }
 
         
-        String dirPath = "/mnt/ssd/wyk2";
+        String dirPath = "/home/ubuntu/test";
         SSDqueue ssdQueue = new SSDqueue(dirPath);
         String t = "1234567890123456789012345678901234567890";
         System.out.println( t.hashCode());
-<<<<<<< HEAD
-        System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        
-=======
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
@@ -44,7 +40,6 @@ public class Main {
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
         System.out.println(ssdQueue.append("dsfsf", 123, ByteBuffer.wrap(t.getBytes())));
         System.out.println(ssdQueue.append("32424", 256, ByteBuffer.wrap(t.getBytes())));
->>>>>>> 3dfdd41d85a5332d4388a97c5e0982e753cdbe4f
 
         Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, 0L, 100);
 
