@@ -71,13 +71,13 @@ public class SSDqueue{
         void appendStart(){
             if(appendStartTime.get() == null || appendStartTime.get() == 0L){
                 appendStartTime.set(System.nanoTime());
-                logger.info("init append time");
+                //logger.info("init append time");
             }
         }
         void getRangeStart(){
             if(getRangeStartTime.get() == null || getRangeStartTime.get() == 0L){
                 getRangeStartTime.set(System.nanoTime());
-                logger.info("init getRange time");
+                //logger.info("init getRange time");
             }
         }
 
@@ -110,9 +110,9 @@ public class SSDqueue{
         void report(){
             double appendElapsedTimeMS = (double)(appendEndTime.get()-appendStartTime.get())/(1000*1000);
             double appendThroughput = (double)appendCount.get()/appendElapsedTimeMS;
-            logger.info("[Append  ] op count : " + appendCount.get());
-            logger.info("[Append  ] elapsed time (ms) : " + appendElapsedTimeMS);
-            logger.info("[Append  ] Throughput (op/ms): " + appendThroughput);
+            //logger.info("[Append  ] op count : " + appendCount.get());
+            //logger.info("[Append  ] elapsed time (ms) : " + appendElapsedTimeMS);
+            //logger.info("[Append  ] Throughput (op/ms): " + appendThroughput);
 
             if (getRangeEndTime.get() == null){
                 getRangeEndTime.set(0L);
@@ -125,9 +125,9 @@ public class SSDqueue{
             }
             double getRangeElapsedTimeMS = (double)(getRangeEndTime.get()-getRangeStartTime.get())/(1000*1000);
             double getRangeThroughput = (double)getRangeCount.get()/getRangeElapsedTimeMS;
-            logger.info("[getRange] op count : " + getRangeCount.get());
-            logger.info("[getRange] elapsed time (ms) : " + getRangeElapsedTimeMS);
-            logger.info("[getRange] Throughput (op/ms): " + getRangeThroughput);
+            //logger.info("[getRange] op count : " + getRangeCount.get());
+            //logger.info("[getRange] elapsed time (ms) : " + getRangeElapsedTimeMS);
+            //logger.info("[getRange] Throughput (op/ms): " + getRangeThroughput);
         }
 
         // report topic stat per second
@@ -150,7 +150,7 @@ public class SSDqueue{
                 
                 // 读盘，建表 
                 //this.fileChannel = fileChannel;
-                logger.info("reover");
+                logger.info("recover");
                 META_FREE_OFFSET.set(0L);
                 ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 2);
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();;
@@ -204,7 +204,7 @@ public class SSDqueue{
         // 划分起始的 Long.BYTES * 来存元数据
         } catch (Exception e) {
             //TODO: handle exception
-            logger.info("error ");
+            logger.info("error 201777");
             e.printStackTrace();
         }
         

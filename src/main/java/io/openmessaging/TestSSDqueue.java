@@ -152,10 +152,10 @@ public class TestSSDqueue {
 		String dataPath = "/mnt/nvme/mq/Data";
 		// System.out.println(" 28 ");
 
-		try {
-			FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
-			FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-			SSDqueue mq = new SSDqueue("/mnt/ssd/wyk/");
+	
+			//FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
+			//FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+			SSDqueue mq = new SSDqueue("/mnt/ssd/wyk");
 			int numOfThreads = 1;
 			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -182,9 +182,7 @@ public class TestSSDqueue {
 			double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
 			log.info("time: " + elapsedTimeS);
 
-		} catch (IOException ie) {
-			ie.printStackTrace();
-		}
+		
 	}
 
 	public static void main(String[] args) {
