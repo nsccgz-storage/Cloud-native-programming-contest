@@ -33,7 +33,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     private SSDqueue ssdQueue;
     public DefaultMessageQueueImpl(){
         
-        String dirPath = "/home/ubuntu/test";
+        String dirPath = "/mnt/ssd/wyk2";
         ssdQueue = new SSDqueue(dirPath);
     }
     @Override
