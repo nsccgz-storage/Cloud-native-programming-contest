@@ -168,7 +168,7 @@ public class SSDqueue{
 
         void appendUpdateStat(String topic, int queueId, ByteBuffer data) {
             int id = threadId.get();
-            stats[id].addSample(data.remaining());
+//            stats[id].addSample(data.remaining());
             stats[id].appendEndTime = System.nanoTime();
             stats[id].appendCount += 1;
             stats[id].writeBytes += data.remaining();
@@ -267,11 +267,11 @@ public class SSDqueue{
                 }
             }
 
-            String totalWriteBucketReport = "";
-            totalWriteBucketReport += myBucketBound[0] + " < ";
+            StringBuilder totalWriteBucketReport = new StringBuilder();
+            totalWriteBucketReport.append(myBucketBound[0]).append(" < ");
             for (int i = 0; i < numOfBucket; i++){
-                totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
-                totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
+                totalWriteBucketReport.append("[").append(totalWriteBucketCount[i]).append("]");
+                totalWriteBucketReport.append(" < ").append(myBucketBound[i + 1]).append(" < ");
             }
             logger.info("[Total Append Data Dist]" + totalWriteBucketReport);
 
@@ -280,11 +280,11 @@ public class SSDqueue{
                 for (int i = 0; i < numOfBucket; i++) {
                     curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
                 }
-                String curWriteBucketReport = "";
-                curWriteBucketReport += myBucketBound[0] + " < ";
+                StringBuilder curWriteBucketReport = new StringBuilder();
+                curWriteBucketReport.append(myBucketBound[0]).append(" < ");
                 for (int i = 0; i < numOfBucket; i++) {
-                    curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
-                    curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
+                    curWriteBucketReport.append("[").append(curWriteBucketCount[i]).append("]");
+                    curWriteBucketReport.append(" < ").append(myBucketBound[i + 1]).append(" < ");
                 }
 
                 logger.info("[Current Append Data Dist]" + curWriteBucketReport);
@@ -340,11 +340,11 @@ public class SSDqueue{
                 curGetRangeLatency /= getNumOfThreads;
             }
 
-            String appendStat = "";
-            String getRangeStat = "";
+            StringBuilder appendStat = new StringBuilder();
+            StringBuilder getRangeStat = new StringBuilder();
             for (int i = 0; i < getNumOfThreads; i++){
-                appendStat += String.format("%d,", curAppendCount[i]);
-                getRangeStat += String.format("%d,", curGetRangeCount[i]);
+                appendStat.append(String.format("%d,", curAppendCount[i]));
+                getRangeStat.append(String.format("%d,", curGetRangeCount[i]));
             }
             String csvStat = String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
                     writeBandwidth, elapsedTimeS, appendThroughput, appendLatency, getRangeThroughput, getRangeLatency,
@@ -692,7 +692,7 @@ public class SSDqueue{
             tmp.putLong(tail);
             tmp.flip();
             fileChannel.write(tmp, this.metaOffset);
-            fileChannel.force(true);
+//            fileChannel.force(true); // 能保证后面data.put时一定会force
         }
 
         public String toString(){
@@ -766,12 +766,37 @@ public class SSDqueue{
                 }
 
                 long writeStartOffset = FREE_OFFSET.getAndAdd(bufLength);
-                // do write work
+                ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
+                iter = writerQueue.iterator();
+                Writer writer;
+                do{
+                    writer = iter.next();
+                    writer.offset += writeStartOffset;
+                    // 迁移更新上一个block指针的操作到写聚合
+                    if(writer.block.tail == -1L){ // update an empty data queue
+                        writer.block.tail = writer.offset;
+                        writer.block.head = writer.block.tail;
+                    }else{
+                        buffer.clear();
+                        buffer.putLong(writer.offset);
+                        buffer.flip();
+                        fileChannel.write(buffer, writer.block.tail + Long.BYTES); // 更新 nextOffset
+                        writer.block.tail = writer.offset;
+                    }
+                    buffer.clear();
+                    buffer.putLong(writer.block.totalNum+1);
+                    buffer.putLong(writer.block.head);
+                    buffer.putLong(writer.block.tail);
+                    buffer.flip();
+                    fileChannel.write(buffer, writer.block.metaOffset);
+                } while (iter.hasNext() && !writer.equals(lastWriter));
+
+
                 // 写期间 unlock 使得其他 writer 可以被加入 writerQueue
                 {
                     lock.unlock();
                     writerBuffer.flip();
-
+                    testStat.stats[testStat.threadId.get()].addSample(writerBuffer.remaining());
                     this.fileChannel.write(writerBuffer, writeStartOffset);
                     this.fileChannel.force(true);
                     lock.lock();
@@ -782,7 +807,7 @@ public class SSDqueue{
                     if (!ready.equals(w)) {
                         ready.done = true;
                         ready.cv.signal();
-                        ready.offset += writeStartOffset;
+//                        ready.offset += writeStartOffset;
                     }
                     if (ready.equals(lastWriter)){
                         break;
@@ -793,7 +818,7 @@ public class SSDqueue{
                     writerQueue.getFirst().cv.signal();
                 }
 
-                w.offset += writeStartOffset;
+//                w.offset += writeStartOffset;
                 offset = w.offset;
             } catch (InterruptedException | IOException e) {
                 e.printStackTrace();
@@ -805,27 +830,9 @@ public class SSDqueue{
 
         public Long put(ByteBuffer data) throws IOException{
             long startOffset = writeAgg(data, this);
-
-            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
-            if(tail == -1L){ // update an empty data queue
-                tail = startOffset;
-                head = tail;
-            }else{
-                buffer.clear();
-                buffer.putLong(startOffset);
-                buffer.flip();
-                fileChannel.write(buffer, tail + Long.BYTES); // 更新 nextOffset
-                tail = startOffset;
-            }
-            buffer.clear();
-            buffer.putLong(totalNum+1);
-            buffer.putLong(head);
-            buffer.putLong(tail);
-            buffer.flip();
-            int len = fileChannel.write(buffer, metaOffset);
-            fileChannel.force(true);
-            totalNum++;
-            return totalNum-1;
+//            totalNum++;
+//            return totalNum-1;
+            return totalNum++;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
             Long startOffset = head;
