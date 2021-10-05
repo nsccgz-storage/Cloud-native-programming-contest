@@ -56,7 +56,7 @@ public class Test1 {
 	public static Vector<Message> generateOne() {
 		String topicName = "topic";
 		Vector<Message> msgs = new Vector<>();
-		for (long offset = 0; offset < 999; offset++) {
+		for (long offset = 0; offset < 1; offset++) {
 			for (int queueId = 0; queueId < 99; queueId++) {
 				Message msg = new Message(topicName, queueId, offset);
 				msgs.add(msg);
@@ -67,7 +67,8 @@ public class Test1 {
 
 	public static void testOne() throws IOException{
 		//Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
-		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
+		//DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
+		SSDqueue mq = new SSDqueue("/mnt/ssd/wyk2");
 		Vector<Message> msgs = generateOne();
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
@@ -81,7 +82,17 @@ public class Test1 {
 			Message msg = msgs.get(i);
 			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 			if (result.get(0).compareTo(msg.buf) != 0) {
+
+				log.info("topic: " + msg.topic + " id: " + msg.queueId + " offset: " + msg.offset +" buffer: "  + result.get(0));
+		
+				byte[] tmp = msg.buf.array();
+							log.info("***************real*************************");
+							for(int ii=0;  ii < tmp.length; ++ii){
+								System.out.print(tmp[ii] + " ");
+							}
+							log.info("***************end*************************");
 				log.error("data error !");
+				System.exit(0);
 			}
 		}
 	}
@@ -206,6 +217,12 @@ public class Test1 {
 
 						if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
 							log.error("data error !");
+							byte[] tmp = getRangeMsgs.get(j).checkBuf.array();
+							log.info("***************real*************************");
+							for(int ii=0;  ii < tmp.length; ++ii){
+								System.out.print(tmp[ii] + " ");
+							}
+							log.info("***************end*************************");
 							System.exit(0);
 						}
 					
@@ -287,8 +304,15 @@ public class Test1 {
 		}
 		System.out.println("dbPath : " + args[0]);
 		String dbPath = args[0] ;
-		// testOne();
-		testThreadPool(dbPath);
+
+		try {
+			testOne();
+		} catch (Exception e) {
+			//TODO: handle exception
+			e.printStackTrace();
+		}
+		
+		// testThreadPool(dbPath);
 		// Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
 		// int ioSize = 1000;
 		// byte[] data = new byte[ioSize];

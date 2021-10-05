@@ -27,19 +27,19 @@ public class Main {
         // }
 
         
-        String dirPath = "/home/ubuntu/test";
+        String dirPath = "/mnt/ssd/wyk2";
         SSDqueue ssdQueue = new SSDqueue(dirPath);
         String t = "1234567890123456789012345678901234567890";
         System.out.println( t.hashCode());
-        System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        System.out.println(ssdQueue.setTopic("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        System.out.println(ssdQueue.setTopic("dsfsf", 123, ByteBuffer.wrap(t.getBytes())));
-        System.out.println(ssdQueue.setTopic("32424", 256, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("dsfsf", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("32424", 256, ByteBuffer.wrap(t.getBytes())));
 
         Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, 0L, 100);
 

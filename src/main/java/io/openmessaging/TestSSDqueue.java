@@ -114,7 +114,7 @@ public class TestSSDqueue {
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
 			
-			msg.getOffset = mq.setTopic(msg.topic, msg.queueId, msg.buf);
+			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
 			
 			if (msg.getOffset != msg.offset) {
 				log.error("offset error !");
