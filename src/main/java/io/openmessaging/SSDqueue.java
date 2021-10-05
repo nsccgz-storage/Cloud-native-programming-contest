@@ -532,14 +532,14 @@ public class SSDqueue{
                 // 
                 int cur = currentNum.getAndIncrement();
                 metaFileChannel.write(tmp, this.topicArrayOffset + (cur) * (TOPIC_NAME_SZIE + Long.BYTES));
-                metaFileChannel.force(true);
+//                metaFileChannel.force(true);
                 
                 tmp.clear();
                 // tmp = ByteBuffer.allocate(Integer.BYTES);
                 tmp.putInt(currentNum.get());
                 tmp.flip();
                 int len = metaFileChannel.write(tmp, 0L);
-                metaFileChannel.force(true);
+//                metaFileChannel.force(true);
 
                 //System.out.println("110: " + len);
                 //logger.info("num: "+ cur + " metaQueue: "+ queueArray.getMetaOffset());
@@ -568,7 +568,7 @@ public class SSDqueue{
                     result = writeData.put(data);
                 }
             }
-
+            metaFileChannel.force(true);
         } catch (Exception e) {
             //TODO: handle exception
             e.printStackTrace();
@@ -613,7 +613,7 @@ public class SSDqueue{
             tmp.putInt(this.currentNum);
             tmp.flip();
             metaFileChannel.write(tmp, metaDataOffset);
-            metaFileChannel.force(true);
+//            metaFileChannel.force(true);// 在setTopic函数中有 metaFile的force，故省略此步骤
 
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
         }
@@ -636,7 +636,7 @@ public class SSDqueue{
             tmpData.putLong(dataMetaOffset);
             tmpData.flip();
             metaFileChannel.write(tmpData, offset);
-            metaFileChannel.force(true);
+//            metaFileChannel.force(true);// 在setTopic函数中有 metaFile的force，故省略此步骤
             // TODO: 写回 SSD
             // 这个需要原子修改
             currentNum++;
@@ -644,7 +644,7 @@ public class SSDqueue{
             tmp.putInt(this.currentNum);
             tmp.flip();
             metaFileChannel.write(tmp, metaDataOffset);
-            metaFileChannel.force(true);
+//            metaFileChannel.force(true);// 在setTopic函数中有 metaFile的force，故省略此步骤
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
             return offset;
         }
@@ -692,7 +692,7 @@ public class SSDqueue{
             tmp.putLong(tail);
             tmp.flip();
             fileChannel.write(tmp, this.metaOffset);
-//            fileChannel.force(true); // 能保证后面data.put时一定会force
+//            fileChannel.force(true); // 能保证后面data.put时一定会有 fileChannel的force
         }
 
         public String toString(){

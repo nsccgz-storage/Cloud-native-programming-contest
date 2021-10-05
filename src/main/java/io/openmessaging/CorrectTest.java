@@ -109,9 +109,9 @@ public class CorrectTest {
             byte[] ans = new byte[buffer.remaining()];
             buffer.get(ans);
             if(ans.length != data.length){
-                System.out.println("ans =  "+ans.length+" "+ Arrays.toString(ans));
-                System.out.println("data = "+data.length+" "+  Arrays.toString(data));
-                System.out.println("msg = "+this);
+//                System.out.println("ans =  "+ans.length+" "+ Arrays.toString(ans));
+//                System.out.println("data = "+data.length+" "+  Arrays.toString(data));
+//                System.out.println("msg = "+this);
                 return false;
             }
             boolean flag = true;
