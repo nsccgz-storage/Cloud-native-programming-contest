@@ -13,11 +13,11 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.apache.log4j.spi.LoggerFactory;
-import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
-//import org.slf4j.LoggerFactory;
-//import org.slf4j.Logger;
+
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
 
 public class SSDqueue{
     private static final Logger logger = Logger.getLogger(SSDqueue.class);
@@ -41,95 +41,369 @@ public class SSDqueue{
     FileChannel metaFileChannel;
 
     TestStat testStat;
-    private class TestStat{
+
+    private class TestStat {
         // report throughput per second
-        ThreadLocal<Long> appendStartTime;
-        ThreadLocal<Long> appendEndTime;
-        ThreadLocal<Long> getRangeStartTime;
-        ThreadLocal<Long> getRangeEndTime;
-        ThreadLocal<Long> opCount;
-        ThreadLocal<Long> appendCount;
-        ThreadLocal<Long> getRangeCount;
+        ThreadLocal<Integer> threadId;
+        AtomicInteger numOfThreads;
+        Long startTime;
+        Long endTime;
+        Long opCount;
+
+        AtomicBoolean reported;
+        int[] oldTotalWriteBucketCount;
+        MemoryUsage memoryUsage;
+
+        private class ThreadStat {
+            Long appendStartTime;
+            Long appendEndTime;
+            int appendCount;
+            Long getRangeStartTime;
+            Long getRangeEndTime;
+            int getRangeCount;
+            Long writeBytes;
+            public int[] bucketBound;
+            public int[] bucketCount;
+
+            ThreadStat() {
+                appendStartTime = 0L;
+                appendEndTime = 0L;
+                appendCount = 0;
+                getRangeStartTime = 0L;
+                getRangeEndTime = 0L;
+                getRangeCount = 0;
+                writeBytes = 0L;
+                reported = new AtomicBoolean();
+                reported.set(false);
+
+                bucketBound = new int[19];
+                bucketBound[0] = 100;
+                bucketBound[1] = 512;
+                for (int i = 1; i <= 17; i++){
+                    bucketBound[i+1] = i*1024;
+                }
+                bucketCount = new int[bucketBound.length-1];
+                for (int i = 0; i < bucketCount.length; i++){
+                    bucketCount[i] = 0;
+                }
+
+                MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
+                memoryUsage = memory.getHeapMemoryUsage();
+            }
+
+            public ThreadStat clone() {
+                ThreadStat ret = new ThreadStat();
+                ret.appendStartTime = this.appendStartTime;
+                ret.appendEndTime = this.appendEndTime;
+                ret.appendCount = this.appendCount;
+                ret.getRangeStartTime = this.getRangeStartTime;
+                ret.getRangeEndTime = this.getRangeEndTime;
+                ret.getRangeCount = this.getRangeCount;
+                ret.writeBytes = this.writeBytes;
+                ret.bucketBound = this.bucketBound.clone();
+                ret.bucketCount = this.bucketCount.clone();
+                return ret;
+            }
+            public void addSample(int len){
+                for (int i = 0; i < bucketCount.length; i++){
+                    if (len < bucketBound[i+1]){
+                        bucketCount[i]++;
+                        break;
+                    }
+                }
+            }
+        }
+
+        ThreadStat[] oldStats;
+        Long oldEndTime;
+        ThreadStat[] stats;
+
+        //DataFile[] myDataFiles;
+        //DataFile.WriteStat[] oldWriteStats;
+
         // ThreadLocal< HashMap<Integer, Long> >
         // report operation per second
+        //TestStat(DataFile[] dataFiles) {
         TestStat(){
-            appendStartTime = new ThreadLocal<>();
-            appendEndTime = new ThreadLocal<>();
-            getRangeStartTime = new ThreadLocal<>();
-            getRangeEndTime = new ThreadLocal<>();
-
-            appendCount = new ThreadLocal<>();
-            getRangeCount = new ThreadLocal<>();
-            opCount = new ThreadLocal<>();
-
-            appendStartTime.set(0L);
-            appendEndTime.set(0L);
-            getRangeStartTime.set(0L);
-            getRangeEndTime.set(0L);
-            appendCount.set(0L);
-            getRangeCount.set(0L);
-        }
-        void appendStart(String topic, int queueId, ByteBuffer data){
-            if(appendStartTime.get() == null || appendStartTime.get() == 0L){
-                appendStartTime.set(System.nanoTime());
-                logger.info("init append time");
+            threadId = new ThreadLocal<>();
+            numOfThreads = new AtomicInteger();
+            numOfThreads.set(0);
+            stats = new ThreadStat[100];
+            for (int i = 0; i < 100; i++) {
+                stats[i] = new ThreadStat();
             }
+            startTime = 0L;
+            endTime = 0L;
+            oldEndTime = 0L;
+            opCount = 0L;
+            //myDataFiles = dataFiles;
+            //oldWriteStats = new DataFile.WriteStat[myDataFiles.length];
         }
-        void getRangeStart(String topic, int queueId, long offset, int fetchNum){
-            if(getRangeStartTime.get() == null || getRangeStartTime.get() == 0L){
-                getRangeStartTime.set(System.nanoTime());
-                logger.info("init getRange time");
+
+        void updateThreadId() {
+            if (threadId.get() == null) {
+                int thisNumOfThread = numOfThreads.getAndAdd(1);
+                threadId.set(thisNumOfThread);
+                logger.info("init thread id : " + thisNumOfThread);
             }
         }
 
-        void appendUpdateStat(String topic, int queueId, ByteBuffer data, long tail){
-            if (appendCount.get() == null){
-                appendCount.set(0L);
+        void appendStart() {
+            updateThreadId();
+            int id = threadId.get();
+            if (stats[id].appendStartTime == 0L) {
+                stats[id].appendStartTime = System.nanoTime();
+                // log.info("init append time");
             }
-            appendEndTime.set(System.nanoTime());
-            appendCount.set(appendCount.get()+1);
+        }
+
+        void getRangeStart() {
+            updateThreadId();
+            int id = threadId.get();
+            if (stats[id].getRangeStartTime == 0L) {
+                stats[id].getRangeStartTime = System.nanoTime();
+                // log.info("init getRange time");
+            }
+        }
+
+        void appendUpdateStat(String topic, int queueId, ByteBuffer data) {
+            int id = threadId.get();
+            stats[id].addSample(data.remaining());
+            stats[id].appendEndTime = System.nanoTime();
+            stats[id].appendCount += 1;
+            stats[id].writeBytes += data.remaining();
+            stats[id].writeBytes += Integer.BYTES; // metadata
             update();
         }
-        void getRangeUpdateStat(String topic, int queueId, long offset, int fetchNum){
-            if (getRangeCount.get() == null){
-                getRangeCount.set(0L);
-            }
-            getRangeEndTime.set(System.nanoTime());
-            getRangeCount.set(getRangeCount.get()+1);
+
+        void getRangeUpdateStat(String topic, int queueId, long offset, int fetchNum) {
+            int id = threadId.get();
+            stats[id].getRangeEndTime = System.nanoTime();
+            stats[id].getRangeCount += 1;
             update();
         }
-        void update(){
-            if (opCount.get() == null){
-                opCount.set(0L);
+
+        synchronized void update() {
+            if (reported.get() == true){
+                return;
             }
-            long curOpCount = opCount.get();
-            if (curOpCount % 10000 == 0){
+            if (startTime == 0L) {
+                startTime = System.nanoTime();
+                endTime = System.nanoTime();
+            }
+            opCount += 1;
+            if (opCount % 10 == 0){
+                return ;
+            }
+            Long curTime = System.nanoTime();
+            if (curTime - endTime > 5L * 1000L * 1000L * 1000L) {
+                endTime = curTime;
+                reported.set(true);
                 report();
+                reported.set(false);
             }
-            opCount.set(curOpCount+1);
         }
-        void report(){
-            double appendElapsedTimeMS = (double)(appendEndTime.get()-appendStartTime.get())/(1000*1000);
-            double appendThroughput = (double)appendCount.get()/appendElapsedTimeMS;
-            logger.info("[Append  ] op count : " + appendCount.get());
-            logger.info("[Append  ] elapsed time (ms) : " + appendElapsedTimeMS);
-            logger.info("[Append  ] Throughput (op/ms): " + appendThroughput);
 
-            if (getRangeEndTime.get() == null){
-                getRangeEndTime.set(0L);
+        synchronized void report() {
+            // throughput, iops for append/getRange
+            // writeBandwidth
+            int getNumOfThreads = numOfThreads.get();
+            double[] appendTpPerThread = new double[getNumOfThreads];
+            double[] getRangeTpPerThread = new double[getNumOfThreads];
+            double[] appendLatencyPerThread = new double[getNumOfThreads];
+            double[] getRangeLatencyPerThread = new double[getNumOfThreads];
+            double[] bandwidthPerThread = new double[getNumOfThreads];
+
+
+            double appendThroughput = 0;
+            double getRangeThroughput = 0;
+            double appendLatency = 0;
+            double getRangeLatency = 0;
+            double writeBandwidth = 0; // MiB/s
+
+            // total
+
+            double elapsedTimeS = (endTime - startTime) / (double) (1000 * 1000 * 1000);
+            for (int i = 0; i < getNumOfThreads; i++) {
+                double appendElapsedTimeS = (stats[i].appendEndTime - stats[i].appendStartTime)
+                        / ((double) (1000 * 1000 * 1000));
+                double appendElapsedTimeMS = (stats[i].appendEndTime - stats[i].appendStartTime)
+                        / ((double) (1000 * 1000));
+                appendTpPerThread[i] = stats[i].appendCount / appendElapsedTimeS;
+                appendLatencyPerThread[i] = appendElapsedTimeMS / stats[i].appendCount;
+                double getRangeElapsedTimeS = (stats[i].getRangeEndTime - stats[i].getRangeStartTime)
+                        / ((double) (1000 * 1000 * 1000));
+                double getRangeElapsedTimeMS = (stats[i].getRangeEndTime - stats[i].getRangeStartTime)
+                        / ((double) (1000 * 1000));
+                getRangeTpPerThread[i] = stats[i].getRangeCount / getRangeElapsedTimeS;
+                getRangeLatencyPerThread[i] = getRangeElapsedTimeMS / stats[i].getRangeCount;
+                double dataSize = stats[i].writeBytes / (double) (1024 * 1024);
+                bandwidthPerThread[i] = dataSize / elapsedTimeS;
             }
-            if (getRangeStartTime.get() == null){
-                getRangeStartTime.set(0L);
+
+            for (int i = 0; i < getNumOfThreads; i++) {
+                appendThroughput += appendTpPerThread[i];
+                getRangeThroughput += getRangeTpPerThread[i];
+                appendLatency += appendLatencyPerThread[i];
+                getRangeLatency += getRangeLatencyPerThread[i];
+                writeBandwidth += bandwidthPerThread[i];
             }
-            if (getRangeCount.get() == null){
-                getRangeCount.set(0L);
+            // appendThroughput /= getNumOfThreads;
+            // getRangeThroughput /= getNumOfThreads;
+            appendLatency /= getNumOfThreads;
+            getRangeLatency /= getNumOfThreads;
+            // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
+
+            // 报告总的写入大小分布
+            int[] totalWriteBucketCount = new int[100];
+            int[] myBucketBound = stats[0].bucketBound;
+            for (int i = 0; i < 100; i++){
+                totalWriteBucketCount[i] = 0;
             }
-            double getRangeElapsedTimeMS = (double)(getRangeEndTime.get()-getRangeStartTime.get())/(1000*1000);
-            double getRangeThroughput = (double)getRangeCount.get()/getRangeElapsedTimeMS;
-            logger.info("[getRange] op count : " + getRangeCount.get());
-            logger.info("[getRange] elapsed time (ms) : " + getRangeElapsedTimeMS);
-            logger.info("[getRange] Throughput (op/ms): " + getRangeThroughput);
+            int numOfBucket = stats[0].bucketCount.length;
+            for (int i = 0; i < getNumOfThreads; i++){
+                for (int j = 0; j < numOfBucket; j++){
+                    totalWriteBucketCount[j] += stats[i].bucketCount[j];
+                }
+            }
+
+            String totalWriteBucketReport = "";
+            totalWriteBucketReport += myBucketBound[0] + " < ";
+            for (int i = 0; i < numOfBucket; i++){
+                totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
+                totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
+            }
+            logger.info("[Total Append Data Dist]" + totalWriteBucketReport);
+
+            if (oldTotalWriteBucketCount != null) {
+                int[] curWriteBucketCount = new int[100];
+                for (int i = 0; i < numOfBucket; i++) {
+                    curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
+                }
+                String curWriteBucketReport = "";
+                curWriteBucketReport += myBucketBound[0] + " < ";
+                for (int i = 0; i < numOfBucket; i++) {
+                    curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
+                    curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
+                }
+
+                logger.info("[Current Append Data Dist]" + curWriteBucketReport);
+
+            }
+
+            oldTotalWriteBucketCount = totalWriteBucketCount;
+
+            double curAppendThroughput = 0;
+            double curGetRangeThroughput = 0;
+            double curAppendLatency = 0;
+            double curGetRangeLatency = 0;
+            double curWriteBandwidth = 0; // MiB/s
+            double thisElapsedTimeS = 0;
+
+            int[] curAppendCount = new int[getNumOfThreads];
+            int[] curGetRangeCount = new int[getNumOfThreads];
+
+            // current
+            // get the stat for this period
+            if (oldStats != null) {
+                thisElapsedTimeS = (endTime - oldEndTime) / (double) (1000 * 1000 * 1000);
+                for (int i = 0; i < getNumOfThreads; i++) {
+                    double appendElapsedTimeMS = (stats[i].appendEndTime - oldStats[i].appendEndTime)
+                            / ((double) (1000 * 1000));
+                    double appendElapsedTimeS = (stats[i].appendEndTime - oldStats[i].appendEndTime)
+                            / ((double) (1000 * 1000 * 1000));
+                    double appendCount = stats[i].appendCount - oldStats[i].appendCount;
+                    curAppendCount[i] = stats[i].appendCount - oldStats[i].appendCount;
+                    appendTpPerThread[i] = (appendCount) / appendElapsedTimeS;
+                    appendLatencyPerThread[i] = appendElapsedTimeMS / appendCount;
+                    double getRangeElapsedTimeMS = (stats[i].getRangeEndTime - oldStats[i].getRangeEndTime)
+                            / ((double) (1000 * 1000));
+                    double getRangeElapsedTimeS = (stats[i].getRangeEndTime - oldStats[i].getRangeEndTime)
+                            / ((double) (1000 * 1000 * 1000));
+                    double getRangeCount = stats[i].getRangeCount - oldStats[i].getRangeCount;
+                    curGetRangeCount[i] = stats[i].getRangeCount - oldStats[i].getRangeCount;
+                    getRangeTpPerThread[i] = getRangeCount / getRangeElapsedTimeS;
+                    getRangeLatencyPerThread[i] = getRangeElapsedTimeMS / getRangeCount;
+                    double dataSize = (stats[i].writeBytes - oldStats[i].writeBytes) / (double) (1024 * 1024);
+                    bandwidthPerThread[i] = dataSize / thisElapsedTimeS;
+                }
+                for (int i = 0; i < getNumOfThreads; i++) {
+                    curAppendThroughput += appendTpPerThread[i];
+                    curGetRangeThroughput += getRangeTpPerThread[i];
+                    curAppendLatency += appendLatencyPerThread[i];
+                    curGetRangeLatency += getRangeLatencyPerThread[i];
+                    curWriteBandwidth += bandwidthPerThread[i];
+                }
+                // curAppendThroughput /= getNumOfThreads;
+                // curGetRangeThroughput /= getNumOfThreads;
+                curAppendLatency /= getNumOfThreads;
+                curGetRangeLatency /= getNumOfThreads;
+            }
+
+            String appendStat = "";
+            String getRangeStat = "";
+            for (int i = 0; i < getNumOfThreads; i++){
+                appendStat += String.format("%d,", curAppendCount[i]);
+                getRangeStat += String.format("%d,", curGetRangeCount[i]);
+            }
+            String csvStat = String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+                    writeBandwidth, elapsedTimeS, appendThroughput, appendLatency, getRangeThroughput, getRangeLatency,
+                    curWriteBandwidth, thisElapsedTimeS, curAppendThroughput, curAppendLatency, curGetRangeThroughput,
+                    curGetRangeLatency);
+
+            logger.info("appendStat   :"+appendStat);
+            logger.info("getRangeStat :"+getRangeStat);
+            logger.info("csvStat      :"+csvStat);
+            logger.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
+
+            // report write stat
+            // for (int i = 0; i < dataFiles.length; i++){
+            //     if (oldWriteStats[i] != null){
+            //         // get total write stat and cur write stat
+
+            //         DataFile.WriteStat curWriteStat = dataFiles[i].writeStat;
+            //         DataFile.WriteStat oldWriteStat = oldWriteStats[i];
+            //         String writeReport = "";
+            //         writeReport += "[Total ] File " + i;
+            //         writeReport += " " + "emptyQueueCount : " + curWriteStat.emptyQueueCount;
+            //         writeReport += " " + "exceedBufNumCount : " + curWriteStat.exceedBufNumCount;
+            //         writeReport += " " + "exceedBufLengthCount : " + curWriteStat.exceedBufLengthCount;
+            //         log.info(writeReport);
+            //         log.info("Write Size Dist : "+curWriteStat.toString());
+
+            //         // current
+
+            //         oldWriteStat.emptyQueueCount = curWriteStat.emptyQueueCount - oldWriteStat.emptyQueueCount;
+            //         oldWriteStat.exceedBufLengthCount = curWriteStat.exceedBufLengthCount - oldWriteStat.exceedBufLengthCount;
+            //         oldWriteStat.exceedBufNumCount = curWriteStat.exceedBufNumCount - oldWriteStat.exceedBufNumCount;
+            //         for (int j = 0; j < oldWriteStat.bucketCount.length; j++){
+            //             oldWriteStat.bucketCount[j] = curWriteStat.bucketCount[j] - oldWriteStat.bucketCount[j];
+            //         }
+
+            //         curWriteStat = oldWriteStat;
+            //         writeReport = "";
+            //         writeReport += "[Current ] File " + i;
+            //         writeReport += " " + "emptyQueueCount : " + curWriteStat.emptyQueueCount;
+            //         writeReport += " " + "exceedBufNumCount : " + curWriteStat.exceedBufNumCount;
+            //         writeReport += " " + "exceedBufLengthCount : " + curWriteStat.exceedBufLengthCount;
+            //         log.info(writeReport);
+            //         log.info("Write Size Dist : "+curWriteStat.toString());
+
+
+            //     }
+            //    oldWriteStats[i] = dataFiles[i].writeStat.clone();
+            // }
+
+            logger.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
+
+            // deep copy
+            oldStats = stats.clone();
+            for (int i = 0; i < 100; i++) {
+                oldStats[i] = stats[i].clone();
+            }
+            oldEndTime = endTime;
         }
+
         // report topic stat per second
     }
 
@@ -155,6 +429,8 @@ public class SSDqueue{
     }
 
     public SSDqueue(FileChannel fileChannel, FileChannel metaFileChannel){
+        testStat = new TestStat();
+
         this.fileChannel = fileChannel;
         this.metaFileChannel = metaFileChannel;
 
@@ -169,15 +445,15 @@ public class SSDqueue{
 
         control = new ConcurrentHashMap<>();
 
-        testStat = new TestStat();
-        logger.info("initialize new SSDqueue, num: "+currentNum.get());
-
         writerQueueLocalBuffer = new ThreadLocal<>();
         lock = new ReentrantLock(false); // false 非公平锁
         queueCondition = lock.newCondition();
         writerQueue = new ArrayDeque<>();
     }
+
     public SSDqueue(FileChannel fileChannel, FileChannel metaFileChannel, Boolean t)throws IOException{
+        testStat = new TestStat();
+
         // 读盘，建表 
         // TODO, recover
         this.fileChannel = fileChannel;
@@ -210,8 +486,6 @@ public class SSDqueue{
             tmp.flip();
 
             String topicName = new String(tmp.array()).trim();
-            //logger.info("len: " + len + " topicName: " + topicName + " queueMetaOffset: " + queueMetaOffset + " num" + currentNum.get());
-            //System.out.println("75： " + queueMetaOffset);
 
             topicNameQueueMetaMap.put(topicName, queueMetaOffset);
             
@@ -220,7 +494,6 @@ public class SSDqueue{
 
         }
 
-        testStat = new TestStat();
         logger.info("recover a SSDqueue, num: "+currentNum.get());
 
         writerQueueLocalBuffer = new ThreadLocal<>();
@@ -228,13 +501,16 @@ public class SSDqueue{
         queueCondition = lock.newCondition();
         writerQueue = new ArrayDeque<>();
     }
+
     public Map<Integer, Long> readQueue(Long queueMetaOffset) throws IOException{
         QueueId resData = new QueueId(metaFileChannel, queueMetaOffset);
         return resData.readAll();
 
     }
+
     public Long setTopic(String topicName, int queueId, ByteBuffer data){
-        testStat.appendStart(topicName, queueId, data);
+        testStat.appendStart();
+
         Long result;
         try{
 
@@ -272,12 +548,6 @@ public class SSDqueue{
                 topicData.put(queueId, writeData.getMetaOffset());
                 topicNameQueueMetaMap.put(topicName, queueArray.getMetaOffset());
                 queueTopicMap.put(topicName, topicData);
-
-                //control.put(topicName + queueId, new ReentrantLock());
-                //System.out.println("112: w meta: "+ writeData.getMetaOffset());
-
-//                return res;
-                testStat.appendUpdateStat(topicName, queueId, data, writeData.tail);
             }else{
                 Long metaDataOffset = topicData.get(queueId);
                 if(metaDataOffset == null){
@@ -293,15 +563,9 @@ public class SSDqueue{
                     // 插入 DRAM 哈希表
                     topicData.put(queueId, writeData.getMetaOffset());
                     queueTopicMap.put(topicName, topicData);
-                    //control.put(topicName + queueId, new ReentrantLock());
-                    
-//                    return res;
-                    testStat.appendUpdateStat(topicName, queueId, data, writeData.tail);
                 }else{
                     Data writeData = new Data(fileChannel, metaDataOffset);
                     result = writeData.put(data);
-//                    return writeData.put(data);
-                    testStat.appendUpdateStat(topicName, queueId, data, writeData.tail);
                 }
             }
 
@@ -310,27 +574,25 @@ public class SSDqueue{
             e.printStackTrace();
             return null;
         }
-
+        testStat.appendUpdateStat(topicName, queueId, data);
         return result;
     }
     public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
+        testStat.getRangeStart();
         Map<Integer, ByteBuffer> result = new HashMap<>();
         try{
-            testStat.getRangeStart(topicName,queueId, offset, fetchNum);
             Map<Integer, Long> topicData = queueTopicMap.get(topicName);
             if(topicData == null) return result;
             Long metaDataOffset = topicData.get(queueId);
             if(metaDataOffset == null) return result;
 
-            //System.out.println("143: r meta: "+ metaDataOffset);
-
             Data resData = new Data(fileChannel, metaDataOffset);
 
             result = resData.getRange(offset, fetchNum);
-            testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
         }catch(IOException e){
             logger.error(e);
         }
+        testStat.getRangeUpdateStat(topicName, queueId, offset, fetchNum);
         return result;
     }
 
@@ -384,8 +646,6 @@ public class SSDqueue{
             metaFileChannel.write(tmp, metaDataOffset);
             metaFileChannel.force(true);
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
-            //System.out.println("w 213: " + this.toString());
-            //logger.info(toString());
             return offset;
         }
         public Long getMetaOffset(){
@@ -397,8 +657,6 @@ public class SSDqueue{
             //logger.info(toString());
             for(int i=0; i<this.currentNum; ++i){
                 int len2 = metaFileChannel.read(tmp, this.queueIdArray + i*(Integer.BYTES + Long.BYTES));
-                //logger.info(toString());
-                //System.out.println("222: " + len2);
                 tmp.flip();
                 res.put(tmp.getInt(), tmp.getLong());
                 tmp.clear(); // 清空buffer为下一次写buffer作准备
@@ -444,8 +702,7 @@ public class SSDqueue{
         public Data(FileChannel fileChannel, Long metaOffset) throws IOException{
             this.fileChannel = fileChannel;
             this.metaOffset = metaOffset;
-            
-    
+
             // 恢复 totalNum, tail, head
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES + Long.BYTES);
             this.fileChannel.read(tmp, metaOffset);
@@ -478,7 +735,6 @@ public class SSDqueue{
                 int maxBufLength = 90 * 1024; // 90KiB + 17KiB < writerQueueBufferCapacity = 128KiB
 
                 // 执行批量写操作
-//
                 int bufLength = 0;
                 int bufNum = 0;
                 boolean continueMerge = true;
@@ -550,7 +806,6 @@ public class SSDqueue{
         public Long put(ByteBuffer data) throws IOException{
             long startOffset = writeAgg(data, this);
 
-            //System.out.println("w: " + this.toString() + " : " + len);
             ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
             if(tail == -1L){ // update an empty data queue
                 tail = startOffset;
@@ -583,13 +838,11 @@ public class SSDqueue{
                 int len = fileChannel.read(tmp, nextOffset);
                 tmp.flip();    
                 startOffset = tmp.getLong();
-                
             }
 
             for(int i=0; i<fetchNum && startOffset != -1L; ++i){
                 ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES);
                 int len1 = fileChannel.read(tmp, startOffset);
-                //logger.info(len1 + " " + startOffset);
                 tmp.flip();
 
                 Long dataSize = tmp.getLong();
@@ -600,7 +853,6 @@ public class SSDqueue{
                 tmp1.flip();
                 res.put(i, tmp1);
                 startOffset = nextOffset;
-
             }
             return res;
         }
