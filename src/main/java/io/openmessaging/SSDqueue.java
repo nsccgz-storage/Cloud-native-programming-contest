@@ -415,10 +415,11 @@ public class SSDqueue{
     }
 
     public SSDqueue(String dirPath){
-        //testStat = new TestStat();
+        testStat = new TestStat();
+        this.numOfDataFileChannels = 64;
         try {
             //init(dirPath);
-            this.numOfDataFileChannels = 8;
+            
             dataSpaces = new DataSpace[numOfDataFileChannels];
             boolean flag = new File(dirPath + "/meta").exists();
             if(flag){
@@ -478,7 +479,7 @@ public class SSDqueue{
                 //this.queueTopicMap = new ConcurrentHashMap<>();
                 this.qTopicDataMap = new ConcurrentHashMap<>();
 
-                //testStat = new TestStat();
+                testStat = new TestStat();
                 logger.info("initialize new SSDqueue, num: "+currentNum.get());
             }
         // 划分起始的 Long.BYTES * 来存元数据
@@ -511,7 +512,7 @@ public class SSDqueue{
     //     }
     // }
     public Long setTopic(String topicName, int queueId, ByteBuffer data){
-        //testStat.appendStart();
+        testStat.appendStart();
         Long result;
         try{
             Map<Integer, DataMeta> topicData = qTopicDataMap.get(topicName);
@@ -576,13 +577,13 @@ public class SSDqueue{
             e.printStackTrace();
             return null;
         }
-        //testStat.appendUpdateStat(topicName, queueId, data);
+        testStat.appendUpdateStat(topicName, queueId, data);
         return result;
     }
     public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
         Map<Integer, ByteBuffer> result = new HashMap<>();
         try{
-            //testStat.getRangeStart();
+            testStat.getRangeStart();
             Map<Integer, DataMeta> topicData = qTopicDataMap.get(topicName);
             if(topicData == null) return result;
 
@@ -593,7 +594,7 @@ public class SSDqueue{
             Data resData = new Data(dataSpaces[fcId], meta.metaOffset);
             //Data resData = new Data(fileChannel, metaDataOffset);
             result = resData.getRange(offset, fetchNum);
-            //testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
+            testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
         }catch(IOException e){
             logger.error(e);
         }
@@ -789,6 +790,7 @@ public class SSDqueue{
                     break;
                 }
                 Long nextOffset = startOffset + Long.BYTES;
+                tmp.clear();
                 int len = ds.read(tmp, nextOffset);
                 tmp.flip();        
                 startOffset = tmp.getLong(); 

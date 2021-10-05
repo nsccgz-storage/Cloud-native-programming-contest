@@ -141,8 +141,6 @@ public class TestSSDqueue {
 				log.error("data error !");
 				return;
 			}
-
-			
 		}
 	}
 
@@ -156,7 +154,7 @@ public class TestSSDqueue {
 			//FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
 			//FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
 			SSDqueue mq = new SSDqueue("/mnt/ssd/wyk");
-			int numOfThreads = 1;
+			int numOfThreads = 16;
 			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 			long startTime = System.nanoTime();
