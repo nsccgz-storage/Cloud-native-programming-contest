@@ -123,6 +123,7 @@ public class Test1 {
 				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
 				if (msg.getOffset != msg.offset) {
 					log.error("offset error !");
+					log.error("getoffset: " + msg.getOffset + " hope offset: "+ msg.offset);
 				}
 				// Map<Integer, ByteBuffer> result;
 				// result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);

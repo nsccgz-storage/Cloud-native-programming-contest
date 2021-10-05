@@ -35,7 +35,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     private SSDqueue ssdQueue;
     public DefaultMessageQueueImpl(){
         
-        String dirPath = "/essd";
+        String dirPath = "/mnt/ssd/wyk";
         ssdQueue = new SSDqueue(dirPath);
     }
     @Override
