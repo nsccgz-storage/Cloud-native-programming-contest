@@ -33,12 +33,12 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     private SSDqueue ssdQueue;
     public DefaultMessageQueueImpl(){
         
-        String dirPath = "/home/ubuntu/test";
+        String dirPath = "/mnt/ssd/wyk";
         ssdQueue = new SSDqueue(dirPath);
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
-        return ssdQueue.setTopic(topic, queueId, data);
+        return ssdQueue.append(topic, queueId, data);
     }
 
     @Override
