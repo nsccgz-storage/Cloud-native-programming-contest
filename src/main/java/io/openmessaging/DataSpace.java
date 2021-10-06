@@ -35,13 +35,13 @@ public class DataSpace {
         boolean done;
         long offset;
         Condition cv;
-        SSDqueue.Data block;
-        Writer(ByteBuffer d, Condition c, SSDqueue.Data b){
+        DataMeta meta;
+        Writer(ByteBuffer d, Condition c, DataMeta m){
             data = d;
             done = false;
             cv = c;
             offset = 0L;
-            block = b;
+            meta = m;
         }
     }
 
@@ -160,7 +160,7 @@ public class DataSpace {
         return fc.read(res, offset);
     }
 
-    public long writeAgg(ByteBuffer data, SSDqueue.Data block){
+    public DataMeta writeAgg(ByteBuffer data, DataMeta srcMeta){
         if (writerQueueLocalBuffer.get() == null) {
             writerQueueLocalBuffer.set(ByteBuffer.allocateDirect(writerQueueBufferCapacity)); // 分配堆外内存
         }
@@ -171,16 +171,15 @@ public class DataSpace {
         long[] writerMetaList = writerMetaDataList.get();
 
         lock.lock();
-        Writer w = new Writer(data, queueCondition, block);
+        Writer w = new Writer(data, queueCondition, srcMeta);
         try {
             writerQueue.addLast(w);
             while (!w.done && !w.equals(writerQueue.getFirst())) {
                 w.cv.await();
             }
             if (w.done) {
-                return w.offset;
+                return w.meta;
             }
-
 
             // 执行批量写操作
             int bufLength = 0;
@@ -216,20 +215,22 @@ public class DataSpace {
                     writeStat.incEmptyQueueCount();
                 }
 
-                if (lastWriter.block.tail == -1) { // 保存 head
-                    lastWriter.block.head = lastWriter.offset;
-                    lastWriter.block.tail = lastWriter.offset;
+                if (lastWriter.meta.tail == -1) { // 保存 head
+                    lastWriter.meta.head = lastWriter.offset;
+                    lastWriter.meta.tail = lastWriter.offset;
+                    lastWriter.meta.metaOffset = lastWriter.offset;
+
                     writerMetaList[bufNum*2-2] = lastWriter.offset;
-                    writerMetaList[bufNum*2-1] = lastWriter.block.getMetaOffset();
+                    writerMetaList[bufNum*2-1] = lastWriter.meta.metaOffset;
 //                    buffer.flip();
 //                    int size = fc.write(buffer, lastWriter.block.metaOffset);
                 } else { // 更新上一个block的next指针
                     writerMetaList[bufNum*2-2] = lastWriter.offset;
-                    writerMetaList[bufNum*2-1] = lastWriter.block.tail + Long.BYTES;
+                    writerMetaList[bufNum*2-1] = lastWriter.meta.tail + Long.BYTES;
 //                    buffer.putLong(lastWriter.offset);
 //                    buffer.flip();
 //                    int size = fc.write(buffer, lastWriter.block.tail + Long.BYTES);
-                    lastWriter.block.tail = lastWriter.offset;
+                    lastWriter.meta.tail = lastWriter.offset;
                 }
             }
             writerBuffer.flip();
@@ -275,7 +276,7 @@ public class DataSpace {
         } finally {
             lock.unlock();
         }
-        return w.offset;
+        return w.meta;
     }
 
     public long readHandle(long offset) throws IOException{

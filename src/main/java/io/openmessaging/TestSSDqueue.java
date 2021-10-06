@@ -153,7 +153,8 @@ public class TestSSDqueue {
 	
 			//FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
 			//FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-			SSDqueue mq = new SSDqueue("/mnt/ssd/wyk");
+//			SSDqueue mq = new SSDqueue("/mnt/ssd/wxr");
+			DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
 			int numOfThreads = 16;
 			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -161,7 +162,7 @@ public class TestSSDqueue {
 			for (int i = 0; i < numOfThreads; i++) {
 				final int thread_id = i;
 				executor.execute(() -> {
-					threadRun(thread_id, mq, barrier);
+					threadRun(thread_id, mq.ssdQueue, barrier);
 
 				});
 			}
