@@ -17,9 +17,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-//import org.slf4j.LoggerFactory;
-//import org.slf4j.Logger;
-
 public class SSDqueue{
     private static final Logger logger = Logger.getLogger(SSDqueue.class);
 

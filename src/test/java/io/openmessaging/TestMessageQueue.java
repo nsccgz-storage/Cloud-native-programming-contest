@@ -39,7 +39,7 @@ public class TestMessageQueue {
 	// public static String dbPath = "/mnt/nvme/mq";
 	// public static String dbPath = "/mnt/ssd/mq";
 	// TODO: just for test
-	public static String dbPath = ".";
+	public static String dbPath = "~/oasdmnk";
 
 	private static class Message {
 		String topic;
