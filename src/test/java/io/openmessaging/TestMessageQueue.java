@@ -39,7 +39,7 @@ public class TestMessageQueue {
 	// public static String dbPath = "/mnt/nvme/mq";
 	// public static String dbPath = "/mnt/ssd/mq";
 	// TODO: just for test
-	public static String dbPath = "./";
+	public static String dbPath = "./JustForTest/asdfasdf/testDB";
 
 	private static class Message {
 		String topic;
@@ -249,7 +249,7 @@ public class TestMessageQueue {
 			return false;
 		}
 		System.err.println("The dir is not exist, so I will create!");
-		file.mkdir();
+		file.mkdirs();
 		return true;
 
 	}
