@@ -356,8 +356,6 @@ public class TestMessageQueue {
 
 			}
 			barrier.await();
-
-
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 		} catch (BrokenBarrierException e) {
