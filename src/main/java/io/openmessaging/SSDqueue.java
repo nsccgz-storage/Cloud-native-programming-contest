@@ -394,7 +394,7 @@ public class SSDqueue{
                 oldWriteStats[i] = dataSpaces[i].writeStat.clone();
              }
 
-            logger.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
+//            logger.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
 
             // deep copy
             oldStats = stats.clone();
@@ -690,19 +690,7 @@ public class SSDqueue{
     * 只存 head
     *  <Length, nextOffset, Data>
     */
-    class DataMeta{
-        public long metaOffset;
-        public long head;
-        public long tail;
-        public long totalNum;
 
-        public DataMeta(long metaOffset, long head, long tail, long totalNum){
-            this.metaOffset = metaOffset;
-            this.head = head;
-            this.tail = tail;
-            this.totalNum = totalNum;
-        }
-    }
     public class Data{
         Long totalNum; // 不存
         Long tail; // 不存
@@ -715,7 +703,7 @@ public class SSDqueue{
         }
         public Data(DataSpace ds) throws IOException{
             this.ds  = ds;
-            this.metaOffset = ds.createLink();
+            this.metaOffset = -1L;//ds.createLink();
 
             this.totalNum = 0L;
             this.tail = -1L;
@@ -724,11 +712,12 @@ public class SSDqueue{
         public Data(DataSpace ds, Long metaOffset) throws IOException{
             this.ds = ds;
             this.metaOffset = metaOffset;
-            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
-            ds.read(tmp, metaOffset);
-            tmp.flip();
-
-            this.head = tmp.getLong();
+//            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
+//            ds.read(tmp, metaOffset);
+//            tmp.flip();
+//
+//            this.head = tmp.getLong();
+            this.head = metaOffset;
             this.tail = -1L;
             this.totalNum = 0L;
 
@@ -750,7 +739,12 @@ public class SSDqueue{
         }
 
         public Long put(ByteBuffer data) throws IOException{
-            long offset = ds.writeAgg(data, this);
+            long res = totalNum;
+            DataMeta dataMeta = ds.writeAgg(data, this.getMeta());
+            this.head = dataMeta.head;
+            this.tail = dataMeta.tail;
+            this.totalNum = dataMeta.totalNum + 1;
+            this.metaOffset = dataMeta.metaOffset;
 //            if(tail == -1L){
 //                head = offset;
 //                tail = offset;
@@ -759,11 +753,14 @@ public class SSDqueue{
 //                ds.updateLink(tail, offset);
 //                tail = offset;
 //            }
-            long res = totalNum;
-            totalNum++;
+//            }
+
+//            totalNum++;
 //            ds.updateMeta(metaOffset, totalNum, head, tail);
             return res;
         }
+
+
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
             Long startOffset = head;
             Map<Integer, ByteBuffer> res = new HashMap<>();
