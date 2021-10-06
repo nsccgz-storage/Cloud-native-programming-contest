@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -42,6 +43,8 @@ public class SSDqueue{
     // opt
     int numOfDataFileChannels;
     DataSpace[] dataSpaces;
+    ConcurrentHashMap<String, Map<Long,Long>> allDataOffsetMap;
+    boolean RCOVER = false;
 
     TestStat testStat;
     public class TestStat{
@@ -422,6 +425,7 @@ public class SSDqueue{
                 // recover
                 // 读盘，建表
                 logger.info("recover");
+                RCOVER = true;
                 META_FREE_OFFSET.set(0L);
                 ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 2);
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();;
@@ -460,6 +464,8 @@ public class SSDqueue{
                 }
             }else{
                 // create new mq
+                this.allDataOffsetMap = new ConcurrentHashMap<>();
+                
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 for(int i=0; i < numOfDataFileChannels; i++){
                     String dbPath = dirPath + "/db" + i;
@@ -505,6 +511,7 @@ public class SSDqueue{
     //         e.printStackTrace();
     //     }
     // }
+    String spitMark = "*$@%";
 
     public Long append(String topicName, int queueId, ByteBuffer data){
         testStat.appendStart(data.remaining());
@@ -522,13 +529,20 @@ public class SSDqueue{
                 Long qOffset = q.put(queueId, writeData.getMetaOffset());
 
                 this.put(topicName, q.metaDataOffset);
-
+                
                 // 更新 DRAM map
                 topicData = new HashMap<>();
                 topicData.put(queueId, writeData.getMeta());
                 topicNameQueueMetaMap.put(topicName, q.getMetaOffset());
                 qTopicDataMap.put(topicName, topicData);
                 metaFileChannel.force(true);
+
+                String key = topicName + spitMark + queueId;
+                Map<Long, Long> tmp2 = new HashMap<>();
+                tmp2.put(result, writeData.tail);
+
+                allDataOffsetMap.put(key, tmp2);
+
             }else{
                 DataMeta meta = topicData.get(queueId);
                 if(meta == null){
@@ -546,6 +560,12 @@ public class SSDqueue{
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
                     metaFileChannel.force(true);
+
+                    String key = topicName + spitMark + queueId;
+                    Map<Long, Long> tmp2 = allDataOffsetMap.get(key);
+                    tmp2.put(result, writeData.tail);
+                    allDataOffsetMap.put(key, tmp2);
+
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                     //Data writeData = new Data(dataSpaces[fcId], metaDataOffset);
@@ -556,6 +576,12 @@ public class SSDqueue{
 
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
+
+
+                    String key = topicName + spitMark + queueId;
+                    Map<Long, Long> tmp2 = allDataOffsetMap.get(key);
+                    tmp2.put(result, writeData.tail);
+                    allDataOffsetMap.put(key, tmp2);
                 }
             }
         } catch (Exception e) {
@@ -579,7 +605,11 @@ public class SSDqueue{
             int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
             Data resData = new Data(dataSpaces[fcId], meta.metaOffset);
             //Data resData = new Data(fileChannel, metaDataOffset);
-            result = resData.getRange(offset, fetchNum);
+            if(RCOVER) result = resData.getRange(offset, fetchNum);
+            else{
+                String key = topicName + spitMark + queueId;
+                result = resData.getRange(key, offset, fetchNum);
+            }
             testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
         }catch(IOException e){
             logger.error(e);
@@ -691,6 +721,8 @@ public class SSDqueue{
     *  <Length, nextOffset, Data>
     */
 
+    
+
     public class Data{
         Long totalNum; // 不存
         Long tail; // 不存
@@ -760,6 +792,39 @@ public class SSDqueue{
             return res;
         }
 
+
+        public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
+
+            Map<Long, Long> map = allDataOffsetMap.get(key);
+
+            Long startOffset = map.get(offset);
+            if(startOffset == null){
+                startOffset = tail;
+            }
+
+            //Long cnt = offset;
+
+            Map<Integer, ByteBuffer> res = new HashMap<>();
+            
+            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
+            for(int i=0; i<fetchNum && startOffset != -1L; ++i){
+                buffer.clear();
+                int len1 = ds.read(buffer, startOffset);
+                buffer.flip();
+
+                long dataSize = buffer.getLong();
+                long nextOffset = buffer.getLong();
+
+                ByteBuffer tmp1 = ByteBuffer.allocate((int) dataSize);
+                int len2 = ds.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
+                tmp1.flip();
+                res.put(i, tmp1);
+                // if(startOffset == tail) break;
+                startOffset = nextOffset;
+
+            }
+            return res;
+        }
 
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
             Long startOffset = head;
