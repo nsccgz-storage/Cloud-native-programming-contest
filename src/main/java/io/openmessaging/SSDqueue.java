@@ -275,7 +275,7 @@ public class SSDqueue{
             this.ds  = ds;
             this.metaOffset = -1L;
            
-            this.totalNum = -1L;
+            this.totalNum = 0L;
             this.tail = -1L;
             this.head = this.metaOffset;
         }
@@ -289,7 +289,7 @@ public class SSDqueue{
 
             // this.head = tmp.getLong();
             this.tail = -1L;
-            this.totalNum = -1L;
+            this.totalNum = 0L;
 
         }
         public Data(DataSpace ds, DataMeta dm){
@@ -307,6 +307,7 @@ public class SSDqueue{
                 tail = offset;
                 metaOffset = offset;
                 //ds.updateMeta(metaOffset, totalNum, head, tail);
+                ds.force();
             }else{
                 ds.updateLink(tail, offset); //
                 tail = offset;
@@ -317,18 +318,18 @@ public class SSDqueue{
             return res;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
-            logger.info(this.toString());
+            //logger.info(this.toString());
 
             Long startOffset = head;
             Map<Integer, ByteBuffer> res = new HashMap<>();
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
 
             boolean flag = true;
-            if(this.totalNum != -1 && offset == this.totalNum - 1){
+            if(this.totalNum != 0L && offset == this.totalNum - 1){
                 startOffset = tail;
                 flag = false;
             }
-            logger.info(this.toString());
+            //logger.info(this.toString());
 
             for(int i=0; i<offset && startOffset != -1L && flag; ++i){
                 // if(startOffset == tail){

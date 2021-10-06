@@ -33,7 +33,15 @@ public class DataSpace {
         this.FREE_OFFSET = new AtomicLong(0L);
         
     }
-
+    public void force(){
+        try {
+            fc.force(true);
+        } catch (Exception e) {
+            //TODO: handle exception
+            e.printStackTrace();
+        }
+        
+    }
     synchronized public long write(ByteBuffer data) throws IOException{
         long size = data.remaining() + Long.BYTES * 2;
         long offset = FREE_OFFSET.getAndAdd(size);
@@ -46,7 +54,7 @@ public class DataSpace {
         byteData.flip();
         int len = fc.write(byteData,offset);
         //update();
-        fc.force(true);
+        //fc.force(true);
         return offset;
     }
     public int read(ByteBuffer res, long offset) throws IOException{
