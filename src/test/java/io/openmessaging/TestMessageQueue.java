@@ -36,10 +36,10 @@ public class TestMessageQueue {
 	private static final Logger log = Logger.getLogger(Test1.class);
 	public static Random rand = new Random();
 	public static byte[] sampleData = new byte[17408];
-	public static String dbPath = "/mnt/nvme/mq";
+	// public static String dbPath = "/mnt/nvme/mq";
 	// public static String dbPath = "/mnt/ssd/mq";
 	// TODO: just for test
-	// public static String dbPath = ".";
+	public static String dbPath = ".";
 
 	private static class Message {
 		String topic;
@@ -80,7 +80,7 @@ public class TestMessageQueue {
 		log.info("Start : testSingleThreadAppendAndGetRange");
 		deleteDir(dbPath);
 		mkdirDir(dbPath);
-		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
+		MessageQueue mq = new DefaultTestMessageQueueImpl(dbPath);
 		String topicName = "testSingleThreadAppendAndGetRange";
 		Vector<Message> msgs = new Vector<>();
 		for (long offset = 0; offset < 10; offset++) {
@@ -129,7 +129,7 @@ public class TestMessageQueue {
 	public void testMultiThreadAppendAndGetRange() {
 		deleteDir(dbPath);
 		mkdirDir(dbPath);
-		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
+		MessageQueue mq = new DefaultTestMessageQueueImpl(dbPath);
 		log.info("Start : testMultiThreadAppendAndGetRange");
 		int numOfThreads = 20;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
@@ -257,7 +257,7 @@ public class TestMessageQueue {
 	public void testMultiThreadGetRangeFetchNum(){
 		deleteDir(dbPath);
 		mkdirDir(dbPath);
-		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
+		MessageQueue mq = new DefaultTestMessageQueueImpl(dbPath);
 		log.info("Start : testMultiThreadAppendAndGetRange");
 		int numOfThreads = 20;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
