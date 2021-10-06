@@ -164,7 +164,7 @@ public class TestMessageQueue {
 		try {
 			String topicName = "testMultiThreadAppendAndGetRange" + threadId;
 			Vector<Message> msgs = new Vector<>();
-			for (long offset = 0; offset < 999; offset++) {
+			for (long offset = 0; offset < 99; offset++) {
 				for (int queueId = 0; queueId < 9; queueId++) {
 					Message msg = new Message(topicName, queueId, offset);
 					msgs.add(msg);
@@ -297,7 +297,7 @@ public class TestMessageQueue {
 			String topicName = "topic" + threadId;
 			int queueId = 23423;
 			Vector<Message> getRangeMsgs = new Vector<>();
-			for (long offset = 0; offset < 999; offset++) {
+			for (long offset = 0; offset < 99; offset++) {
 				Message msg = new Message(topicName, queueId, offset);
 				getRangeMsgs.add(msg);
 			}
@@ -364,5 +364,8 @@ public class TestMessageQueue {
 		}
 
 	}
+
+
+	// TODO: recover test
 
 }
