@@ -32,9 +32,8 @@ public class DataSpace {
         
     }
 
-    public long write(ByteBuffer data) throws IOException{
+    synchronized public long write(ByteBuffer data) throws IOException{
         long size = data.remaining() + Long.BYTES * 2;
-
         long offset = FREE_OFFSET.getAndAdd(size);
 
         long nextOffset = -1L;
