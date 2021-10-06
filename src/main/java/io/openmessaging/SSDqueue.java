@@ -169,7 +169,6 @@ public class SSDqueue{
                 // 更新 DRAM map
                 topicData = new HashMap<>();
                 topicData.put(queueId, writeData.getMeta());
-                
                 qTopicDataMap.put(topicName, topicData);
                 
                 this.metaFileChannel.force(true);
@@ -278,7 +277,6 @@ public class SSDqueue{
             //updataSpace();
 
             this.currentNum = 0;
-            // TODO: 不需要此处写，会在下面 put 操作这写
             // ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
             // tmp.putInt(this.currentNum);
             // tmp.flip();
@@ -379,7 +377,7 @@ public class SSDqueue{
 
             this.head = tmp.getLong();
             this.tail = -1L;
-            this.totalNum = 0L;
+            this.totalNum = -1L;
 
             // 恢复 totalNum, tail, head
             // ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES + Long.BYTES);
@@ -417,10 +415,14 @@ public class SSDqueue{
             Long startOffset = head;
             Map<Integer, ByteBuffer> res = new HashMap<>();
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
-
+            boolean flag = true;
+            if(this.totalNum != -1 && offset == this.totalNum - 1){
+                startOffset = tail;
+                flag = false;
+            }
             //logger.info(this.toString());
 
-            for(int i=0; i<offset && startOffset != -1L; ++i){
+            for(int i=0; i<offset && startOffset != -1L && flag; ++i){
                 // if(startOffset == tail){
                 //     startOffset = -1L;
                 //     break;
