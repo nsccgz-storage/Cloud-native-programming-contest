@@ -23,7 +23,6 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 public class SSDqueue{
-    String spacePath = "/home/ubuntu/Space";
     private static final Logger logger = Logger.getLogger(SSDqueue.class);
     
     FileChannel spaceMetaFc;
@@ -173,6 +172,7 @@ public class SSDqueue{
                 topicNameQueueMetaMap.put(topicName, q.getMetaOffset());
                 qTopicDataMap.put(topicName, topicData);
                 
+                this.metaFileChannel.force(true);
                 //logger.info("topic: " + topicName + "queueId: " + queueId + "writeData: " + writeData.toString());
 
             }else{
@@ -183,7 +183,6 @@ public class SSDqueue{
                     Data writeData = new Data(dataSpaces[fcId]);
 
                     //logger.info(writeData.toString());
-
                     result = writeData.put(data);
 
                     Long queueMetaOffset = topicNameQueueMetaMap.get(topicName);
@@ -195,24 +194,17 @@ public class SSDqueue{
                     qTopicDataMap.put(topicName, topicData);
 
                     //logger.info(writeData.toString());
-
+                    this.metaFileChannel.force(true);
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-                    //Data writeData = new Data(dataSpaces[fcId], metaDataOffset);
-
                     Data writeData = new Data(dataSpaces[fcId], meta);
-
-                    // logger.info(writeData.toString());
-
                     result = writeData.put(data);
 
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
-                    // logger.info("topic: " + topicName + "queueId: " + queueId + "writeData: " + writeData.toString());
-                    // logger.info(writeData.toString());
                 }
             }
-
+            
         } catch (Exception e) {
             e.printStackTrace();
             return null;
@@ -265,7 +257,7 @@ public class SSDqueue{
             metaTmp.putInt(currentNum.get());
             metaTmp.flip();
             int len = metaFileChannel.write(metaTmp, 0L);
-            metaFileChannel.force(true);
+            //metaFileChannel.force(true);
         } catch (Exception e) {
             //TODO: handle exception
             e.printStackTrace();
@@ -290,7 +282,7 @@ public class SSDqueue{
             tmp.putInt(this.currentNum);
             tmp.flip();
             metaFileChannel.write(tmp, metaDataOffset);
-            metaFileChannel.force(true);
+            //metaFileChannel.force(true);
 
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
         }
@@ -320,7 +312,7 @@ public class SSDqueue{
             tmp.putInt(this.currentNum);
             tmp.flip();
             metaFileChannel.write(tmp, metaDataOffset);
-            metaFileChannel.force(true);
+            //metaFileChannel.force(true);
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
             return offset;
         }
@@ -406,17 +398,18 @@ public class SSDqueue{
         }
         public Long put(ByteBuffer data) throws IOException{
             //logger.info(toString());
-            long offset = ds.write(data);
+            long offset = ds.write(data); // TODO: force
             if(tail == -1L){
                 head = offset;
                 tail = offset;
+                ds.updateMeta(metaOffset, totalNum, head, tail);
             }else{
                 ds.updateLink(tail, offset); //
                 tail = offset;
             }
             long res = totalNum;
             totalNum++;
-            ds.updateMeta(metaOffset, totalNum, head, tail);
+            //ds.updateMeta(metaOffset, totalNum, head, tail);
             return res;
         }
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{

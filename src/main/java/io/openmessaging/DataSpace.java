@@ -44,7 +44,7 @@ public class DataSpace {
         byteData.flip();
         int len = fc.write(byteData,offset);
         //update();
-        fc.force(true);
+        //fc.force(true);
         return offset;
     }
     public int read(ByteBuffer res, long offset) throws IOException{
@@ -77,7 +77,7 @@ public class DataSpace {
         buffer.putLong(newTail);
         buffer.flip();
         int size = fc.write(buffer, tail + Long.BYTES);
-        //fc.force(true);
+        fc.force(true);
         return size;
     }
     public int updateMeta(long offset, long totalNum, long head, long tail)throws IOException{
