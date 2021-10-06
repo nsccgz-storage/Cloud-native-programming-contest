@@ -10,12 +10,6 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
-            <scope>provided</scope>
-            <version>1.7.6</version>
-        </dependency>
-        <dependency>
             <groupId>com.intel.pmem</groupId>
             <artifactId>llpl</artifactId>
             <version>1.2.0-release</version>
@@ -27,7 +21,7 @@
             <artifactId>log4j</artifactId>
             <version>1.2.12</version>
         </dependency>
-        
+
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
