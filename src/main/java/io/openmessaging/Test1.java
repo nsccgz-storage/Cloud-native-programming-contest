@@ -145,7 +145,7 @@ public class Test1 {
 				if (threadId == 0){
 					log.info("begin write!");
 				}
-				for (int i = 0; i < msgs.size(); i++) {
+			for (int i = 0; i < msgs.size(); i++) {
 					Message msg = msgs.get(i);
 					msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
 					if (msg.getOffset != msg.offset) {
@@ -259,9 +259,9 @@ public class Test1 {
 	}
 
 	public static void testThreadPool(String dbPath) {
-		DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
-		int numOfThreads = 1;
-		// int numOfThreads = 40;
+		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
+		// int numOfThreads = 1;
+		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();
@@ -306,7 +306,8 @@ public class Test1 {
 		String dbPath = args[0] ;
 
 		try {
-			testOne();
+			// testOne();
+			testThreadPool(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();

@@ -30,22 +30,39 @@ import org.apache.log4j.Logger;
 public class Test1MessageQueueImpl extends MessageQueue {
     // Initialization
     
+    public MessageQueue mq;
     public SSDqueue ssdQueue;
+
     public Test1MessageQueueImpl(){
 
 //        String dirPath = "/home/wangxr/桌面/pmem_test";
 //        String dirPath = "/essd";
         String dirPath = "/mnt/nvme/mq";
         // String dirPath = "/mnt/ssd/wxr";
-        ssdQueue = new SSDqueue(dirPath);
+        init(dirPath);
     }
+
+    public Test1MessageQueueImpl(String dirPath){
+        init(dirPath);
+    }
+
+    public void init(String dirPath){
+        ssdQueue = new SSDqueue(dirPath);
+        // mq = new Test1MessageQueue(dirPath);
+    }
+
+
+
+
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
         return ssdQueue.append(topic, queueId, data);
+        // return mq.append(topic, queueId, data);
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum){
         return ssdQueue.getRange(topic, queueId, offset, fetchNum);
+        // return mq.getRange(topic, queueId, offset, fetchNum);
     }
 }
