@@ -411,7 +411,7 @@ public class SSDqueue{
 
     public SSDqueue(String dirPath){
 
-        this.numOfDataFileChannels = 2;
+        this.numOfDataFileChannels = 4;
         try {
             //init(dirPath);
 

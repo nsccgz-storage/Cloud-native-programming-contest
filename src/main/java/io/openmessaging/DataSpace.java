@@ -27,8 +27,8 @@ public class DataSpace {
     public Deque<Writer> writerQueue;
     public WriteStat writeStat;
 
-    final int MAX_BUF_NUM = 16;
-    final int MAX_BUF_LENGTH = 200 * 1024; // 200KiB + 17KiB < writerQueueBufferCapacity = 256KiB
+    final int MAX_BUF_NUM = 6;
+    final int MAX_BUF_LENGTH = 48 * 1024; // 200KiB + 17KiB < writerQueueBufferCapacity = 256KiB
 
     private class Writer{
         ByteBuffer data;
