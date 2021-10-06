@@ -164,12 +164,12 @@ public class SSDqueue{
                 Long qOffset = q.put(queueId, writeData.getMetaOffset());
 
                 this.put(topicName, q.metaDataOffset);
-
+                topicNameQueueMetaMap.put(topicName, q.getMetaOffset());
                 //logger.info("num: "+ cur + " metaQueue: "+ queueArray.getMetaOffset());
                 // 更新 DRAM map
                 topicData = new HashMap<>();
                 topicData.put(queueId, writeData.getMeta());
-                topicNameQueueMetaMap.put(topicName, q.getMetaOffset());
+                
                 qTopicDataMap.put(topicName, topicData);
                 
                 this.metaFileChannel.force(true);
@@ -278,10 +278,11 @@ public class SSDqueue{
             //updataSpace();
 
             this.currentNum = 0;
-            ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
-            tmp.putInt(this.currentNum);
-            tmp.flip();
-            metaFileChannel.write(tmp, metaDataOffset);
+            // TODO: 不需要此处写，会在下面 put 操作这写
+            // ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
+            // tmp.putInt(this.currentNum);
+            // tmp.flip();
+            // metaFileChannel.write(tmp, metaDataOffset);
             //metaFileChannel.force(true);
 
             this.queueIdArray = this.metaDataOffset + Integer.BYTES;
