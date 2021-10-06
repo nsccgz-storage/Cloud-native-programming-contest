@@ -1,21 +1,27 @@
 package io.openmessaging;
 
-
 import org.apache.log4j.Logger;
-
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+import org.apache.log4j.Logger;
+
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
+
 //import org.slf4j.LoggerFactory;
 //import org.slf4j.Logger;
 import java.io.RandomAccessFile;
@@ -25,14 +31,12 @@ import java.lang.management.MemoryUsage;
 public class SSDqueue{
     String spacePath = "/home/ubuntu/Space";
     private static final Logger logger = Logger.getLogger(SSDqueue.class);
-    
+
     FileChannel spaceMetaFc;
 
-    //AtomicLong FREE_OFFSET = new AtomicLong();
     AtomicLong META_FREE_OFFSET = new AtomicLong();
     AtomicInteger currentNum = new AtomicInteger();
 
-    
     int QUEUE_NUM = 10000;
     int TOPIC_NUM = 100;
     
@@ -43,22 +47,20 @@ public class SSDqueue{
     //ConcurrentHashMap<String, Map<Integer, Long>> queueTopicMap;
     ConcurrentHashMap<String, Map<Integer, DataMeta>> qTopicDataMap;
 
-    //FileChannel fileChannel;
     FileChannel metaFileChannel;
     // opt
     int numOfDataFileChannels;
     DataSpace[] dataSpaces;
 
     TestStat testStat;
-
-    private class TestStat {
+    private class TestStat{
         // report throughput per second
         ThreadLocal<Integer> threadId;
         AtomicInteger numOfThreads;
         Long startTime;
         Long endTime;
         Long opCount;
-        
+
         AtomicBoolean reported;
         int[] oldTotalWriteBucketCount;
         MemoryUsage memoryUsage;
@@ -95,7 +97,7 @@ public class SSDqueue{
                 for (int i = 0; i < bucketCount.length; i++){
                     bucketCount[i] = 0;
                 }
-                
+
                 MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
                 memoryUsage = memory.getHeapMemoryUsage();
             }
@@ -132,7 +134,6 @@ public class SSDqueue{
 
         // ThreadLocal< HashMap<Integer, Long> >
         // report operation per second
-        //TestStat(DataFile[] dataFiles) {
         TestStat(){
             threadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
@@ -162,7 +163,6 @@ public class SSDqueue{
             int id = threadId.get();
             if (stats[id].appendStartTime == 0L) {
                 stats[id].appendStartTime = System.nanoTime();
-                // log.info("init append time");
             }
         }
 
@@ -171,13 +171,12 @@ public class SSDqueue{
             int id = threadId.get();
             if (stats[id].getRangeStartTime == 0L) {
                 stats[id].getRangeStartTime = System.nanoTime();
-                // log.info("init getRange time");
             }
         }
 
         void appendUpdateStat(String topic, int queueId, ByteBuffer data) {
             int id = threadId.get();
-            stats[id].addSample(data.remaining());
+//            stats[id].addSample(data.remaining());
             stats[id].appendEndTime = System.nanoTime();
             stats[id].appendCount += 1;
             stats[id].writeBytes += data.remaining();
@@ -193,7 +192,7 @@ public class SSDqueue{
         }
 
         synchronized void update() {
-            if (reported.get() == true){
+            if (reported.get()){
                 return;
             }
             if (startTime == 0L) {
@@ -262,7 +261,7 @@ public class SSDqueue{
             appendLatency /= getNumOfThreads;
             getRangeLatency /= getNumOfThreads;
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
-            
+
             // 报告总的写入大小分布
             int[] totalWriteBucketCount = new int[100];
             int[] myBucketBound = stats[0].bucketBound;
@@ -348,12 +347,12 @@ public class SSDqueue{
                 curAppendLatency /= getNumOfThreads;
                 curGetRangeLatency /= getNumOfThreads;
             }
-            
-            String appendStat = "";
-            String getRangeStat = "";
+
+            StringBuilder appendStat = new StringBuilder();
+            StringBuilder getRangeStat = new StringBuilder();
             for (int i = 0; i < getNumOfThreads; i++){
-                appendStat += String.format("%d,", curAppendCount[i]);
-                getRangeStat += String.format("%d,", curGetRangeCount[i]);
+                appendStat.append(String.format("%d,", curAppendCount[i]));
+                getRangeStat.append(String.format("%d,", curGetRangeCount[i]));
             }
             String csvStat = String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
                     writeBandwidth, elapsedTimeS, appendThroughput, appendLatency, getRangeThroughput, getRangeLatency,
@@ -369,7 +368,6 @@ public class SSDqueue{
             // for (int i = 0; i < dataFiles.length; i++){
             //     if (oldWriteStats[i] != null){
             //         // get total write stat and cur write stat
-                    
             //         DataFile.WriteStat curWriteStat = dataFiles[i].writeStat;
             //         DataFile.WriteStat oldWriteStat = oldWriteStats[i];
             //         String writeReport = "";
@@ -398,7 +396,7 @@ public class SSDqueue{
             //         log.info(writeReport);
             //         log.info("Write Size Dist : "+curWriteStat.toString());
 
- 
+
             //     }
             //    oldWriteStats[i] = dataFiles[i].writeStat.clone();
             // }
@@ -416,24 +414,26 @@ public class SSDqueue{
         // report topic stat per second
     }
 
+
+
     public SSDqueue(String dirPath){
         testStat = new TestStat();
         this.numOfDataFileChannels = 64;
         try {
             //init(dirPath);
-            
+
             dataSpaces = new DataSpace[numOfDataFileChannels];
             boolean flag = new File(dirPath + "/meta").exists();
             if(flag){
                 // recover
-                // 读盘，建表 
-                logger.info("reover");
+                // 读盘，建表
+                logger.info("recover");
                 META_FREE_OFFSET.set(0L);
                 ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 2);
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();;
                 for(int i=0; i < numOfDataFileChannels; i++){
                     String dbPath = dirPath + "/db" + i;
-                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel());              
+                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel());
                 }
 
                 this.topicNameQueueMetaMap = new ConcurrentHashMap<>();
@@ -460,13 +460,12 @@ public class SSDqueue{
                     String topicName = new String(bytes).trim();
 
                     topicNameQueueMetaMap.put(topicName, queueMetaOffset);
-                    
+
                     // 遍历每个 topic 下的 queue
                     qTopicDataMap.put(topicName, readQueue(queueMetaOffset));
                 }
             }else{
                 // create new mq
-                logger.info("init a SSDqueue, num: "+currentNum.get());
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 for(int i=0; i < numOfDataFileChannels; i++){
                     String dbPath = dirPath + "/db" + i;
@@ -487,10 +486,10 @@ public class SSDqueue{
         // 划分起始的 Long.BYTES * 来存元数据
         } catch (Exception e) {
             //TODO: handle exception
-            logger.info("error 201777");
+//            logger.error("error 201777");
             e.printStackTrace();
         }
-        
+
     }
     // void init(String dirPath){
     //     try {
@@ -513,7 +512,7 @@ public class SSDqueue{
     //         e.printStackTrace();
     //     }
     // }
-    
+
     public Long append(String topicName, int queueId, ByteBuffer data){
         //testStat.appendStart();
         Long result;
@@ -523,7 +522,7 @@ public class SSDqueue{
                 // 自下而上
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data writeData = new Data(dataSpaces[fcId]);
-         
+
                 result = writeData.put(data);
 
                 QueueId q =  new QueueId(metaFileChannel, QUEUE_NUM);
@@ -531,23 +530,17 @@ public class SSDqueue{
 
                 this.put(topicName, q.metaDataOffset);
 
-                //logger.info("num: "+ cur + " metaQueue: "+ queueArray.getMetaOffset());
                 // 更新 DRAM map
                 topicData = new HashMap<>();
                 topicData.put(queueId, writeData.getMeta());
                 topicNameQueueMetaMap.put(topicName, q.getMetaOffset());
                 qTopicDataMap.put(topicName, topicData);
-                
-                //logger.info("topic: " + topicName + "queueId: " + queueId + "writeData: " + writeData.toString());
-
             }else{
                 DataMeta meta = topicData.get(queueId);
                 if(meta == null){
                     // 增加 queueIdArray
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                     Data writeData = new Data(dataSpaces[fcId]);
-
-                    //logger.info(writeData.toString());
 
                     result = writeData.put(data);
 
@@ -558,23 +551,16 @@ public class SSDqueue{
                     // 插入 DRAM 哈希表
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
-
-                    //logger.info(writeData.toString());
-
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                     //Data writeData = new Data(dataSpaces[fcId], metaDataOffset);
 
                     Data writeData = new Data(dataSpaces[fcId], meta);
 
-                    // logger.info(writeData.toString());
-
                     result = writeData.put(data);
 
                     topicData.put(queueId, writeData.getMeta());
                     qTopicDataMap.put(topicName, topicData);
-                    // logger.info("topic: " + topicName + "queueId: " + queueId + "writeData: " + writeData.toString());
-                    // logger.info(writeData.toString());
                 }
             }
 
@@ -618,12 +604,12 @@ public class SSDqueue{
             help[i] = ' ';
         }
         padStr.append(help);
-        
+
         ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE); // offset : name
         tmp.putLong(qHandle);
         tmp.put(padStr.toString().getBytes(), 0, TOPIC_NAME_SZIE);
         tmp.flip();
-    
+
         try {
             metaFileChannel.write(tmp, this.topicArrayOffset + (currentNum.getAndIncrement()) * (TOPIC_NAME_SZIE + Long.BYTES));
             ByteBuffer metaTmp = ByteBuffer.allocate(Integer.BYTES);
@@ -679,7 +665,7 @@ public class SSDqueue{
             tmpData.flip();
             metaFileChannel.write(tmpData, offset);
             //metaFileChannel.force(true);
-         
+
             currentNum++;
             ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
             tmp.putInt(this.currentNum);
@@ -716,7 +702,7 @@ public class SSDqueue{
         public long head;
         public long tail;
         public long totalNum;
-        
+
         public DataMeta(long metaOffset, long head, long tail, long totalNum){
             this.metaOffset = metaOffset;
             this.head = head;
@@ -737,7 +723,7 @@ public class SSDqueue{
         public Data(DataSpace ds) throws IOException{
             this.ds  = ds;
             this.metaOffset = ds.createLink();
-           
+
             this.totalNum = 0L;
             this.tail = -1L;
             this.head = -1L;
@@ -769,14 +755,14 @@ public class SSDqueue{
             this.totalNum = dm.totalNum;
             this.metaOffset = dm.metaOffset;
         }
+
         public Long put(ByteBuffer data) throws IOException{
-            //logger.info(toString());
             long offset = ds.write(data);
             if(tail == -1L){
                 head = offset;
                 tail = offset;
             }else{
-                ds.updateLink(tail, offset); //
+                ds.updateLink(tail, offset);
                 tail = offset;
             }
             long res = totalNum;
@@ -789,24 +775,20 @@ public class SSDqueue{
             Map<Integer, ByteBuffer> res = new HashMap<>();
             ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
 
-            logger.info(this.toString());
-
             for(int i=0; i<offset && startOffset != -1L; ++i){
                 // if(startOffset == tail){
                 //     startOffset = -1L;
                 //     break;
                 // }
-                logger.info(this.toString());
 
                 Long nextOffset = startOffset + Long.BYTES;
                 tmp.clear();
                 int len = ds.read(tmp, nextOffset);
-                tmp.flip();        
-                startOffset = tmp.getLong(); 
+                tmp.flip();
+                startOffset = tmp.getLong();
             }
             ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
             for(int i=0; i<fetchNum && startOffset != -1L; ++i){
-                
                 buffer.clear();
                 int len1 = ds.read(buffer, startOffset);
                 buffer.flip();
@@ -820,15 +802,7 @@ public class SSDqueue{
                 res.put(i, tmp1);
                 // if(startOffset == tail) break;
                 startOffset = nextOffset;
-                logger.info(this.toString() + "offset: " + startOffset);
 
-                byte[] p = tmp1.array();
-                logger.info("read res");
-                for(int k=0; k<p.length; ++k){
-                    System.out.print(" " + p[k]);
-                }
-                System.out.println(" ");
-                
             }
             return res;
         }
