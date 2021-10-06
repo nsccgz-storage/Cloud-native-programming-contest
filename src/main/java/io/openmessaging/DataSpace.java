@@ -21,14 +21,14 @@ public class DataSpace {
 
     public ThreadLocal<ByteBuffer> writerQueueLocalBuffer;
     public ThreadLocal<long[]> writerMetaDataList;
-    final int writerQueueBufferCapacity = 1024 * 256;
+    final int writerQueueBufferCapacity = 70 * 1024;
     public Lock lock; // 写队列的锁
     public Condition queueCondition;
     public Deque<Writer> writerQueue;
     public WriteStat writeStat;
 
-    final int MAX_BUF_NUM = 16;
-    final int MAX_BUF_LENGTH = 200 * 1024; // 200KiB + 17KiB < writerQueueBufferCapacity = 256KiB
+    final int MAX_BUF_NUM = 6;
+    final int MAX_BUF_LENGTH = 48 * 1024; // 200KiB + 17KiB < writerQueueBufferCapacity = 256KiB
 
     private class Writer{
         ByteBuffer data;
@@ -107,7 +107,7 @@ public class DataSpace {
 
     SSDqueue.TestStat testStat;
 
-    public DataSpace(FileChannel fc, long startSpace, SSDqueue.TestStat testStat) {
+    public DataSpace(FileChannel fc, long startSpace) {
         this.fc = fc;
         this.FREE_OFFSET = new AtomicLong(startSpace);
         //update();

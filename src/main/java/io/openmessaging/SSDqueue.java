@@ -411,7 +411,7 @@ public class SSDqueue{
 
     public SSDqueue(String dirPath){
 
-        this.numOfDataFileChannels = 2;
+        this.numOfDataFileChannels = 4;
         try {
             //init(dirPath);
 
@@ -463,7 +463,7 @@ public class SSDqueue{
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 for(int i=0; i < numOfDataFileChannels; i++){
                     String dbPath = dirPath + "/db" + i;
-                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel(), Long.BYTES, testStat);
+                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel(), Long.BYTES);
                 }
 
                 currentNum.set(0);
