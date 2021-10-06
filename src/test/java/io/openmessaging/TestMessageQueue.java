@@ -80,7 +80,7 @@ public  class TestMessageQueue {
 	public void testSingleThreadAppendAndGetRange(){
 		String topicName = "topic";
 		Vector<Message> msgs = new Vector<>();
-		for (long offset = 0; offset < 1; offset++) {
+		for (long offset = 0; offset < 10; offset++) {
 			for (int queueId = 0; queueId < 99; queueId++) {
 				Message msg = new Message(topicName, queueId, offset);
 				msgs.add(msg);
