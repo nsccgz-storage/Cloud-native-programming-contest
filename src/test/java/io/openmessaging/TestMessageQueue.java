@@ -37,7 +37,10 @@ public  class TestMessageQueue {
 	private static final Logger log = Logger.getLogger(Test1.class);
 	public static Random rand = new Random();
 	public static byte[] sampleData = new byte[17408];
-	public static String dbPath = "/mnt/nvme/mq";
+	// public static String dbPath = "/mnt/nvme/mq";
+	// public static String dbPath = "/mnt/ssd/mq";
+	// TODO: just for test
+	public static String dbPath = ".";
 
 	private static class Message {
 		String topic;
