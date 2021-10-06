@@ -175,7 +175,6 @@ public class TestMessageQueue {
 			}
 			barrier.await();
 
-			long startTime = System.nanoTime();
 			if (threadId == 0) {
 				log.info("begin write!");
 			}
@@ -212,11 +211,6 @@ public class TestMessageQueue {
 					System.exit(0);
 				}
 			}
-			long elapsedTime = System.nanoTime() - startTime;
-			double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
-
-			log.info("pass the test, successfully !!!");
-			log.info("time: " + elapsedTimeS);
 
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -256,6 +250,119 @@ public class TestMessageQueue {
 		}
 		file.mkdir();
 		return true;
+
+	}
+
+	@Test
+	public void testMultiThreadGetRangeFetchNum(){
+		deleteDir(dbPath);
+		mkdirDir(dbPath);
+		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
+		log.info("Start : testMultiThreadAppendAndGetRange");
+		int numOfThreads = 20;
+		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
+		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
+		long startTime = System.nanoTime();
+		for (int i = 0; i < numOfThreads; i++) {
+			final int thread_id = i;
+			executor.execute(() -> {
+				threadRunTestMultiThreadGetRangeFetchNum(thread_id, mq, barrier);
+
+			});
+		}
+		executor.shutdown();
+		try {
+			// Wait a while for existing tasks to terminate
+			while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+				System.out.println("Pool did not terminate, waiting ...");
+			}
+		} catch (InterruptedException ie) {
+			executor.shutdownNow();
+			ie.printStackTrace();
+		}
+		long elapsedTime = System.nanoTime() - startTime;
+		double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+
+		log.info("pass the test, successfully !!!");
+		log.info("time: " + elapsedTimeS);
+	}
+
+	public static void threadRunTestMultiThreadGetRangeFetchNum(int threadId, MessageQueue mq,
+			CyclicBarrier barrier) {
+		try {
+
+			Map<Integer, ByteBuffer> result;
+			barrier.await();
+			String topicName = "topic" + threadId;
+			int queueId = 23423;
+			Vector<Message> getRangeMsgs = new Vector<>();
+			for (long offset = 0; offset < 999; offset++) {
+				Message msg = new Message(topicName, queueId, offset);
+				getRangeMsgs.add(msg);
+			}
+			if (threadId == 0) {
+				log.info("init messages ok");
+			}
+	
+			barrier.await();
+			
+			
+			if (threadId == 0){
+				log.info("begin getRangeFetchMulti!");
+			}
+			for (int i = 0; i < getRangeMsgs.size(); i++){
+				log.debug("i : "+i);
+				Message msg = getRangeMsgs.get(i);
+				log.debug(msg.buf);
+				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+				if (msg.getOffset != msg.offset) {
+					log.error("offset error !");
+					System.exit(0);
+				}
+				result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
+				for (int j = 0; j <= i; j++){
+					// log.info(result.get(j));
+					// log.info(getRangeMsgs.get(j).checkBuf);
+
+					if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
+						log.error("data error !");
+						byte[] tmp = getRangeMsgs.get(j).checkBuf.array();
+						log.info("***************real*************************");
+						for(int ii=0;  ii < tmp.length; ++ii){
+							System.out.print(tmp[ii] + " ");
+						}
+						log.info("***************end*************************");
+						System.exit(0);
+					}
+				
+				}
+				for (int k = 0; k <= 40 && k <= i; k++){
+					log.debug("k : " + k);
+					log.debug("i-k : " + (i-k));
+					result = mq.getRange(msg.topic, msg.queueId, i-k, k+1);
+					for (int j = 0; j <= 40 && j<= k ; j++){
+						log.debug("j : "+j);
+						log.debug(result.get(j));
+						log.debug("i-k+j : "+ (i-k+j));
+						log.debug(getRangeMsgs.get(i-k+j).checkBuf);
+						if (result.get(j).compareTo(getRangeMsgs.get(i-k+j).checkBuf) != 0){
+							log.error("data error !");
+							System.exit(0);
+						}
+
+					}
+
+				}
+
+			}
+			barrier.await();
+
+
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
 
 	}
 
