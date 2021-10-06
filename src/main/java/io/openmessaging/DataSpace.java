@@ -7,6 +7,8 @@ import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.log4j.spi.LoggerFactory;
+
+
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
@@ -24,11 +26,11 @@ public class DataSpace {
     public DataSpace(FileChannel fc) throws IOException{
         this.fc = fc;
         // read metaData
-        ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
-        int size = fc.read(tmp, 0L);
-        //logger.info(size);
-        tmp.flip();
-        this.FREE_OFFSET = new AtomicLong(tmp.getLong());
+        // ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
+        // int size = fc.read(tmp, 0L);
+        // //logger.info(size);
+        // tmp.flip();
+        this.FREE_OFFSET = new AtomicLong(0L);
         
     }
 
@@ -44,7 +46,7 @@ public class DataSpace {
         byteData.flip();
         int len = fc.write(byteData,offset);
         //update();
-        //fc.force(true);
+        fc.force(true);
         return offset;
     }
     public int read(ByteBuffer res, long offset) throws IOException{
@@ -80,21 +82,21 @@ public class DataSpace {
         fc.force(true);
         return size;
     }
-    public int updateMeta(long offset, long totalNum, long head, long tail)throws IOException{
-        // ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
-        // buffer.putLong(totalNum);
-        // buffer.putLong(head);
-        // buffer.putLong(tail);
-        // buffer.flip();
-        // int size = fc.write(buffer, offset);
-        // fc.force(true);
-        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
-        buffer.putLong(head);
-        buffer.flip();
-        int size = fc.write(buffer, offset);
-        fc.force(true);
-        return size;
-    }
+    // public int updateMeta(long offset, long totalNum, long head, long tail)throws IOException{
+    //     // ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 3);
+    //     // buffer.putLong(totalNum);
+    //     // buffer.putLong(head);
+    //     // buffer.putLong(tail);
+    //     // buffer.flip();
+    //     // int size = fc.write(buffer, offset);
+    //     // fc.force(true);
+    //     ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+    //     buffer.putLong(head);
+    //     buffer.flip();
+    //     int size = fc.write(buffer, offset);
+    //     fc.force(true);
+    //     return size;
+    // }
     public long createLink(){
         long res = FREE_OFFSET.getAndAdd(Long.BYTES * 1);
         return res;
@@ -112,5 +114,37 @@ public class DataSpace {
             e.printStackTrace();
             logger.error("err!!!!!!!!!!!!!!!!!");
         }
+    }
+
+    synchronized DataMeta addOne(ByteBuffer data, DataMeta src) throws IOException{
+        DataMeta res = new DataMeta(src.head, src.metaOffset, src.tail, src.totalNum);
+
+        long size = data.remaining() + Long.BYTES * 2;
+
+        // 写入数据
+
+        long offset = FREE_OFFSET.getAndAdd(size);
+        long newTail = offset;
+
+        long nextOffset = -1L;
+        ByteBuffer byteData = ByteBuffer.allocate((int)size);
+        byteData.putLong(size - (Long.BYTES + Long.BYTES));
+        byteData.putLong(nextOffset);
+        byteData.put(data);
+        byteData.flip();
+        int len = fc.write(byteData,offset);
+
+        // 更新链表
+        if(src.tail != -1L){
+            updateLink(src.tail,  newTail);
+        }else{
+            res.tail = newTail;
+            res.head = newTail;
+            res.metaOffset = newTail;
+        }
+        
+        res.totalNum++;
+
+        return res;
     }
 }
