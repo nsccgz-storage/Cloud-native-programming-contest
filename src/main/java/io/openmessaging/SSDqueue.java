@@ -562,9 +562,10 @@ public class SSDqueue{
                     metaFileChannel.force(true);
 
                     String key = topicName + spitMark + queueId;
-                    Map<Long, Long> tmp2 = allDataOffsetMap.get(key);
-                    tmp2.put(result, writeData.tail);
-                    allDataOffsetMap.put(key, tmp2);
+                Map<Long, Long> tmp2 = new HashMap<>();
+                tmp2.put(result, writeData.tail);
+
+                allDataOffsetMap.put(key, tmp2);
 
                 }else{
                     int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
