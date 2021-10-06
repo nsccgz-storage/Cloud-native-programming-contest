@@ -445,6 +445,7 @@ public class SSDqueue{
                 Long offset = 0L + Integer.BYTES;
                 tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE);
                 for(int i=0; i<currentNum.get(); i++, offset += Long.BYTES + TOPIC_NAME_SZIE){
+                    tmp.clear();
                     int len = metaFileChannel.read(tmp, offset);
                     //logger.info("len: " + len + " " + this.toString());
                     tmp.flip();
