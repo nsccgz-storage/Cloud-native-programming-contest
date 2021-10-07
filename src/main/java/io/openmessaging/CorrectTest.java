@@ -30,6 +30,7 @@ public class CorrectTest {
     public static void main(String[] args) {
         // just for test
         String localPath = "/home/wangxr/桌面/pmem_test";
+//        String localPath = "/mnt/ssd/wxr";
         try {
             File dir = new File(localPath);
             for(File f:dir.listFiles()){
@@ -41,7 +42,7 @@ public class CorrectTest {
             System.out.println("===== Stage 1: write data =====");
             Files.createFile(Paths.get(localPath+messagePath));
             writer = new BufferedWriter(new FileWriter(localPath+messagePath));
-            writeTest(10, 10L*1024L*1024L, new DefaultMessageQueueImpl()); // 40 thread, 10 MiB test data
+            writeTest(10, 1L*1024L*1024L, new DefaultMessageQueueImpl()); // 40 thread, 10 MiB test data
             writer.close();
 
             /////////////////////////////////////////////////////////////

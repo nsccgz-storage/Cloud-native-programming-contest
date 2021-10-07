@@ -456,7 +456,6 @@ public class SSDqueue{
                     String topicName = new String(bytes).trim();
 
                     topicNameQueueMetaMap.put(topicName, queueMetaOffset);
-
                     // 遍历每个 topic 下的 queue
                     qTopicDataMap.put(topicName, readQueue(queueMetaOffset));
                 }
