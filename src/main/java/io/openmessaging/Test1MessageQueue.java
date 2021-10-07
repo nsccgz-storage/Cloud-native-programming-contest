@@ -1764,7 +1764,9 @@ public class Test1MessageQueue extends MessageQueue {
                     }
                 }
                 long writePosition = curPosition;
-                curPosition += bufLength;
+                //  对齐到4K
+                curPosition += bufLength + (4096 - bufLength % 4096);
+                // assert (curPosition % 4096 == 0);
                 if (mqConfig.useStats){
                     writeStat.addSample(bufLength);
                 }
@@ -2135,11 +2137,13 @@ public class Test1MessageQueue extends MessageQueue {
         public HotDataCircleBuffer hotDataCache;
         public boolean isHot;
         public ByteBuffer maxOffsetData;
+        public int dataFileId;
 
-        MQQueue() {
+        MQQueue(int thisDataFileId) {
             isHot = false;
             maxOffset = 0L;
             queueMap = new HashMap<>();
+            dataFileId = thisDataFileId;
             // hotDataCache = new HotDataCircleBuffer();
         }
     }
@@ -2254,8 +2258,11 @@ public class Test1MessageQueue extends MessageQueue {
         MQQueue q;
         mqTopic = mqMap.get(topic);
         if (mqTopic == null) {
-            int threadId = updateThreadId();
-            int dataFileId = threadId & 3; //   0b11
+            // int threadId = updateThreadId();
+            // int dataFileId = threadId / 10; //   0b11
+            int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+
+
             mqTopic = new MQTopic(topic, dataFileId);
             mqMap.put(topic, mqTopic);
         }
@@ -2263,7 +2270,9 @@ public class Test1MessageQueue extends MessageQueue {
 
         q = mqTopic.queueArray[queueId];
         if (mqTopic.queueArray[queueId] == null){
-            q = new MQQueue();
+            Integer queueIdObject = queueId;
+            int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+            q = new MQQueue(dataFileId);
             mqTopic.queueArray[queueId] = q;
         }
         // if (q.isHot){
@@ -2298,7 +2307,10 @@ public class Test1MessageQueue extends MessageQueue {
         // log.info(dataFileId);
 
 
-        DataFile df = dataFiles[mqTopic.dataFileId];
+        // DataFile df = dataFiles[mqTopic.dataFileId];
+        DataFile df = dataFiles[q.dataFileId];
+        // DataFile df = dataFiles[dataFileId];
+        
         long position = 0;
         switch (mqConfig.writeMethod) {
             case 0:
@@ -2412,7 +2424,9 @@ public class Test1MessageQueue extends MessageQueue {
 
         // Integer queueIdObject = queueId;
         // int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
-        DataFile df = dataFiles[mqTopic.dataFileId];
+        // DataFile df = dataFiles[mqTopic.dataFileId];
+        DataFile df = dataFiles[q.dataFileId];
+        // DataFile df = dataFiles[dataFileId];
 
         for (int i = 0; i < fetchNum; i++) {
             pos = q.queueMap.get(offset + i);
