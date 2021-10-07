@@ -51,7 +51,7 @@ public class SSDBench {
         // long totalBenchSize = 256L*1024L*1024L; //256MiB
         // long totalBenchSize = 64L*1024L*1024L; // 64MiB
 
-        log.info("type,thread,ioSize,bandwidth,iops");
+        log.info("type,thread,ioSize,bandwidth,iops,latency(us)");
 
         // log.info("small io size in 16MiB");
 
@@ -167,7 +167,7 @@ public class SSDBench {
         benchLock.lock();
         System.out.println("dbPathDir : " + dbPath);
 
-        log.info("type,thread,ioSize,bandwidth,iops");
+        log.info("type,thread,ioSize,bandwidth,iops,latency(us)");
 
 
         log.info("test");
@@ -329,11 +329,12 @@ public class SSDBench {
         }
         long endTime = System.nanoTime();
         long elapsedTime = stats[0].endTime - stats[0].startTime;
+        double latency = (double)(elapsedTime/1000)/totalBenchCount;
         double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
         double totalBenchSizeMiB = (double) totalBenchSize * thread / (1024 * 1024);
         double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
         double iops = totalBenchCount * thread / elapsedTimeS;
-        String output = String.format("%s,%d,%d,%.3f,%.3f", type, thread, ioSize, bandwidth, iops);
+        String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops,latency);
         log.info(output);
     }
 
@@ -416,11 +417,12 @@ public class SSDBench {
         }
         long endTime = System.nanoTime();
         long elapsedTime = stats[0].endTime - stats[0].startTime;
+        double latency = (double)(elapsedTime/1000)/totalBenchCount;
         double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
         double totalBenchSizeMiB = (double) totalBenchSize * thread / (1024 * 1024);
         double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
         double iops = totalBenchCount * thread / elapsedTimeS;
-        String output = String.format("%s,%d,%d,%.3f,%.3f", type, thread, ioSize, bandwidth, iops);
+        String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops,latency);
         log.info(output);
     }
 
