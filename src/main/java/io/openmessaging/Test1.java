@@ -293,7 +293,14 @@ public class Test1 {
 	public static void threadRunWritePerformanceTest(int threadId, MessageQueue mq, CyclicBarrier barrier) {
 		try {
 			{
-				Vector<Message> msgs = generateTopic(threadId);
+				String topicName = "topic" + threadId;
+				Vector<Message> msgs = new Vector<>();
+				for (long offset = 0; offset < 999; offset++) {
+					for (int queueId = 0; queueId < 99; queueId++) {
+						Message msg = new Message(topicName, queueId, offset);
+						msgs.add(msg);
+					}
+				}
 				if (threadId == 0) {
 					log.info("init messages ok");
 				}
@@ -312,24 +319,6 @@ public class Test1 {
 
 				}
 				barrier.await();
-
-				if (threadId == 0) {
-					log.info("begin read!");
-				}
-				Map<Integer, ByteBuffer> result;
-				for (int i = 0; i < msgs.size(); i++) {
-					Message msg = msgs.get(i);
-
-					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-					msg.buf.position(msg.oriPosition);
-					if (result.get(0).compareTo(msg.checkBuf) != 0) {
-						log.error(result.get(0));
-						log.error(msg.checkBuf);
-
-						log.error("data error !");
-						System.exit(0);
-					}
-				}
 			}
 
 		} catch (InterruptedException e) {

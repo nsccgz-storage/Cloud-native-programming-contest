@@ -707,8 +707,8 @@ public class Test1MessageQueue extends MessageQueue {
             writeAggDirectBuffer.position(0);
 
             writerQueue = new ArrayDeque<>();
-            writerQueueLock = new ReentrantLock(true);
-            // writerQueueLock = new ReentrantLock(false);
+            // writerQueueLock = new ReentrantLock(true);
+            writerQueueLock = new ReentrantLock(false);
             writerQueueCondition = writerQueueLock.newCondition();
 
             writerQueueBufferCapacity = 128*1024;
@@ -1685,10 +1685,10 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.unlock();
  
                 // log.debug("try to add a new writer to queue");
-                writerQueue.addLast(w);
+                writerQueue.add(w);
                 // log.debug(writerQueue);
                 // log.debug(writerQueue.getFirst());
-                while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
+                while (!(w.done == 1 || w.equals(writerQueue.peek()) )){
                     // log.debug("wait for the leader of queue");
                     w.cv.await();
                 }
@@ -1776,7 +1776,7 @@ public class Test1MessageQueue extends MessageQueue {
                 }
 
                 while(true){
-                    Writer ready = writerQueue.removeFirst();
+                    Writer ready = writerQueue.poll();
                     if (!ready.equals(w)){
                         ready.done = 1;
                         ready.cv.signal();

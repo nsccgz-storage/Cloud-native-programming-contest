@@ -1,12 +1,17 @@
 package io.openmessaging;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.LinkedList;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Test1Benchmark {
 	public static void main(String[] args) {
 		// testByteBufferAllocate();
-		testConcurrentMap();
+		testDeque();
+		// testConcurrentMap();
 	}
 
 	public static void testByteBufferAllocate(){
@@ -29,8 +34,8 @@ public class Test1Benchmark {
 		ConcurrentHashMap<String, Integer> map = new ConcurrentHashMap<>();
 		long startTime = System.nanoTime();
 		long endTime = System.nanoTime();
-		int ret = 0;
 		double latency = (endTime - startTime);
+		int ret = 0;
 
 		startTime = System.nanoTime();
 		for (int i = 0; i < 100; i++){
@@ -48,6 +53,41 @@ public class Test1Benchmark {
 		latency = (endTime - startTime)/100;
 		System.out.println("get latency : " + latency + " ns");
 		System.out.println(ret);
+	}
+
+	public static void testDeque(){
+		Deque<Integer> dq = new ArrayDeque<>();
+		// Deque<Integer> dq = new LinkedList<>();
+		// ArrayBlockingQueue<Integer> dq = new ArrayBlockingQueue<>(10000);
+		
+		long startTime = System.nanoTime();
+		long endTime = System.nanoTime();
+		double latency = (endTime - startTime);
+		int benchNum = 10000;
+
+		startTime = System.nanoTime();
+		for (int i = 0; i < benchNum; i++){
+			dq.add(i);
+			// dq.addLast(i);
+		}
+		endTime = System.nanoTime();
+		latency  = (endTime-startTime)/benchNum;
+		System.out.println("put latency : " + latency + " ns");
+
+		int ret = 0;
+		startTime = System.nanoTime();
+		for (int i = 0; i < benchNum; i++){
+			ret = dq.poll();
+			// ret = dq.getFirst();
+			// dq.removeFirst();
+		}
+		endTime = System.nanoTime();
+		latency  = (endTime-startTime)/benchNum;
+		System.out.println("get latency : " + latency + " ns");
+		System.out.println(ret);
+
+
+
 	}
 
 	
