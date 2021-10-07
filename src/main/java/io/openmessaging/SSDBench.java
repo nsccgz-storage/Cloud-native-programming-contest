@@ -23,6 +23,10 @@ import java.nio.MappedByteBuffer;
 import java.util.concurrent.BrokenBarrierException;
 import java.io.IOException;
 
+import io.openmessaging.UnsafeUtil;
+import sun.nio.ch.DirectBuffer;
+
+
 public class SSDBench {
     private static final Logger log = Logger.getLogger(SSDBench.class);
     public static AtomicLong writePosition = new AtomicLong(0);
@@ -42,9 +46,11 @@ public class SSDBench {
         }
         String dbPath = args[0];
         // runBench(dbPath);
-        runBench1(dbPath);
+        // runBench1(dbPath);
+        testBench(dbPath);
     }
-    public static void runBench(String dbPath){
+
+    public static void runBench(String dbPath) {
         benchLock.lock();
         System.out.println("dbPathDir : " + dbPath);
         // long totalBenchSize = 4L*1024L*1024L*1024L; // 4GiB
@@ -56,136 +62,168 @@ public class SSDBench {
         // log.info("small io size in 16MiB");
 
         // {
-        //     long totalBenchSize = 16L*1024L*1024L; // 16MiB
-        //     int[] ioSizes = {64, 128, 256, 512, 1*1024, 2*1024, 4*1024, 8*1024};
+        // long totalBenchSize = 16L*1024L*1024L; // 16MiB
+        // int[] ioSizes = {64, 128, 256, 512, 1*1024, 2*1024, 4*1024, 8*1024};
 
-        //     for (int i = 0; i < ioSizes.length; i++) {
-        //         benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], false);
-        //         benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], true);
-        //     }
-        //     for (int i = 0; i < ioSizes.length; i++) {
-        //         benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false);
-        //         benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
-        //     }
-        //     // int[] numOfFiles = { 1, 2 };
-        //     int[] numOfFiles = {1,2,4,6,8,10,12,14,16};
-        //     // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+        // for (int i = 0; i < ioSizes.length; i++) {
+        // benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], false);
+        // benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], true);
+        // }
+        // for (int i = 0; i < ioSizes.length; i++) {
+        // benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false);
+        // benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
+        // }
+        // // int[] numOfFiles = { 1, 2 };
+        // int[] numOfFiles = {1,2,4,6,8,10,12,14,16};
+        // // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
-        //     for (int i = 0; i < numOfFiles.length; i++) {
-        //         for (int j = 0; j < ioSizes.length; j++) {
-        //             benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
-        //             benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
-        //         }
-        //     }
-        //     for (int i = 0; i < numOfFiles.length; i++) {
-        //         for (int j = 0; j < ioSizes.length; j++) {
-        //             benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-        //                     false);
-        //             benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-        //                     true);
-        //         }
-        //     }
+        // for (int i = 0; i < numOfFiles.length; i++) {
+        // for (int j = 0; j < ioSizes.length; j++) {
+        // benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+        // ioSizes[j], false);
+        // benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+        // ioSizes[j], true);
+        // }
+        // }
+        // for (int i = 0; i < numOfFiles.length; i++) {
+        // for (int j = 0; j < ioSizes.length; j++) {
+        // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+        // ioSizes[j],
+        // false);
+        // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+        // ioSizes[j],
+        // true);
+        // }
+        // }
         // }
 
         // log.info("large io size in 1GiB");
         // {
-        //     long totalBenchSize = 1L * 1024L * 1024L * 1024L; // 1GiB
-        //     int[] ioSizes = { 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 64 * 1024, 128 * 1024, 256 * 1024,
-        //         512 * 1024, 1024 * 1024 };
-        //     for (int i = 0; i < ioSizes.length; i++) {
-        //         benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], false);
-        //         benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], true);
-        //     }
-        //     for (int i = 0; i < ioSizes.length; i++) {
-        //         benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false);
-        //         benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
-        //     }
-        //     // int[] numOfFiles = { 1, 2 };
-        //     // int[] numOfFiles = {1,2,3,4,5};
-        //     int[] numOfFiles = {1,2,4,6,8,10,12,14,16};
-        //     // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
-
-        //     for (int i = 0; i < numOfFiles.length; i++) {
-        //         for (int j = 0; j < ioSizes.length; j++) {
-        //             benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-        //                     false);
-        //             benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
-        //         }
-        //     }
-        //     for (int i = 0; i < numOfFiles.length; i++) {
-        //         for (int j = 0; j < ioSizes.length; j++) {
-        //             benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-        //                     false);
-        //             benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-        //                     true);
-        //         }
-        //     }
+        // long totalBenchSize = 1L * 1024L * 1024L * 1024L; // 1GiB
+        // int[] ioSizes = { 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 64 * 1024, 128 *
+        // 1024, 256 * 1024,
+        // 512 * 1024, 1024 * 1024 };
+        // for (int i = 0; i < ioSizes.length; i++) {
+        // benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], false);
+        // benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], true);
         // }
+        // for (int i = 0; i < ioSizes.length; i++) {
+        // benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false);
+        // benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
+        // }
+        // // int[] numOfFiles = { 1, 2 };
+        // // int[] numOfFiles = {1,2,3,4,5};
+        // int[] numOfFiles = {1,2,4,6,8,10,12,14,16};
+        // // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
+        // for (int i = 0; i < numOfFiles.length; i++) {
+        // for (int j = 0; j < ioSizes.length; j++) {
+        // benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+        // ioSizes[j],
+        // false);
+        // benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+        // ioSizes[j], true);
+        // }
+        // }
+        // for (int i = 0; i < numOfFiles.length; i++) {
+        // for (int j = 0; j < ioSizes.length; j++) {
+        // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+        // ioSizes[j],
+        // false);
+        // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+        // ioSizes[j],
+        // true);
+        // }
+        // }
+        // }
 
         log.info("test");
         {
             long totalBenchSize = 256L * 1024L * 1024L; // 1GiB
-            int[] ioSizes = { 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 48*1024,64 * 1024, 80*1024, 128 * 1024, 256 * 1024, 512 * 1024, 1024*1024};
+            int[] ioSizes = { 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024, 48 * 1024, 64 * 1024, 80 * 1024, 128 * 1024,
+                    256 * 1024, 512 * 1024, 1024 * 1024 };
             // int[] ioSizes = { 64 * 1024};
             // for (int i = 0; i < ioSizes.length; i++) {
-            //     benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], false);
-            //     benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], true);
+            // benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], false);
+            // benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[i], true);
             // }
             // for (int i = 0; i < ioSizes.length; i++) {
-            //     benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false);
-            //     benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
+            // benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], false);
+            // benchMappedlWrite(dbPath, totalBenchSize, ioSizes[i], true);
             // }
             // int[] numOfFiles = { 1, 2 };
             // int[] numOfFiles = { 3 };
             // int[] numOfFiles = {1,2,3,4,5};
-            int[] numOfFiles = {1,2,3,4,5,6,8,10,12,14,16};
+            int[] numOfFiles = { 1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16 };
             // int[] numOfFiles = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
 
-            for (int i = 0; i < numOfFiles.length; i++) {
-                for (int j = 0; j < ioSizes.length; j++) {
-                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-                            false);
-                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
-                    benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-                            false);
-                    benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-                            true);
- 
-                }
-            }
             // for (int i = 0; i < numOfFiles.length; i++) {
             //     for (int j = 0; j < ioSizes.length; j++) {
-           //     }
+            //         benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
+            //         benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
+            //         benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
+            //         benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
+
+            //     }
+            // }
+            // for (int i = 0; i < numOfFiles.length; i++) {
+            // for (int j = 0; j < ioSizes.length; j++) {
+            // }
             // }
         }
         benchLock.unlock();
     }
 
-    public static void runBench1(String dbPath){
+    public static void runBench1(String dbPath) {
 
         benchLock.lock();
         System.out.println("dbPathDir : " + dbPath);
 
         log.info("type,thread,ioSize,bandwidth,iops,latency(us)");
 
+        log.info("test");
+        {
+            long totalBenchSize = 512L * 1024L * 1024L; // 1GiB
+            int[] ioSizes = { 32 * 1024, 48 * 1024, 64 * 1024, 80 * 1024, 128 * 10244 };
+            int[] numOfFiles = { 3, 4 };
+
+            for (int i = 0; i < numOfFiles.length; i++) {
+                for (int j = 0; j < ioSizes.length; j++) {
+                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
+                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
+                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+                    // ioSizes[j],
+                    // false);
+                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],
+                    // ioSizes[j],
+                    // true);
+
+                }
+            }
+        }
+        benchLock.unlock();
+    }
+
+
+    public static void testBench(String dbPath) {
+
+        benchLock.lock();
+        System.out.println("dbPathDir : " + dbPath);
+
+        log.info("type,thread,ioSize,bandwidth,iops,latency(us)");
 
         log.info("test");
         {
             long totalBenchSize = 512L * 1024L * 1024L; // 1GiB
-            int[] ioSizes = {32 * 1024, 48*1024, 64 * 1024, 80*1024, 128 * 10244};
-            int[] numOfFiles = {3,4};
+            int[] ioSizes = { 32 * 1024, 48 * 1024, 64 * 1024, 80 * 1024, 128 * 10244 };
+            int[] numOfFiles = { 1 };
 
             for (int i = 0; i < numOfFiles.length; i++) {
                 for (int j = 0; j < ioSizes.length; j++) {
-                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-                            false);
-                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
-                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-                            // false);
-                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j],
-                            // true);
- 
+                    benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[j], false);
+                    benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[j], true);
+                    benchMappedlWriteUnsafe(dbPath, totalBenchSize, ioSizes[j]);
+                    benchMappedlWrite(dbPath, totalBenchSize, ioSizes[j], true);
                 }
             }
         }
@@ -202,6 +240,7 @@ public class SSDBench {
             int thread = 1;
             assert (totalBenchSize % ioSize == 0);
             long totalBenchCount = totalBenchSize / ioSize;
+            totalBenchSize = totalBenchCount * ioSize;
             ByteBuffer buf;
             String type = "seqWrite";
             if (isDirect) {
@@ -221,10 +260,11 @@ public class SSDBench {
             }
             long elapsedTime = System.nanoTime() - startTime;
             double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+            double latency = (double) (elapsedTime / 1000) / totalBenchCount;
             double totalBenchSizeMiB = totalBenchSize / (1024 * 1024);
             double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
             double iops = totalBenchCount / elapsedTimeS;
-            String output = String.format("%s,%d,%d,%.3f,%.3f", type, thread, ioSize, bandwidth, iops);
+            String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops, latency);
             log.info(output);
             fileChannel.close();
             db.delete();
@@ -242,11 +282,11 @@ public class SSDBench {
             FileChannel fileChannel = new RandomAccessFile(db, "rw").getChannel();
 
             int thread = 1;
-            MappedByteBuffer mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0,
-                    totalBenchSize);
+            MappedByteBuffer mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, totalBenchSize);
 
             assert (totalBenchSize % ioSize == 0);
             long totalBenchCount = totalBenchSize / ioSize;
+            totalBenchSize = totalBenchCount*ioSize;
 
             ByteBuffer buf;
             String type = "seqWriteMapped";
@@ -268,10 +308,11 @@ public class SSDBench {
             }
             long elapsedTime = System.nanoTime() - startTime;
             double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+            double latency = (double) (elapsedTime / 1000) / totalBenchCount;
             double totalBenchSizeMiB = totalBenchSize / (1024 * 1024);
             double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
             double iops = totalBenchCount / elapsedTimeS;
-            String output = String.format("%s,%d,%d,%.3f,%.3f", type, thread, ioSize, bandwidth, iops);
+            String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops, latency);
             log.info(output);
             fileChannel.close();
             db.delete();
@@ -311,8 +352,7 @@ public class SSDBench {
         for (int i = 0; i < thread; i++) {
             final int threadId = i;
             executor.execute(() -> {
-                threadRunSeqWrite(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize, ioSize,
-                        isDirect);
+                threadRunSeqWrite(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize, ioSize, isDirect);
             });
 
         }
@@ -329,12 +369,12 @@ public class SSDBench {
         }
         long endTime = System.nanoTime();
         long elapsedTime = stats[0].endTime - stats[0].startTime;
-        double latency = (double)(elapsedTime/1000)/totalBenchCount;
+        double latency = (double) (elapsedTime / 1000) / totalBenchCount;
         double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
         double totalBenchSizeMiB = (double) totalBenchSize * thread / (1024 * 1024);
         double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
         double iops = totalBenchCount * thread / elapsedTimeS;
-        String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops,latency);
+        String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops, latency);
         log.info(output);
     }
 
@@ -379,8 +419,8 @@ public class SSDBench {
         }
     }
 
-    public static void benchFileChannelWriteMappedMultiFile(String dbPath, long totalBenchSize, int thread,
-            int ioSize, boolean isDirect) {
+    public static void benchFileChannelWriteMappedMultiFile(String dbPath, long totalBenchSize, int thread, int ioSize,
+            boolean isDirect) {
         CyclicBarrier barrier = new CyclicBarrier(thread);
         long totalBenchCount = totalBenchSize / ioSize;
         final long curTotalBenchSize = totalBenchSize - totalBenchSize % ioSize;
@@ -399,8 +439,8 @@ public class SSDBench {
         for (int i = 0; i < thread; i++) {
             final int threadId = i;
             executor.execute(() -> {
-                threadRunSeqWriteMapped(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize,
-                        ioSize, isDirect);
+                threadRunSeqWriteMapped(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize, ioSize,
+                        isDirect);
             });
 
         }
@@ -417,12 +457,12 @@ public class SSDBench {
         }
         long endTime = System.nanoTime();
         long elapsedTime = stats[0].endTime - stats[0].startTime;
-        double latency = (double)(elapsedTime/1000)/totalBenchCount;
+        double latency = (double) (elapsedTime / 1000) / totalBenchCount;
         double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
         double totalBenchSizeMiB = (double) totalBenchSize * thread / (1024 * 1024);
         double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
         double iops = totalBenchCount * thread / elapsedTimeS;
-        String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops,latency);
+        String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops, latency);
         log.info(output);
     }
 
@@ -433,8 +473,7 @@ public class SSDBench {
             File db = new File(dbPath);
             FileChannel fileChannel = new RandomAccessFile(db, "rw").getChannel();
             log.debug("dbPath : " + dbPath);
-            MappedByteBuffer mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0,
-                    totalBenchSize);
+            MappedByteBuffer mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, totalBenchSize);
 
             assert (totalBenchSize % ioSize == 0);
             ByteBuffer buf;
@@ -467,6 +506,96 @@ public class SSDBench {
         } catch (IOException ie) {
             ie.printStackTrace();
         }
+    }
+    @SuppressWarnings("restriction")
+    public static void benchMappedlWriteUnsafeMMapper(String dbPath, long totalBenchSize, int ioSize) {
+        try {
+            dbPath = dbPath + "/ssdbench";
+            log.debug("dbPath : " + dbPath);
+            File db = new File(dbPath);
+
+            int thread = 1;
+            MMapper mmapper = new MMapper(dbPath, 1024L*1024L*1024L);
+
+            assert (totalBenchSize % ioSize == 0);
+            long totalBenchCount = totalBenchSize / ioSize;
+
+            byte[] buf = new byte[ioSize];
+            for (int i = 0; i < ioSize; i++){
+                buf[i] = (byte)i;
+            }
+
+            String type = "seqWriteMappedUnsafeMMapper";
+
+            long curPosition = 0;
+            long maxPosition = totalBenchSize;
+            long startTime = System.nanoTime();
+            while (curPosition < maxPosition) {
+                mmapper.setBytes(curPosition, buf);
+                curPosition += ioSize;
+            }
+            long elapsedTime = System.nanoTime() - startTime;
+            double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+            double latency = (double)(elapsedTime/1000)/(totalBenchCount);
+            double totalBenchSizeMiB = totalBenchSize / (1024 * 1024);
+            double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
+            double iops = totalBenchCount / elapsedTimeS;
+            String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops,latency);
+            log.info(output);
+            db.delete();
+        } catch (IOException ie) {
+            ie.printStackTrace();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+
+    @SuppressWarnings("restriction")
+    public static void benchMappedlWriteUnsafe(String dbPath, long totalBenchSize, int ioSize) {
+        try {
+            dbPath = dbPath + "/ssdbench";
+            log.debug("dbPath : " + dbPath);
+            File db = new File(dbPath);
+            FileChannel fileChannel = new RandomAccessFile(db, "rw").getChannel();
+
+            int thread = 1;
+            MappedByteBuffer mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, totalBenchSize);
+            long mappedBufferAddr = ((DirectBuffer)mappedByteBuffer).address();
+
+            assert (totalBenchSize % ioSize == 0);
+            long totalBenchCount = totalBenchSize / ioSize;
+            totalBenchSize = totalBenchCount * ioSize;
+
+            ByteBuffer buf;
+            String type = "seqWriteMappedUnsafe";
+            buf = ByteBuffer.allocateDirect(ioSize);
+
+            long bufAddr = ((DirectBuffer)buf).address();
+
+            long curPosition = 0L;
+            long maxPosition = totalBenchSize;
+            long startTime = System.nanoTime();
+            while (curPosition < maxPosition) {
+                UnsafeUtil.UNSAFE.copyMemory(bufAddr, mappedBufferAddr+curPosition, ioSize);
+                mappedByteBuffer.force();
+                curPosition += ioSize;
+            }
+            long elapsedTime = System.nanoTime() - startTime;
+            double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+            double latency = (double)(elapsedTime/1000)/(totalBenchCount);
+            double totalBenchSizeMiB = totalBenchSize / (1024 * 1024);
+            double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
+            double iops = totalBenchCount / elapsedTimeS;
+            String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops,latency);
+            log.info(output);
+            fileChannel.close();
+            db.delete();
+        } catch (IOException ie) {
+            ie.printStackTrace();
+        }
+
     }
 
     // public static void benchFileChannelWriteThreadPool(FileChannel fileChannel,
