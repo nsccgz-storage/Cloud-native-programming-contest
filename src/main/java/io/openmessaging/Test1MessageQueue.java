@@ -973,6 +973,7 @@ public class Test1MessageQueue extends MessageQueue {
 
             long position = 0L;
             try {
+                Writer w = new Writer(data, writerQueueCondition);
                 writerQueueLock.lock();
                 // only for debug
                 // fileLock.lock();
@@ -980,7 +981,6 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.unlock();
  
                 log.debug("try to new a writer to queue");
-                Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
                 log.debug(writerQueue);
                 log.debug(writerQueue.getFirst());
@@ -1102,6 +1102,7 @@ public class Test1MessageQueue extends MessageQueue {
 
             long position = 0L;
             try {
+                Writer w = new Writer(data, writerQueueCondition);
                 writerQueueLock.lock();
                 // only for debug
                 // fileLock.lock();
@@ -1109,7 +1110,6 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.unlock();
  
                 log.debug("try to new a writer to queue");
-                Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
                 log.debug(writerQueue);
                 log.debug(writerQueue.getFirst());
@@ -1229,6 +1229,7 @@ public class Test1MessageQueue extends MessageQueue {
 
             long position = 0L;
             try {
+                Writer w = new Writer(data, writerQueueCondition);
                 writerQueueLock.lock();
                 // only for debug
                 // fileLock.lock();
@@ -1236,7 +1237,6 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.unlock();
  
                 // log.debug("try to new a writer to queue");
-                Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
                 // log.debug(writerQueue);
                 // log.debug(writerQueue.getFirst());
@@ -1363,6 +1363,7 @@ public class Test1MessageQueue extends MessageQueue {
 
             long position = 0L;
             try {
+                Writer w = new Writer(data, writerQueueCondition);
                 writerQueueLock.lock();
                 // only for debug
                 // fileLock.lock();
@@ -1370,7 +1371,6 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.unlock();
  
                 log.debug("try to add a new writer to queue");
-                Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
                 log.debug(writerQueue);
                 // log.debug(writerQueue.getFirst());
@@ -1495,6 +1495,7 @@ public class Test1MessageQueue extends MessageQueue {
 
             long position = 0L;
             try {
+                Writer w = new Writer(data, writerQueueCondition);
                 writerQueueLock.lock();
                 // only for debug
                 // fileLock.lock();
@@ -1502,7 +1503,6 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.unlock();
  
                 // log.debug("try to add a new writer to queue");
-                Writer w = new Writer(data, writerQueueCondition);
                 writerQueue.addLast(w);
                 // log.debug(writerQueue);
                 // log.debug(writerQueue.getFirst());
