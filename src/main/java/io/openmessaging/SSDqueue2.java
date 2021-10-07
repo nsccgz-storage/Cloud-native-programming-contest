@@ -79,11 +79,13 @@ public class SSDqueue2{
                 }
                 this.qTopicQueueDataMap = mqMeta.getMap();
             }else{
-                // create new mq     
+                // create new mq    
+                logger.info("create a new queue");
+                
                 this.allDataOffsetMap = new ConcurrentHashMap<>();
                 
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
-                mqMeta = new MetaTopicQueue(this.metaFileChannel, Long.BYTES);
+                this.mqMeta = new MetaTopicQueue(this.metaFileChannel, Long.BYTES);
 
                 for(int i=0; i < numOfDataFileChannels; i++){
                     String dbPath = dirPath + "/db" + i;
@@ -166,8 +168,9 @@ public class SSDqueue2{
     class MetaTopicQueue{
         private FileChannel metaFc;
         private AtomicLong META_FREE_OFFSET;
-        long keySize = 256;
-        long totalNum;
+        private AtomicLong totalNum;
+        long keySize = 128;
+        
         long arrayStartOffset = Long.BYTES;
         
         MetaTopicQueue(FileChannel fc){
@@ -177,7 +180,8 @@ public class SSDqueue2{
             try {
                 fc.read(tmp, 0L);
                 tmp.flip();
-                totalNum = tmp.getLong();
+                totalNum = new AtomicLong(tmp.getLong());
+                META_FREE_OFFSET = new AtomicLong(0L);
             } catch (Exception e) {
                 //TODO: handle exception
                 e.printStackTrace();
@@ -187,7 +191,7 @@ public class SSDqueue2{
         MetaTopicQueue(FileChannel fc, long startOffset){
             this.metaFc = fc;
             META_FREE_OFFSET = new AtomicLong(startOffset);
-            this.totalNum = 0L;
+            this.totalNum = new AtomicLong(0L);
             //arrayStartOffset = startOffset;
         }
         public long put(String key, long offset) throws IOException{
@@ -207,23 +211,23 @@ public class SSDqueue2{
             buffer.flip();
             metaFc.write(buffer, res);
 
-            totalNum++;
+            long ret = totalNum.getAndIncrement();
 
             // 持久化 totalNum
             buffer.clear();
-            buffer.putLong(totalNum);
+            buffer.putLong(totalNum.get());
             buffer.flip();
             metaFc.write(buffer, 0L);
 
             metaFc.force(true);
 
-            return totalNum;
+            return ret;
         }
         public ConcurrentHashMap<String, DataMeta> getMap(){
             ConcurrentHashMap<String, DataMeta> res = new ConcurrentHashMap<>();
             long startOffset = this.arrayStartOffset;
             ByteBuffer buffer = ByteBuffer.allocate((int)(keySize + Long.BYTES));
-            for(int i=0; i<totalNum; i++){
+            for(int i=0; i<totalNum.get(); i++){
                 buffer.clear();
                 try {
                     metaFc.read(buffer, startOffset);
