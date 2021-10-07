@@ -26,20 +26,20 @@ import java.lang.management.MemoryUsage;
 public class SSDqueue2{
     private static final Logger logger = Logger.getLogger(SSDqueue2.class);
     
-    FileChannel spaceMetaFc;
+    // FileChannel spaceMetaFc;
 
     //AtomicLong FREE_OFFSET = new AtomicLong();
-    AtomicLong META_FREE_OFFSET = new AtomicLong();
-    AtomicInteger currentNum = new AtomicInteger();
+    //AtomicLong META_FREE_OFFSET = new AtomicLong();
+    //AtomicInteger currentNum = new AtomicInteger();
 
     
-    int QUEUE_NUM = 10000;
-    int TOPIC_NUM = 100;
+    // int QUEUE_NUM = 10000;
+    // int TOPIC_NUM = 100;
     
-    int TOPIC_NAME_SZIE = 128;
-    Long topicArrayOffset; // 常量
+    // int TOPIC_NAME_SZIE = 128;
+    // Long topicArrayOffset; // 常量
 
-    ConcurrentHashMap<String, Long> topicNameQueueMetaMap;
+    // ConcurrentHashMap<String, Long> topicNameQueueMetaMap;
     
     //FileChannel fileChannel;
     FileChannel metaFileChannel;
@@ -50,9 +50,9 @@ public class SSDqueue2{
     ConcurrentHashMap<String,DataMeta> qTopicQueueDataMap;
     MetaTopicQueue mqMeta;
     private String markSpilt = "$@#";
-    ConcurrentHashMap<String, Map<Long,Long>> allDataOffsetMap; // 加速 getRange
+    ConcurrentHashMap<String, ConcurrentHashMap<Long,Long>> allDataOffsetMap; // 加速 getRange
     
-    boolean RECOVER = true;
+    boolean RECOVER = false;
 
     TestStat testStat;
 
@@ -120,7 +120,7 @@ public class SSDqueue2{
 
                 mqMeta.put(key, writeData.getMetaOffset());            
                 // 更新 DRAM map
-                Map<Long, Long> tmp2 = new HashMap<>();
+                ConcurrentHashMap<Long, Long> tmp2 = new ConcurrentHashMap<>();
                 tmp2.put(result, writeData.tail);
                 allDataOffsetMap.put(key, tmp2);
 
@@ -130,8 +130,7 @@ public class SSDqueue2{
                 Data writeData = new Data(dataSpaces[fcId], tmpD);
                 result = writeData.put(data);
                 
-
-                Map<Long, Long> tmp2 = allDataOffsetMap.get(key);
+                ConcurrentHashMap<Long, Long> tmp2 = allDataOffsetMap.get(key);
                 tmp2.put(result, writeData.tail);
                 allDataOffsetMap.put(key, tmp2);
                 
@@ -201,7 +200,7 @@ public class SSDqueue2{
 
             // TODO: 填充 key
             StringBuilder padStr = new StringBuilder(key);
-            char[] help = new char[(int) (keySize - key.length() + 1)];
+            char[] help = new char[(int) (keySize - key.length())];
             for(int i=0;i<help.length; ++i){
                 help[i] = ' ';
             }
@@ -304,8 +303,8 @@ public class SSDqueue2{
             DataMeta dataMeta = ds.writeAgg(data, this.getMeta());
             this.head = dataMeta.head;
             this.tail = dataMeta.tail;
-            this.totalNum = dataMeta.totalNum + 1;
-            this.metaOffset = dataMeta.metaOffset;
+            this.totalNum++;
+            this.metaOffset = this.head;
 //            if(tail == -1L){
 //                head = offset;
 //                tail = offset;
@@ -323,18 +322,16 @@ public class SSDqueue2{
 
 
         public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
+            Map<Integer, ByteBuffer> res = new HashMap<>();
 
             Map<Long, Long> map = allDataOffsetMap.get(key);
 
             Long startOffset = map.get(offset);
             if(startOffset == null){
-                startOffset = tail;
+                return res;
             }
 
             //Long cnt = offset;
-
-            Map<Integer, ByteBuffer> res = new HashMap<>();
-            
             ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
             for(int i=0; i<fetchNum && startOffset != -1L; ++i){
                 buffer.clear();
