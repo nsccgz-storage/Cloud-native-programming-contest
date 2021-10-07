@@ -638,6 +638,9 @@ public class Test1MessageQueue extends MessageQueue {
         public int writerQueueBufferCapacity;
         public ThreadLocal<ByteBuffer> writerQueueLocalBuffer;
 
+
+        public ThreadLocal<Writer[]> localBatchWriters;
+
         public WriteStat writeStat;
 
         DataFile(String dataFileName) {
@@ -680,6 +683,8 @@ public class Test1MessageQueue extends MessageQueue {
 
             writerQueueBufferCapacity = 128*1024;
             writerQueueLocalBuffer = new ThreadLocal<>();
+
+            localBatchWriters = new ThreadLocal<>();
 
             writeStat = new WriteStat();
         }
@@ -967,6 +972,139 @@ public class Test1MessageQueue extends MessageQueue {
         public long syncSeqWritePushQueue(ByteBuffer data){
             if (threadLocalWriteMetaBuf.get() == null) {
                 threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
+            }
+
+            ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
+
+            long position = 0L;
+            try {
+                Writer w = new Writer(data, writerQueueCondition);
+                writerQueueLock.lock();
+                // only for debug
+                // fileLock.lock();
+                // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
+                // fileLock.unlock();
+ 
+                log.debug("try to new a writer to queue");
+                writerQueue.addLast(w);
+                log.debug(writerQueue);
+                log.debug(writerQueue.getFirst());
+                while (!(w.done == 1 || w.equals(writerQueue.getFirst()) )){
+                    log.debug("wait for the leader of queue");
+                    w.cv.await();
+                }
+                if (w.done == 1){
+                    log.debug(w.position);
+                    return w.position;
+                }
+                log.debug("I am the head");
+                
+                // TODO: 调参
+                int bufLength = 0;
+                int maxBufLength = mqConfig.minBufLength; // 36 KiB
+                // if (w.data.remaining() < 1024){
+                //     maxBufLength = 32*1024;
+                // }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
+                // }
+                int bufNum = 0;
+                int maxBufNum = mqConfig.minBufNum;
+                boolean continueMerge = true;
+                // I am the head of the queue and need to write buffer to SSD
+                // build write batch
+                Iterator<Writer> iter = writerQueue.iterator();
+
+                int ret = 0;
+                position = curPosition;
+                Writer lastWriter = null;
+                int metadataLength = Integer.BYTES;
+                while (continueMerge ){
+                    lastWriter = iter.next();
+                    int dataLength = lastWriter.data.remaining();
+                    int writeLength =  metadataLength + dataLength;
+                    log.debug(lastWriter);
+                    writeMeta.position(0);
+                    writeMeta.putInt(dataLength);
+                    log.debug("write to position : " + position);
+                    writeMeta.position(0);
+                    lastWriter.position = position;
+                    ret = dataFileChannel.write(writeMeta, position);
+                    position += ret;
+                    log.debug("write meta size : "+ret);
+                    ret = dataFileChannel.write(lastWriter.data, position);
+                    position += ret;
+                    log.debug("write data size : "+ret);
+
+                    bufLength += writeLength;
+                    bufNum += 1;
+                    if (bufNum >= maxBufNum){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
+                    }
+                    if (bufLength >= maxBufLength){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
+                    }
+                }
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+
+                curPosition = position;
+                {
+                    log.debug("need to flush, unlock !");
+                    writerQueueLock.unlock();
+                    dataFileChannel.force(true);
+                    writerQueueLock.lock();
+                    log.debug("flush ok , get the lock again!");
+                }
+
+                while(true){
+                    Writer ready = writerQueue.removeFirst();
+                    if (!ready.equals(w)){
+                        ready.done = 1;
+                        ready.cv.signal();
+                    }
+                    if (ready.equals(lastWriter)){
+                        break;
+                    }
+                }
+
+                if (!writerQueue.isEmpty()){
+                    writerQueue.getFirst().cv.signal();
+                }
+                log.debug(w.position);
+                position = w.position;
+
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            } catch (InterruptedException ie){
+                ie.printStackTrace();
+            } finally {
+                writerQueueLock.unlock();
+            }
+            return position;
+
+        }
+
+        public long syncSeqWritePushQueueBatch(ByteBuffer data){
+            if (threadLocalWriteMetaBuf.get() == null) {
+                threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
+            }
+            if (localBatchWriters.get() == null){
+                localBatchWriters.set(new Writer[20]);
             }
 
             ByteBuffer writeMeta = threadLocalWriteMetaBuf.get();
