@@ -41,7 +41,8 @@ public class SSDBench {
             return;
         }
         String dbPath = args[0];
-        runBench(dbPath);
+        // runBench(dbPath);
+        runBench1(dbPath);
     }
     public static void runBench(String dbPath){
         benchLock.lock();

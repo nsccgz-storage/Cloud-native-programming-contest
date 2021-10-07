@@ -227,8 +227,7 @@ public class Test1 {
 
 	public static void testThreadPool(String dbPath) {
 		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
-		// int numOfThreads = 1;
-		int numOfThreads = 40;
+		int numOfThreads = 4;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();
@@ -261,6 +260,85 @@ public class Test1 {
 			sampleData[i] = (byte)i;
 		}
 	}
+	public static void writePerformanceTest(String dbPath){
+		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
+		int numOfThreads = 40;
+		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
+		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
+		long startTime = System.nanoTime();
+		for (int i = 0; i < numOfThreads; i++) {
+			final int threadId = i;
+			executor.execute(() -> {
+				threadRunWritePerformanceTest(threadId, mq, barrier);
+
+			});
+		}
+		executor.shutdown();
+		try {
+			// Wait a while for existing tasks to terminate
+			while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+				System.out.println("Pool did not terminate, waiting ...");
+			}
+		} catch (InterruptedException ie) {
+			executor.shutdownNow();
+			ie.printStackTrace();
+		}
+		long elapsedTime = System.nanoTime() - startTime;
+		double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+
+		log.info("pass the test, successfully !!!");
+		log.info("time: " + elapsedTimeS);
+	}
+
+	public static void threadRunWritePerformanceTest(int threadId, MessageQueue mq, CyclicBarrier barrier) {
+		try {
+			{
+				Vector<Message> msgs = generateTopic(threadId);
+				if (threadId == 0) {
+					log.info("init messages ok");
+				}
+				barrier.await();
+
+				if (threadId == 0) {
+					log.info("begin write!");
+				}
+				for (int i = 0; i < msgs.size(); i++) {
+					Message msg = msgs.get(i);
+					msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+					if (msg.getOffset != msg.offset) {
+						log.error("offset error !");
+						System.exit(0);
+					}
+
+				}
+				barrier.await();
+
+				if (threadId == 0) {
+					log.info("begin read!");
+				}
+				Map<Integer, ByteBuffer> result;
+				for (int i = 0; i < msgs.size(); i++) {
+					Message msg = msgs.get(i);
+
+					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+					msg.buf.position(msg.oriPosition);
+					if (result.get(0).compareTo(msg.checkBuf) != 0) {
+						log.error(result.get(0));
+						log.error(msg.checkBuf);
+
+						log.error("data error !");
+						System.exit(0);
+					}
+				}
+			}
+
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+
+	}
 	public static void main(String[] args) {
 		init();
 		// log.setLevel(Level.DEBUG);
@@ -273,7 +351,8 @@ public class Test1 {
 		String dbPath = args[0] ;
 
 		try {
-			testThreadPool(dbPath);
+			writePerformanceTest(dbPath);
+			// testThreadPool(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();
