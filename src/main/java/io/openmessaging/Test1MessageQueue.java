@@ -191,6 +191,7 @@ public class Test1MessageQueue extends MessageQueue {
             Long getRangeEndTime;
             int getRangeCount;
             int hitHotDataCount;
+            int hotDataAllocCount;
             Long writeBytes;
             public int[] bucketBound;
             public int[] bucketCount;
@@ -204,6 +205,7 @@ public class Test1MessageQueue extends MessageQueue {
                 getRangeCount = 0;
                 writeBytes = 0L;
                 hitHotDataCount = 0;
+                hotDataAllocCount = 0;
                 reported = new AtomicBoolean();
                 reported.set(false);
 
@@ -316,6 +318,12 @@ public class Test1MessageQueue extends MessageQueue {
             int id = threadId.get();
             stats[id].hitHotDataCount += 1;
         }
+        void hotDataAlloc(String topic, int queueId){
+            int id = threadId.get();
+            stats[id].hotDataAllocCount += 1;
+        }
+
+
 
         synchronized void update() {
             if (reported.get() == true){
@@ -534,6 +542,14 @@ public class Test1MessageQueue extends MessageQueue {
                 hotDataReport += String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount);
             }
             log.info("[hit hot data] : " + hotDataReport);
+
+            String hotDataAllocReport = "";
+            for (int i = 0; i < getNumOfThreads; i++){
+                hotDataAllocReport += stats[i].hotDataAllocCount + ",";
+            }
+            log.info("[hot data alloc] : " + hotDataAllocReport);
+
+
 
             // log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
 
@@ -2089,8 +2105,11 @@ public class Test1MessageQueue extends MessageQueue {
         public Long maxOffset = 0L;
         public HashMap<Long, Long> queueMap;
         public HotDataCircleBuffer hotDataCache;
+        public boolean isHot;
+        public ByteBuffer maxOffsetData;
 
         MQQueue() {
+            isHot = false;
             maxOffset = 0L;
             queueMap = new HashMap<>();
             // hotDataCache = new HotDataCircleBuffer();
@@ -2195,11 +2214,22 @@ public class Test1MessageQueue extends MessageQueue {
         } else {
             mqTopic = mqMap.get(topic);
         }
+        data = data.slice();
 
         q = mqTopic.queueArray[queueId];
         if (mqTopic.queueArray[queueId] == null){
             q = new MQQueue();
             mqTopic.queueArray[queueId] = q;
+        }
+        if (q.isHot){
+            if (q.maxOffsetData == null){
+                q.maxOffsetData = ByteBuffer.allocate(17408);
+                testStat.hotDataAlloc(topic, queueId);
+            }
+            q.maxOffsetData.clear();
+            q.maxOffsetData.put(data);
+            q.maxOffsetData.flip();
+            data.flip();
         }
 
         // if (!mqTopic.topicMap.containsKey(queueId)) {
@@ -2299,6 +2329,12 @@ public class Test1MessageQueue extends MessageQueue {
         }
         if (offset == q.maxOffset-1){
             testStat.hitHotData(topic, queueId);
+            q.isHot = true;
+
+            if (q.maxOffsetData != null){
+                ret.put(0, q.maxOffsetData);
+                return ret;
+            }
         }
         if (offset + fetchNum-1 >= q.maxOffset){
             fetchNum = (int)(q.maxOffset-offset);

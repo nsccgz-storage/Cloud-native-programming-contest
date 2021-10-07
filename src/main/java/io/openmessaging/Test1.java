@@ -114,16 +114,16 @@ public class Test1 {
 						log.error("offset error !");
 						System.exit(0);
 					}
-					// Map<Integer, ByteBuffer> result;
-					// result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-					// msg.buf.position(msg.oriPosition);
-					// if (result.get(0).compareTo(msg.checkBuf) != 0) {
-					// 	log.error(result.get(0));
-					// 	log.error(msg.checkBuf);
-					// 	log.error("data error !");
-					// 	barrier.await();
-					// 	System.exit(0);
-					// }
+					Map<Integer, ByteBuffer> result;
+					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+					msg.buf.position(msg.oriPosition);
+					if (result.get(0).compareTo(msg.checkBuf) != 0) {
+						log.error(result.get(0));
+						log.error(msg.checkBuf);
+						log.error("data error !");
+						barrier.await();
+						System.exit(0);
+					}
 	
 				}
 				barrier.await();
