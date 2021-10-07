@@ -1039,13 +1039,13 @@ public class Test1MessageQueue extends MessageQueue {
                             writeStat.incExceedBufNumCount();
                         }
                     }
-                    if (bufLength >= maxBufLength){
-                        continueMerge = false;
-                        if (mqConfig.useStats){
-                            writeStat.incExceedBufLengthCount();
-                        }
+                    // if (bufLength >= maxBufLength){
+                    //     continueMerge = false;
+                    //     if (mqConfig.useStats){
+                    //         writeStat.incExceedBufLengthCount();
+                    //     }
 
-                    }
+                    // }
                     if (!iter.hasNext()){
                         continueMerge = false;
                         if (mqConfig.useStats){
@@ -1934,10 +1934,12 @@ public class Test1MessageQueue extends MessageQueue {
     public class MQTopic {
         public String topicName;
         public HashMap<Integer, MQQueue> topicMap;
+        public MQQueue[] queueArray;
 
         MQTopic(String name) {
             topicName = name;
-            topicMap = new HashMap<Integer, MQQueue>();
+            // topicMap = new HashMap<Integer, MQQueue>();
+            queueArray = new MQQueue[5002];
         }
     }
 
@@ -2028,12 +2030,19 @@ public class Test1MessageQueue extends MessageQueue {
             mqTopic = mqMap.get(topic);
         }
 
-        if (!mqTopic.topicMap.containsKey(queueId)) {
+        q = mqTopic.queueArray[queueId];
+        if (mqTopic.queueArray[queueId] == null){
             q = new MQQueue();
-            mqTopic.topicMap.put(queueId, q);
-        } else {
-            q = mqTopic.topicMap.get(queueId);
+            mqTopic.queueArray[queueId] = q;
         }
+
+        // if (!mqTopic.topicMap.containsKey(queueId)) {
+        //     q = new MQQueue();
+        //     mqTopic.topicMap.put(queueId, q);
+        // } else {
+        //     q = mqTopic.topicMap.get(queueId);
+        // }
+
         // q.hotDataCache.addData(data);
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
@@ -2106,10 +2115,16 @@ public class Test1MessageQueue extends MessageQueue {
         if (mqTopic == null) {
             return ret;
         }
-        q = mqTopic.topicMap.get(queueId);
-        if (q == null) {
+        q = mqTopic.queueArray[queueId];
+        if (mqTopic.queueArray[queueId] == null){
             return ret;
         }
+
+        // q = mqTopic.topicMap.get(queueId);
+        // if (q == null) {
+        //     return ret;
+        // }
+
         if (offset >= q.maxOffset){
             return ret;
         }
