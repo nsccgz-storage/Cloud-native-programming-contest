@@ -1765,11 +1765,12 @@ public class Test1MessageQueue extends MessageQueue {
                 }
                 long writePosition = curPosition;
                 //  对齐到4K
-                curPosition += bufLength + (4096 - bufLength % 4096);
                 // assert (curPosition % 4096 == 0);
                 if (mqConfig.useStats){
                     writeStat.addSample(bufLength);
                 }
+                bufLength = bufLength + (4096 - bufLength % 4096);
+                curPosition += bufLength;
                 {
                     // log.debug("need to flush, unlock !");
                     writerQueueLock.unlock();
