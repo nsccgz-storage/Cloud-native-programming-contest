@@ -607,7 +607,7 @@ public class Test1MessageQueue extends MessageQueue {
             public int exceedBufNumCount;
             public int exceedBufLengthCount;
             WriteStat(){
-                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024};
+                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 56*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024};
                 // bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024, 256*1024, 512*1024};
 
                 bucketCount = new int[bucketBound.length-1];
@@ -1704,9 +1704,9 @@ public class Test1MessageQueue extends MessageQueue {
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
-                // if (w.data.remaining() > 16*1024){
-                //     maxBufLength = 64*1024;
-                // }
+                if (w.data.remaining() > 16*1024){
+                    maxBufLength = 64*1024;
+                }
                 int bufNum = 0;
                 int maxBufNum = mqConfig.minBufNum;
 
