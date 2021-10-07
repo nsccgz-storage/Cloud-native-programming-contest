@@ -69,7 +69,7 @@ public class SSDqueue2{
                 // recover
                 // 读盘，建表 
                 logger.info("reover");
-                RECOVER = true;
+                //RECOVER = true;
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 this.mqMeta = new MetaTopicQueue(this.metaFileChannel);
 
