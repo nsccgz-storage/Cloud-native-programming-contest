@@ -52,7 +52,7 @@ public class SSDqueue2{
     private String markSpilt = "$@#";
     ConcurrentHashMap<String, Map<Long,Long>> allDataOffsetMap; // 加速 getRange
     
-    boolean RECOVER = false;
+    boolean RECOVER = true;
 
     TestStat testStat;
 
