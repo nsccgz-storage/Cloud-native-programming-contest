@@ -707,8 +707,8 @@ public class Test1MessageQueue extends MessageQueue {
             writeAggDirectBuffer.position(0);
 
             writerQueue = new ArrayDeque<>();
-            // writerQueueLock = new ReentrantLock(true);
-            writerQueueLock = new ReentrantLock(false);
+            writerQueueLock = new ReentrantLock(true);
+            // writerQueueLock = new ReentrantLock(false);
             writerQueueCondition = writerQueueLock.newCondition();
 
             writerQueueBufferCapacity = 128*1024;
@@ -1704,9 +1704,9 @@ public class Test1MessageQueue extends MessageQueue {
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
-                if (w.data.remaining() > 16*1024){
-                    maxBufLength = 64*1024;
-                }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
+                // }
                 int bufNum = 0;
                 int maxBufNum = mqConfig.minBufNum;
 
