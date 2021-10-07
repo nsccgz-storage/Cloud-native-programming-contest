@@ -5,7 +5,6 @@ public class DataMeta{
     public long head;
     public long tail;
     public long totalNum;
-    
     public DataMeta(long metaOffset, long head, long tail, long totalNum){
         this.metaOffset = metaOffset;
         this.head = head;

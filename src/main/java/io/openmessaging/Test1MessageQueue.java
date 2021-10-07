@@ -49,7 +49,7 @@ import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
 
 
-public class Test1MessageQueue {
+public class Test1MessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
     private static class MQConfig {
         boolean useStats = true; // 实测，对性能影响不大，挺神奇

@@ -16,3 +16,4 @@ hs_err_*
 .vscode*
 log*
 tmpLog.txt
+JustForTest
