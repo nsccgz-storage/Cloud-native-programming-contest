@@ -2148,11 +2148,13 @@ public class Test1MessageQueue extends MessageQueue {
         public String topicName;
         public HashMap<Integer, MQQueue> topicMap;
         public MQQueue[] queueArray;
+        public int dataFileId;
 
-        MQTopic(String name) {
+        MQTopic(String name, int thisDataFileId) {
             topicName = name;
             // topicMap = new HashMap<Integer, MQQueue>();
             queueArray = new MQQueue[5002];
+            dataFileId = thisDataFileId;
         }
     }
 
@@ -2243,7 +2245,6 @@ public class Test1MessageQueue extends MessageQueue {
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
-        int threadId = updateThreadId();
         log.debug("append : "+topic+","+queueId);
         if (mqConfig.useStats){
             testStat.appendStart();
@@ -2253,7 +2254,9 @@ public class Test1MessageQueue extends MessageQueue {
         MQQueue q;
         mqTopic = mqMap.get(topic);
         if (mqTopic == null) {
-            mqTopic = new MQTopic(topic);
+            int threadId = updateThreadId();
+            int dataFileId = threadId & 3; //   0b11
+            mqTopic = new MQTopic(topic, dataFileId);
             mqMap.put(topic, mqTopic);
         }
         data = data.slice();
@@ -2294,9 +2297,8 @@ public class Test1MessageQueue extends MessageQueue {
         // int dataFileId = Math.floorMod(topic.hashCode()+queueId, numOfDataFiles);
         // log.info(dataFileId);
 
-        int dataFileId = threadId & 3; //   0b11
 
-        DataFile df = dataFiles[dataFileId];
+        DataFile df = dataFiles[mqTopic.dataFileId];
         long position = 0;
         switch (mqConfig.writeMethod) {
             case 0:
@@ -2352,7 +2354,6 @@ public class Test1MessageQueue extends MessageQueue {
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
 
-        int threadId = updateThreadId();
         log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
         if (mqConfig.useStats){
             testStat.getRangeStart();
@@ -2409,10 +2410,9 @@ public class Test1MessageQueue extends MessageQueue {
 
         long pos = 0;
 
-        int dataFileId = threadId & 3; //   0b11
         // Integer queueIdObject = queueId;
         // int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
-        DataFile df = dataFiles[dataFileId];
+        DataFile df = dataFiles[mqTopic.dataFileId];
 
         for (int i = 0; i < fetchNum; i++) {
             pos = q.queueMap.get(offset + i);
