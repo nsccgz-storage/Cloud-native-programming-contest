@@ -703,6 +703,7 @@ public class SSDqueue{
         public Map<Integer, DataMeta> readAll() throws IOException{
             Map<Integer, DataMeta> res = new HashMap<>();
             ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
+//            logger.info("current queue num of this topic "+this.currentNum);
             for(int i=0; i<this.currentNum; ++i){
                 int len2 = metaFileChannel.read(tmp, this.queueIdArray + i*(Integer.BYTES + Long.BYTES));
                 tmp.flip();
