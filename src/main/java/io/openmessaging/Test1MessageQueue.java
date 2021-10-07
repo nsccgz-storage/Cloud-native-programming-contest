@@ -1976,7 +1976,7 @@ public class Test1MessageQueue extends MessageQueue {
         public long tailOffset;
         public ByteBuffer[] datas;
         HotDataCircleBuffer(){
-            maxLength = 16;
+            maxLength = 2;
             curLength = 0;
             head = 0;
             tail = 0;
@@ -1993,9 +1993,8 @@ public class Test1MessageQueue extends MessageQueue {
             log.debug(pos);
             // log.info(datas[head]);
             log.debug(data);
-            log.debug(datas[head]);
-            datas[thisHead].position(0);
-            datas[thisHead].limit(17408);
+            log.debug(datas[thisHead]);
+            datas[thisHead].clear();
             datas[thisHead].put(data);
             datas[thisHead].flip();
             log.debug(datas[thisHead]);
@@ -2008,10 +2007,11 @@ public class Test1MessageQueue extends MessageQueue {
             log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
             log.debug("original data: " + data);
             if (curLength == 0){
-                headOffset = 0L;
-                tailOffset = 0L;
+                // headOffset = 0L;
+                // tailOffset = 0L;
                 copyData(head, data);
                 // datas[head] = data.slice();
+                log.debug("headOffset : "+headOffset + "  tailOffset: "+tailOffset);
                 curLength = 1;
                 return;
             }
@@ -2027,6 +2027,7 @@ public class Test1MessageQueue extends MessageQueue {
 
             // method 2
             copyData(head, data);
+            log.debug(datas[head]);
 
             // method 3
             // datas[head] = data;
@@ -2044,7 +2045,7 @@ public class Test1MessageQueue extends MessageQueue {
         public GetDataRetParameters getData(long offset, int fetchNum, Map<Integer, ByteBuffer> results){
             GetDataRetParameters ret = new GetDataRetParameters();
             log.debug("head : "+head+" tail :"+tail + "  curLength:"+curLength);
-            log.debug("headOffset : "+headOffset + "  tailOffset"+tailOffset);
+            log.debug("headOffset : "+headOffset + "  tailOffset: "+tailOffset);
             log.debug("offset : "+offset + "  fetchNum : "+fetchNum);
             ret.offset = offset;
             ret.fetchNum = fetchNum;
@@ -2084,10 +2085,12 @@ public class Test1MessageQueue extends MessageQueue {
                 ret.fetchNum -= num;
             }
 
+            log.debug("startOffset : "+startOffset);
             for (long i = startOffset; i <= endOffset; i++){
                 int bufIndex = (int)( (i - tailOffset + tail) % maxLength);
                 int resultIndex =(int) (i - offset);
                 log.debug(resultIndex);
+                log.debug(bufIndex);
                 log.debug(datas[bufIndex]);
                 datas[bufIndex].position(0);
                 // datas[bufIndex].limit(datas[bufIndex].capacity());
@@ -2202,6 +2205,7 @@ public class Test1MessageQueue extends MessageQueue {
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
+        log.debug("append : "+topic+","+queueId);
         if (mqConfig.useStats){
             testStat.appendStart();
             testStat.appendUpdateStat(topic, queueId, data);
@@ -2222,14 +2226,22 @@ public class Test1MessageQueue extends MessageQueue {
             mqTopic.queueArray[queueId] = q;
         }
         if (q.isHot){
-            if (q.maxOffsetData == null){
-                q.maxOffsetData = ByteBuffer.allocate(17408);
+            if (q.hotDataCache == null){
                 testStat.hotDataAlloc(topic, queueId);
+                q.hotDataCache = new HotDataCircleBuffer();
+                q.hotDataCache.tailOffset = q.maxOffset;
+                q.hotDataCache.headOffset = q.maxOffset;
             }
-            q.maxOffsetData.clear();
-            q.maxOffsetData.put(data);
-            q.maxOffsetData.flip();
-            data.flip();
+            q.hotDataCache.addData(data);
+
+            // if (q.maxOffsetData == null){
+            //     q.maxOffsetData = ByteBuffer.allocate(17408);
+            //     testStat.hotDataAlloc(topic, queueId);
+            // }
+            // q.maxOffsetData.clear();
+            // q.maxOffsetData.put(data);
+            // q.maxOffsetData.flip();
+            // data.flip();
         }
 
         // if (!mqTopic.topicMap.containsKey(queueId)) {
@@ -2239,7 +2251,6 @@ public class Test1MessageQueue extends MessageQueue {
         //     q = mqTopic.topicMap.get(queueId);
         // }
 
-        // q.hotDataCache.addData(data);
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
         // int dataFileId = Math.floorMod(topic.hashCode()+queueId, numOfDataFiles);
@@ -2303,6 +2314,7 @@ public class Test1MessageQueue extends MessageQueue {
      */
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
+        log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
         if (mqConfig.useStats){
             testStat.getRangeStart();
             testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
@@ -2327,23 +2339,36 @@ public class Test1MessageQueue extends MessageQueue {
         if (offset >= q.maxOffset){
             return ret;
         }
-        if (offset == q.maxOffset-1){
-            testStat.hitHotData(topic, queueId);
-            q.isHot = true;
-
-            if (q.maxOffsetData != null){
-                ret.put(0, q.maxOffsetData);
-                return ret;
-            }
-        }
         if (offset + fetchNum-1 >= q.maxOffset){
             fetchNum = (int)(q.maxOffset-offset);
         }
-        // GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
-        // log.debug("original fetchNum: " + fetchNum);
-        // // fetchNum = changes.fetchNum;
-        // log.debug("updated fetchNum: " + fetchNum);
 
+
+        if (offset >= q.maxOffset-2){
+            testStat.hitHotData(topic, queueId);
+            q.isHot = true;
+
+            if (q.isHot && q.hotDataCache != null){
+                q.hotDataCache.getData(offset, fetchNum, ret);
+                GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
+                log.debug("original fetchNum: " + fetchNum);
+                fetchNum = changes.fetchNum;
+                log.debug("updated fetchNum: " + fetchNum);
+            }
+
+
+        }
+
+
+        // if (offset >= q.maxOffset-1){
+        //     testStat.hitHotData(topic, queueId);
+        //     q.isHot = true;
+
+        //     if (q.maxOffsetData != null){
+        //         ret.put(0, q.maxOffsetData);
+        //         return ret;
+        //     }
+        // }
         long pos = 0;
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
