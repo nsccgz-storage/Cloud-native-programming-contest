@@ -1663,6 +1663,13 @@ public class Test1MessageQueue extends MessageQueue {
 
         }
         public long syncSeqWritePushQueueHeapBatchBuffer(ByteBuffer data){
+            // long trueWriteStartTime = System.nanoTime();
+            // long trueWriteEndTime = System.nanoTime();
+            // long getLockTime = System.nanoTime();
+            // long startTime = System.nanoTime();
+            // long beforeGetLockTime = 0L;
+            // long writeTime = 0L;
+            // long addQueueTime = 0L;
             if (writerQueueLocalBuffer.get() == null){
                 writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
             }
@@ -1679,7 +1686,9 @@ public class Test1MessageQueue extends MessageQueue {
             try {
                 Writer w = new Writer(data, writerQueueCondition);
                 // while (!writerQueueLock.tryLock(2, TimeUnit.MILLISECONDS)){}
+                // beforeGetLockTime = System.nanoTime();
                 writerQueueLock.lock();
+                // getLockTime = System.nanoTime();
                 // only for debug
                 // fileLock.lock();
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
@@ -1689,6 +1698,7 @@ public class Test1MessageQueue extends MessageQueue {
                 writerQueue.add(w);
                 // log.debug(writerQueue);
                 // log.debug(writerQueue.getFirst());
+                // addQueueTime = System.nanoTime();
                 while (!(w.done == 1 || w.equals(writerQueue.peek()) )){
                     // log.debug("wait for the leader of queue");
                     w.cv.await();
@@ -1698,6 +1708,7 @@ public class Test1MessageQueue extends MessageQueue {
                     return w.position;
                 }
                 // log.debug("I am the head");
+                // writeTime = System.nanoTime();
                 
                 // TODO: 调参
                 int bufLength = 0;
@@ -1760,6 +1771,7 @@ public class Test1MessageQueue extends MessageQueue {
                 {
                     // log.debug("need to flush, unlock !");
                     writerQueueLock.unlock();
+                    // trueWriteStartTime = System.nanoTime();
                     writerBuffer.position(0);
                     writerBuffer.limit(writerBuffer.capacity());
                     for (int i = 0; i < bufNum; i++){
@@ -1771,6 +1783,7 @@ public class Test1MessageQueue extends MessageQueue {
                     writerBuffer.limit(bufLength);
                     dataFileChannel.write(writerBuffer, writePosition);
                     dataFileChannel.force(true);
+                    // trueWriteEndTime = System.nanoTime();
                     writerQueueLock.lock();
                     // log.debug("flush ok , get the lock again!");
                 }
@@ -1797,6 +1810,16 @@ public class Test1MessageQueue extends MessageQueue {
             } catch (InterruptedException ie){
                 ie.printStackTrace();
             } finally {
+                long endTime = System.nanoTime();
+                // log.info("latency before get lock (ms) : " + (double)(beforeGetLockTime - startTime)/(1000*1000) );
+                // log.info("get lock then add queue (ms) : " + (double)(addQueueTime - getLockTime)/(1000*1000) );
+                // log.info("latency in write (ns) : " + (double)(endTime-startTime)/(1000*1000) );
+                // log.info("latency in lock (ns) : " + (double)(endTime-getLockTime)/(1000*1000) );
+                // log.info("wait lock (ns) : " + (double)(getLockTime-startTime)/(1000*1000));
+                // if (writeTime != 0L){
+                //     // log.info("write time (ns) : " + (double)(endTime-writeTime)/(1000*1000));
+                //     log.info("true write time (ns) : " + (double)(trueWriteEndTime-trueWriteStartTime)/(1000*1000));
+                // }
                 writerQueueLock.unlock();
             }
             return position;
@@ -2134,6 +2157,8 @@ public class Test1MessageQueue extends MessageQueue {
     }
 
     private ConcurrentHashMap<String, MQTopic> mqMap;
+    private ThreadLocal<Integer> localThreadId;
+    private AtomicInteger numOfThreads;
     // private ConcurrentHashMap<String, HashMap<Integer, HashMap<Integer, Long> > >
     // mqMap;
     // private HashMap<Integer, HashMap<Integer, Long> > queueId2offset2data; //
@@ -2193,6 +2218,9 @@ public class Test1MessageQueue extends MessageQueue {
             testStat = new TestStat(dataFiles);
         }
 
+        localThreadId = new ThreadLocal<>();
+        numOfThreads = new AtomicInteger();
+        numOfThreads.set(0);
         log.info("init ok!");
     }
 
@@ -2204,9 +2232,18 @@ public class Test1MessageQueue extends MessageQueue {
         }
 
     }
+    public int updateThreadId() {
+        if (localThreadId.get() == null) {
+            int thisNumOfThread = numOfThreads.getAndAdd(1);
+            localThreadId.set(thisNumOfThread);
+            log.info("init thread id : " + thisNumOfThread);
+        }
+        return localThreadId.get();
+    }
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
+        int threadId = updateThreadId();
         log.debug("append : "+topic+","+queueId);
         if (mqConfig.useStats){
             testStat.appendStart();
@@ -2252,13 +2289,12 @@ public class Test1MessageQueue extends MessageQueue {
         //     q = mqTopic.topicMap.get(queueId);
         // }
 
-        Integer queueIdObject = queueId;
-        int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+        // Integer queueIdObject = queueId;
+        // int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
         // int dataFileId = Math.floorMod(topic.hashCode()+queueId, numOfDataFiles);
         // log.info(dataFileId);
-        if (dataFileId < 0) {
-            log.info(dataFileId);
-        }
+
+        int dataFileId = threadId & 3; //   0b11
 
         DataFile df = dataFiles[dataFileId];
         long position = 0;
@@ -2315,6 +2351,8 @@ public class Test1MessageQueue extends MessageQueue {
      */
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
+
+        int threadId = updateThreadId();
         log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
         if (mqConfig.useStats){
             testStat.getRangeStart();
@@ -2370,8 +2408,10 @@ public class Test1MessageQueue extends MessageQueue {
 
 
         long pos = 0;
-        Integer queueIdObject = queueId;
-        int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+
+        int dataFileId = threadId & 3; //   0b11
+        // Integer queueIdObject = queueId;
+        // int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
         DataFile df = dataFiles[dataFileId];
 
         for (int i = 0; i < fetchNum; i++) {
