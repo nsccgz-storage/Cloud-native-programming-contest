@@ -139,7 +139,7 @@ public class Test1MessageQueue extends MessageQueue {
     
         int numOfDataFiles = 4;
         int minBufNum = 6;
-        int minBufLength = 48*1024;
+        int minBufLength = 51*1024;
         int timeOutMS = 8;
         boolean fairLock = true;
         int writeMethod = 8; 
@@ -1678,6 +1678,7 @@ public class Test1MessageQueue extends MessageQueue {
             long position = 0L;
             try {
                 Writer w = new Writer(data, writerQueueCondition);
+                // while (!writerQueueLock.tryLock(2, TimeUnit.MILLISECONDS)){}
                 writerQueueLock.lock();
                 // only for debug
                 // fileLock.lock();
@@ -1743,7 +1744,6 @@ public class Test1MessageQueue extends MessageQueue {
                         if (mqConfig.useStats){
                             writeStat.incExceedBufLengthCount();
                         }
-
                     }
                     if (!iter.hasNext()){
                         continueMerge = false;
