@@ -2214,11 +2214,10 @@ public class Test1MessageQueue extends MessageQueue {
         }
         MQTopic mqTopic;
         MQQueue q;
-        if (!mqMap.containsKey(topic)) {
+        mqTopic = mqMap.get(topic);
+        if (mqTopic == null) {
             mqTopic = new MQTopic(topic);
             mqMap.put(topic, mqTopic);
-        } else {
-            mqTopic = mqMap.get(topic);
         }
         data = data.slice();
 
@@ -2227,24 +2226,24 @@ public class Test1MessageQueue extends MessageQueue {
             q = new MQQueue();
             mqTopic.queueArray[queueId] = q;
         }
-        if (q.isHot){
-            // if (q.hotDataCache == null){
-            //     testStat.hotDataAlloc(topic, queueId);
-            //     q.hotDataCache = new HotDataCircleBuffer();
-            //     q.hotDataCache.tailOffset = q.maxOffset;
-            //     q.hotDataCache.headOffset = q.maxOffset;
-            // }
-            // q.hotDataCache.addData(data);
+        // if (q.isHot){
+        //     // if (q.hotDataCache == null){
+        //     //     testStat.hotDataAlloc(topic, queueId);
+        //     //     q.hotDataCache = new HotDataCircleBuffer();
+        //     //     q.hotDataCache.tailOffset = q.maxOffset;
+        //     //     q.hotDataCache.headOffset = q.maxOffset;
+        //     // }
+        //     // q.hotDataCache.addData(data);
 
-            if (q.maxOffsetData == null){
-                q.maxOffsetData = ByteBuffer.allocate(17408);
-                testStat.hotDataAlloc(topic, queueId);
-            }
-            q.maxOffsetData.clear();
-            q.maxOffsetData.put(data);
-            q.maxOffsetData.flip();
-            data.flip();
-        }
+        //     if (q.maxOffsetData == null){
+        //         q.maxOffsetData = ByteBuffer.allocate(17408);
+        //         testStat.hotDataAlloc(topic, queueId);
+        //     }
+        //     q.maxOffsetData.clear();
+        //     q.maxOffsetData.put(data);
+        //     q.maxOffsetData.flip();
+        //     data.flip();
+        // }
 
         // if (!mqTopic.topicMap.containsKey(queueId)) {
         //     q = new MQQueue();
@@ -2359,15 +2358,15 @@ public class Test1MessageQueue extends MessageQueue {
         // }
 
 
-        if (offset >= q.maxOffset-1){
-            testStat.hitHotData(topic, queueId);
-            q.isHot = true;
+        // if (offset >= q.maxOffset-1){
+        //     testStat.hitHotData(topic, queueId);
+        //     q.isHot = true;
 
-            if (q.maxOffsetData != null){
-                ret.put(0, q.maxOffsetData);
-                return ret;
-            }
-        }
+        //     if (q.maxOffsetData != null){
+        //         ret.put(0, q.maxOffsetData);
+        //         return ret;
+        //     }
+        // }
 
 
         long pos = 0;
