@@ -69,7 +69,7 @@ public class SSDqueue2{
                 // recover
                 // 读盘，建表 
                 logger.info("reover");
-                //RECOVER = true;
+                RECOVER = true;
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 this.mqMeta = new MetaTopicQueue(this.metaFileChannel);
 
@@ -120,20 +120,22 @@ public class SSDqueue2{
 
                 mqMeta.put(key, writeData.getMetaOffset());            
                 // 更新 DRAM map
-                qTopicQueueDataMap.put(key, writeData.getMeta());
-
                 Map<Long, Long> tmp2 = new HashMap<>();
                 tmp2.put(result, writeData.tail);
                 allDataOffsetMap.put(key, tmp2);
+
+                qTopicQueueDataMap.put(key, writeData.getMeta());
             }else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data writeData = new Data(dataSpaces[fcId], tmpD);
                 result = writeData.put(data);
-                qTopicQueueDataMap.put(key, writeData.getMeta());
+                
 
                 Map<Long, Long> tmp2 = allDataOffsetMap.get(key);
                 tmp2.put(result, writeData.tail);
                 allDataOffsetMap.put(key, tmp2);
+                
+                qTopicQueueDataMap.put(key, writeData.getMeta());
             }
             
         } catch (Exception e) {
