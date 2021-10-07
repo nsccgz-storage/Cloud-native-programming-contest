@@ -141,7 +141,7 @@ public class Test1MessageQueue extends MessageQueue {
         int minBufNum = 8;
         int minBufLength = 64*1024;
         int timeOutMS = 8;
-        boolean fairLock = false;
+        boolean fairLock = true;
         int writeMethod = 8; 
  
 
