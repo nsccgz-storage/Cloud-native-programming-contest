@@ -53,6 +53,7 @@ public class SSDqueue2{
     ConcurrentHashMap<String, ConcurrentHashMap<Long,Long>> allDataOffsetMap; // 加速 getRange
     
     boolean RECOVER = false;
+    ConcurrentHashMap<String, HotData> hotDataMap;
 
     TestStat testStat;
 
@@ -92,6 +93,8 @@ public class SSDqueue2{
                     dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel(), Long.BYTES);
                 }
                 this.qTopicQueueDataMap = new ConcurrentHashMap<>();
+                this.hotDataMap = new ConcurrentHashMap<>();
+
                 //logger.info("initialize new SSDqueue, num: "+currentNum.get());
             }
         // 划分起始的 Long.BYTES * 来存元数据
@@ -105,26 +108,31 @@ public class SSDqueue2{
 
     public Long append(String topicName, int queueId, ByteBuffer data){
         testStat.appendStart(data.remaining());
+        byte[] hotData = new byte[data.remaining()];
+        data.mark();
+        data.get(hotData);
+        data.reset();
 
         String key = topicName + markSpilt + queueId;
         Long result;
         try{
             DataMeta tmpD = qTopicQueueDataMap.get(key);
-
             // if(topicData == null){
             if(tmpD == null){
-                // 自下而上
+                
+                /////////  自下而上, 持久化
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data writeData = new Data(dataSpaces[fcId]);
                 result = writeData.put(data);
+                mqMeta.put(key, writeData.getMetaOffset());      
 
-                mqMeta.put(key, writeData.getMetaOffset());            
-                // 更新 DRAM map
+                //////// 更新 DRAM map
                 ConcurrentHashMap<Long, Long> tmp2 = new ConcurrentHashMap<>();
                 tmp2.put(result, writeData.tail);
                 allDataOffsetMap.put(key, tmp2);
 
                 qTopicQueueDataMap.put(key, writeData.getMeta());
+
             }else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data writeData = new Data(dataSpaces[fcId], tmpD);
@@ -141,6 +149,9 @@ public class SSDqueue2{
             e.printStackTrace();
             return null;
         }
+
+        hotDataMap.put(key, new HotData(result, hotData));
+
         testStat.appendUpdateStat(topicName, queueId, data);
         return result;
     }
@@ -148,17 +159,22 @@ public class SSDqueue2{
     public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
         Map<Integer, ByteBuffer> result = new HashMap<>();
         String key = topicName + markSpilt + queueId;
+        
         try{
             testStat.getRangeStart();
-
             DataMeta dataMeta = qTopicQueueDataMap.get(key);
             if(dataMeta == null) return result;
-
-            int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-            Data resData = new Data(dataSpaces[fcId], dataMeta);
-            if(RECOVER) result = resData.getRange(offset, fetchNum);
-            else result = resData.getRange(key, offset, fetchNum);
+           
+            if(!RECOVER && hotDataMap.get(key).offset == offset){
+                byte[] array = hotDataMap.get(key).data;
+                ByteBuffer tmp = ByteBuffer.wrap(array);
+                result.put(0, tmp);
+            }else{
+                int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
+                Data resData = new Data(dataSpaces[fcId], dataMeta);
+                result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRange(key, offset, fetchNum);
             
+            }
             testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
         }catch(IOException e){
             logger.error(e);
@@ -393,6 +409,14 @@ public class SSDqueue2{
         }
         public String toString(){
             return "nums: " + totalNum + " head: " + head + " tail: " + tail + " meta: " + metaOffset;
+        }
+    }
+    public class HotData{
+        public long offset;
+        public byte[] data;
+        public HotData(long offset, byte[] data){
+            this.offset = offset;
+            this.data = data; // TODO
         }
     }
 
