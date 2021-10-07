@@ -680,6 +680,8 @@ public class Test1MessageQueue extends MessageQueue {
             try {
                 // FIXME: resource leak ??
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
+                dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
+                dataFileChannel.force(true);
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
