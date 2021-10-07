@@ -190,6 +190,7 @@ public class Test1MessageQueue extends MessageQueue {
             Long getRangeStartTime;
             Long getRangeEndTime;
             int getRangeCount;
+            int hitHotDataCount;
             Long writeBytes;
             public int[] bucketBound;
             public int[] bucketCount;
@@ -202,6 +203,7 @@ public class Test1MessageQueue extends MessageQueue {
                 getRangeEndTime = 0L;
                 getRangeCount = 0;
                 writeBytes = 0L;
+                hitHotDataCount = 0;
                 reported = new AtomicBoolean();
                 reported.set(false);
 
@@ -308,6 +310,11 @@ public class Test1MessageQueue extends MessageQueue {
             stats[id].getRangeEndTime = System.nanoTime();
             stats[id].getRangeCount += 1;
             update();
+        }
+
+        void hitHotData(String topic, int queueId){
+            int id = threadId.get();
+            stats[id].hitHotDataCount += 1;
         }
 
         synchronized void update() {
@@ -520,6 +527,13 @@ public class Test1MessageQueue extends MessageQueue {
                 }
                 oldWriteStats[i] = dataFiles[i].writeStat.clone();
             }
+
+            // report hit hot data ratio
+            String hotDataReport = "";
+            for (int i = 0; i < getNumOfThreads; i++){
+                hotDataReport += String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount);
+            }
+            log.info("[hit hot data] : " + hotDataReport);
 
             // log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
 
@@ -2281,6 +2295,9 @@ public class Test1MessageQueue extends MessageQueue {
 
         if (offset >= q.maxOffset){
             return ret;
+        }
+        if (offset == q.maxOffset-1){
+            testStat.hitHotData(topic, queueId);
         }
         if (offset + fetchNum-1 >= q.maxOffset){
             fetchNum = (int)(q.maxOffset-offset);
