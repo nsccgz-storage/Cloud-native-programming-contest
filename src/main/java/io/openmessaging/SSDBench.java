@@ -46,8 +46,8 @@ public class SSDBench {
         }
         String dbPath = args[0];
         // runBench(dbPath);
-        // runBench1(dbPath);
-        testBench(dbPath);
+        runBench1(dbPath);
+        // testBench(dbPath);
     }
 
     public static void runBench(String dbPath) {
@@ -191,12 +191,9 @@ public class SSDBench {
                 for (int j = 0; j < ioSizes.length; j++) {
                     benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
                     benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
-                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],
-                    // ioSizes[j],
-                    // false);
-                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],
-                    // ioSizes[j],
-                    // true);
+                    benchFileChannelWriteMappedMultiFileUnsafe(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j]);
+                    benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],ioSizes[j], false);
+                    benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],ioSizes[j],true);
 
                 }
             }
@@ -216,14 +213,15 @@ public class SSDBench {
         {
             long totalBenchSize = 512L * 1024L * 1024L; // 1GiB
             int[] ioSizes = { 32 * 1024, 48 * 1024, 64 * 1024, 80 * 1024, 128 * 10244 };
-            int[] numOfFiles = { 1 };
+            int[] numOfFiles = { 3,4 };
 
             for (int i = 0; i < numOfFiles.length; i++) {
                 for (int j = 0; j < ioSizes.length; j++) {
-                    benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[j], false);
-                    benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[j], true);
-                    benchMappedlWriteUnsafe(dbPath, totalBenchSize, ioSizes[j]);
-                    benchMappedlWrite(dbPath, totalBenchSize, ioSizes[j], true);
+                    // benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[j], false);
+                    // benchFileChannelWrite(dbPath, totalBenchSize, ioSizes[j], true);
+                    // benchMappedlWriteUnsafe(dbPath, totalBenchSize, ioSizes[j]);
+                    // benchMappedlWrite(dbPath, totalBenchSize, ioSizes[j], true);
+                    benchFileChannelWriteMappedMultiFileUnsafe(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j]);
                 }
             }
         }
@@ -507,6 +505,7 @@ public class SSDBench {
             ie.printStackTrace();
         }
     }
+
     @SuppressWarnings("restriction")
     public static void benchMappedlWriteUnsafeMMapper(String dbPath, long totalBenchSize, int ioSize) {
         try {
@@ -596,6 +595,91 @@ public class SSDBench {
             ie.printStackTrace();
         }
 
+    }
+
+
+    public static void benchFileChannelWriteMappedMultiFileUnsafe(String dbPath, long totalBenchSize, int thread, int ioSize) {
+        CyclicBarrier barrier = new CyclicBarrier(thread);
+        long totalBenchCount = totalBenchSize / ioSize;
+        final long curTotalBenchSize = totalBenchCount * ioSize ;
+        totalBenchSize = curTotalBenchSize;
+
+        ThreadStat[] stats = new ThreadStat[thread];
+        for (int i = 0; i < stats.length; i++) {
+            stats[i] = new ThreadStat();
+        }
+        String type = "seqWriteMultiFileMappedUnsafe";
+        ExecutorService executor = Executors.newFixedThreadPool(thread);
+        long startTime = System.nanoTime();
+        for (int i = 0; i < thread; i++) {
+            final int threadId = i;
+            executor.execute(() -> {
+                threadRunSeqWriteMappedUnsafe(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize, ioSize);
+            });
+
+        }
+        executor.shutdown();
+
+        try {
+            // Wait a while for existing tasks to terminate
+            while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                System.out.println("Pool did not terminate, waiting ...");
+            }
+        } catch (InterruptedException ie) {
+            executor.shutdownNow();
+            ie.printStackTrace();
+        }
+        long endTime = System.nanoTime();
+        long elapsedTime = stats[0].endTime - stats[0].startTime;
+        double latency = (double) (elapsedTime / 1000) / totalBenchCount;
+        double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+        double totalBenchSizeMiB = (double) totalBenchSize * thread / (1024 * 1024);
+        double bandwidth = (totalBenchSizeMiB) / (elapsedTimeS);
+        double iops = totalBenchCount * thread / elapsedTimeS;
+        String output = String.format("%s,%d,%d,%.3f,%.3f,%.3f", type, thread, ioSize, bandwidth, iops, latency);
+        log.info(output);
+    }
+
+    public static void threadRunSeqWriteMappedUnsafe(ThreadStat stat, CyclicBarrier barrier, String dbPath, int threadId,
+            long totalBenchSize, int ioSize) {
+        try {
+            dbPath = dbPath + "/ssdbench" + threadId;
+            File db = new File(dbPath);
+            FileChannel fileChannel = new RandomAccessFile(db, "rw").getChannel();
+            log.debug("dbPath : " + dbPath);
+            MappedByteBuffer mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, totalBenchSize);
+
+            assert (totalBenchSize % ioSize == 0);
+
+            long mappedBufferAddr = ((DirectBuffer)mappedByteBuffer).address();
+            ByteBuffer buf;
+            buf = ByteBuffer.allocateDirect(ioSize);
+
+            long bufAddr = ((DirectBuffer)buf).address();
+
+            log.debug("begin bench !!");
+            long curPosition = 0L;
+            long maxPosition = totalBenchSize;
+            barrier.await();
+            long startTime = System.nanoTime();
+            while (curPosition < maxPosition) {
+                UnsafeUtil.UNSAFE.copyMemory(bufAddr, mappedBufferAddr+curPosition, ioSize);
+                mappedByteBuffer.force();
+                curPosition += ioSize;
+            }
+            barrier.await();
+            long endTime = System.nanoTime();
+            stat.startTime = startTime;
+            stat.endTime = endTime;
+            fileChannel.close();
+            db.delete();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } catch (BrokenBarrierException e) {
+            e.printStackTrace();
+        } catch (IOException ie) {
+            ie.printStackTrace();
+        }
     }
 
     // public static void benchFileChannelWriteThreadPool(FileChannel fileChannel,
