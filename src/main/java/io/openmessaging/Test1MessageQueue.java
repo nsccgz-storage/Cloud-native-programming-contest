@@ -142,7 +142,7 @@ public class Test1MessageQueue extends MessageQueue {
         int minBufLength = 48*1024;
         int timeOutMS = 8;
         boolean fairLock = false;
-        int writeMethod = 4; 
+        int writeMethod = 7; 
  
 
         // version just for test
@@ -1131,7 +1131,7 @@ public class Test1MessageQueue extends MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 48*1024; // 36 KiB
+                int maxBufLength = mqConfig.minBufLength; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
@@ -1139,7 +1139,7 @@ public class Test1MessageQueue extends MessageQueue {
                 //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 6;
+                int maxBufNum = mqConfig.minBufNum;
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
@@ -1258,7 +1258,7 @@ public class Test1MessageQueue extends MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 48*1024; // 36 KiB
+                int maxBufLength = mqConfig.minBufLength; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
@@ -1266,7 +1266,7 @@ public class Test1MessageQueue extends MessageQueue {
                 //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 6;
+                int maxBufNum = mqConfig.minBufNum;
 
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
@@ -1497,6 +1497,13 @@ public class Test1MessageQueue extends MessageQueue {
             if (writerQueueLocalBuffer.get() == null){
                 writerQueueLocalBuffer.set(ByteBuffer.allocateDirect(writerQueueBufferCapacity));
             }
+            // if (localBatchWriters.get() == null){
+            //     localBatchWriters.set(new Writer[20]);
+            // }
+
+            // Writer[] batchWriters = localBatchWriters.get();
+
+
             ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
 
             long position = 0L;
@@ -1524,7 +1531,7 @@ public class Test1MessageQueue extends MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 48*1024; // 36 KiB
+                int maxBufLength = mqConfig.minBufLength; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
@@ -1532,7 +1539,7 @@ public class Test1MessageQueue extends MessageQueue {
                 //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 6;
+                int maxBufNum = mqConfig.minBufNum;
 
                 Writer[] batchWriters = new Writer[maxBufNum];
 
@@ -1629,6 +1636,13 @@ public class Test1MessageQueue extends MessageQueue {
             if (writerQueueLocalBuffer.get() == null){
                 writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
             }
+            if (localBatchWriters.get() == null){
+                localBatchWriters.set(new Writer[20]);
+            }
+
+            Writer[] batchWriters = localBatchWriters.get();
+
+
             ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
 
             long position = 0L;
@@ -1656,7 +1670,7 @@ public class Test1MessageQueue extends MessageQueue {
                 
                 // TODO: 调参
                 int bufLength = 0;
-                int maxBufLength = 48*1024; // 36 KiB
+                int maxBufLength = mqConfig.minBufLength; // 36 KiB
                 // if (w.data.remaining() < 1024){
                 //     maxBufLength = 32*1024;
                 // }
@@ -1664,9 +1678,8 @@ public class Test1MessageQueue extends MessageQueue {
                 //     maxBufLength = 64*1024;
                 // }
                 int bufNum = 0;
-                int maxBufNum = 6;
+                int maxBufNum = mqConfig.minBufNum;
 
-                Writer[] batchWriters = new Writer[maxBufNum];
 
                 boolean continueMerge = true;
                 // I am the head of the queue and need to write buffer to SSD
