@@ -28,7 +28,7 @@ public class Main {
 
         
         String dirPath = "/home/ubuntu/test";
-        SSDqueue ssdQueue = new SSDqueue(dirPath);
+        SSDqueue2 ssdQueue = new SSDqueue2(dirPath);
         String t = "1234567890123456789012345678901234567890";
         System.out.println( t.hashCode());
         // System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));

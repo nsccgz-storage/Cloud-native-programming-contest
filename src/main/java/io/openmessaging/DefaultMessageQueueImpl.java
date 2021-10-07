@@ -30,11 +30,11 @@ import org.apache.log4j.Logger;
 public class DefaultMessageQueueImpl extends MessageQueue {
     // Initialization
     
-    private SSDqueue ssdQueue;
+    private SSDqueue2 ssdQueue;
     public DefaultMessageQueueImpl(){
         
         String dirPath = "/essd";
-        ssdQueue = new SSDqueue(dirPath);
+        ssdQueue = new SSDqueue2(dirPath);
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data){

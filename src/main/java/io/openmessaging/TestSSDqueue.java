@@ -100,7 +100,7 @@ public class TestSSDqueue {
 		return msgs;
 	}
 
-	public static void threadRun(int threadId, SSDqueue mq, CyclicBarrier barrier) {
+	public static void threadRun(int threadId, SSDqueue2 mq, CyclicBarrier barrier) {
 		Vector<Message> msgs = generateTopic(threadId);
 		log.info("init messages ok");
 		try {
@@ -153,7 +153,7 @@ public class TestSSDqueue {
 	
 			//FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
 			//FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-			SSDqueue mq = new SSDqueue("/mnt/ssd/wyk");
+			SSDqueue2 mq = new SSDqueue2("/mnt/ssd/wyk");
 			int numOfThreads = 16;
 			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
