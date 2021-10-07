@@ -139,7 +139,7 @@ public class Test1MessageQueue extends MessageQueue {
     
         int numOfDataFiles = 4;
         int minBufNum = 6;
-        int minBufLength = 51*1024;
+        int minBufLength = 52*1024;
         int timeOutMS = 8;
         boolean fairLock = true;
         int writeMethod = 8; 
