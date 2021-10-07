@@ -49,6 +49,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum){
         // return ssdQueue.getRange(topic, queueId, offset, fetchNum);
-        return mq.getRange(topic, queueId, offset, fetchNum);
+        // return mq.getRange(topic, queueId, offset, fetchNum);
+        return null;
     }
 }
