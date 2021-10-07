@@ -1718,7 +1718,7 @@ public class Test1MessageQueue extends MessageQueue {
                 Iterator<Writer> iter = writerQueue.iterator();
                 Writer lastWriter = null;
                 int dataLength = 0;
-                int metadataLength = Integer.BYTES;
+                short metadataLength = Short.BYTES;
                 int writeLength = 0;
 
                 position = curPosition;
@@ -1763,7 +1763,8 @@ public class Test1MessageQueue extends MessageQueue {
                     writerBuffer.position(0);
                     writerBuffer.limit(writerBuffer.capacity());
                     for (int i = 0; i < bufNum; i++){
-                        writerBuffer.putInt(batchWriters[i].data.remaining());
+                        // writerBuffer.putInt(batchWriters[i].data.remaining());
+                        writerBuffer.putShort((short)batchWriters[i].data.remaining());
                         writerBuffer.put(batchWriters[i].data);
                     }
                     writerBuffer.position(0);
@@ -1817,9 +1818,10 @@ public class Test1MessageQueue extends MessageQueue {
                 // dataFileChannel.read(tmp);
                 ret = dataFileChannel.read(readMeta, position);
                 readMeta.position(0);
-                int dataLength = readMeta.getInt();
+                int dataLength = readMeta.getShort();
+                // int dataLength = readMeta.getInt();
                 ByteBuffer tmp = ByteBuffer.allocate(dataLength);
-                ret = dataFileChannel.read(tmp, position + readMeta.capacity());
+                ret = dataFileChannel.read(tmp, position + Short.BYTES);
                 // log.debug(ret);
                 return tmp;
             } catch (IOException ie) {
@@ -2226,22 +2228,22 @@ public class Test1MessageQueue extends MessageQueue {
             mqTopic.queueArray[queueId] = q;
         }
         if (q.isHot){
-            if (q.hotDataCache == null){
-                testStat.hotDataAlloc(topic, queueId);
-                q.hotDataCache = new HotDataCircleBuffer();
-                q.hotDataCache.tailOffset = q.maxOffset;
-                q.hotDataCache.headOffset = q.maxOffset;
-            }
-            q.hotDataCache.addData(data);
-
-            // if (q.maxOffsetData == null){
-            //     q.maxOffsetData = ByteBuffer.allocate(17408);
+            // if (q.hotDataCache == null){
             //     testStat.hotDataAlloc(topic, queueId);
+            //     q.hotDataCache = new HotDataCircleBuffer();
+            //     q.hotDataCache.tailOffset = q.maxOffset;
+            //     q.hotDataCache.headOffset = q.maxOffset;
             // }
-            // q.maxOffsetData.clear();
-            // q.maxOffsetData.put(data);
-            // q.maxOffsetData.flip();
-            // data.flip();
+            // q.hotDataCache.addData(data);
+
+            if (q.maxOffsetData == null){
+                q.maxOffsetData = ByteBuffer.allocate(17408);
+                testStat.hotDataAlloc(topic, queueId);
+            }
+            q.maxOffsetData.clear();
+            q.maxOffsetData.put(data);
+            q.maxOffsetData.flip();
+            data.flip();
         }
 
         // if (!mqTopic.topicMap.containsKey(queueId)) {
@@ -2344,31 +2346,30 @@ public class Test1MessageQueue extends MessageQueue {
         }
 
 
-        if (offset >= q.maxOffset-2){
+        // if (offset >= q.maxOffset-2){
+        //     testStat.hitHotData(topic, queueId);
+        //     q.isHot = true;
+        //     if (q.isHot && q.hotDataCache != null){
+        //         q.hotDataCache.getData(offset, fetchNum, ret);
+        //         GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
+        //         log.debug("original fetchNum: " + fetchNum);
+        //         fetchNum = changes.fetchNum;
+        //         log.debug("updated fetchNum: " + fetchNum);
+        //     }
+        // }
+
+
+        if (offset >= q.maxOffset-1){
             testStat.hitHotData(topic, queueId);
             q.isHot = true;
 
-            if (q.isHot && q.hotDataCache != null){
-                q.hotDataCache.getData(offset, fetchNum, ret);
-                GetDataRetParameters changes = q.hotDataCache.getData(offset, fetchNum, ret);
-                log.debug("original fetchNum: " + fetchNum);
-                fetchNum = changes.fetchNum;
-                log.debug("updated fetchNum: " + fetchNum);
+            if (q.maxOffsetData != null){
+                ret.put(0, q.maxOffsetData);
+                return ret;
             }
-
-
         }
 
 
-        // if (offset >= q.maxOffset-1){
-        //     testStat.hitHotData(topic, queueId);
-        //     q.isHot = true;
-
-        //     if (q.maxOffsetData != null){
-        //         ret.put(0, q.maxOffsetData);
-        //         return ret;
-        //     }
-        // }
         long pos = 0;
         Integer queueIdObject = queueId;
         int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
