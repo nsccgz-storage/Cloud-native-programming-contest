@@ -47,8 +47,8 @@ public class Test1MessageQueueImpl extends MessageQueue {
     }
 
     public void init(String dirPath){
-        ssdQueue = new SSDqueue(dirPath);
-        // mq = new Test1MessageQueue(dirPath);
+        // ssdQueue = new SSDqueue(dirPath);
+        mq = new Test1MessageQueue(dirPath);
     }
 
 
@@ -56,13 +56,13 @@ public class Test1MessageQueueImpl extends MessageQueue {
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
-        return ssdQueue.append(topic, queueId, data);
-        // return mq.append(topic, queueId, data);
+        // return ssdQueue.append(topic, queueId, data);
+        return mq.append(topic, queueId, data);
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum){
-        return ssdQueue.getRange(topic, queueId, offset, fetchNum);
-        // return mq.getRange(topic, queueId, offset, fetchNum);
+        // return ssdQueue.getRange(topic, queueId, offset, fetchNum);
+        return mq.getRange(topic, queueId, offset, fetchNum);
     }
 }

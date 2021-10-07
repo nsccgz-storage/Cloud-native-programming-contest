@@ -49,53 +49,15 @@ public class Test1 {
 			buf.put(sampleData.clone());
 			buf.position(size);
 			oriPosition = size;
+			// for check
+
 			checkBuf = buf.duplicate();
+			// checkBuf = ByteBuffer.allocate(17408);
+			// checkBuf.put(sampleData.clone());
+			// checkBuf.position(size);
 		}
 	}
 
-	public static Vector<Message> generateOne() {
-		String topicName = "topic";
-		Vector<Message> msgs = new Vector<>();
-		for (long offset = 0; offset < 1; offset++) {
-			for (int queueId = 0; queueId < 99; queueId++) {
-				Message msg = new Message(topicName, queueId, offset);
-				msgs.add(msg);
-			}
-		}
-		return msgs;
-	}
-
-	public static void testOne() throws IOException{
-		//Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
-		//DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
-		SSDqueue mq = new SSDqueue("/mnt/ssd/wyk2");
-		Vector<Message> msgs = generateOne();
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-			if (msg.getOffset != msg.offset) {
-				log.error("offset error !");
-			}
-		}
-		Map<Integer, ByteBuffer> result;
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-			if (result.get(0).compareTo(msg.buf) != 0) {
-
-				log.info("topic: " + msg.topic + " id: " + msg.queueId + " offset: " + msg.offset +" buffer: "  + result.get(0));
-		
-				byte[] tmp = msg.buf.array();
-							log.info("***************real*************************");
-							for(int ii=0;  ii < tmp.length; ++ii){
-								System.out.print(tmp[ii] + " ");
-							}
-							log.info("***************end*************************");
-				log.error("data error !");
-				System.exit(0);
-			}
-		}
-	}
 
 	public static Vector<Message> generateTopic(int i) {
 		String topicName = "topic" + i;
@@ -306,7 +268,6 @@ public class Test1 {
 		String dbPath = args[0] ;
 
 		try {
-			// testOne();
 			testThreadPool(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception
