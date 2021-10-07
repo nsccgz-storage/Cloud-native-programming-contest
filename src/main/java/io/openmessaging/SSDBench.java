@@ -31,6 +31,7 @@ public class SSDBench {
     private static final Logger log = Logger.getLogger(SSDBench.class);
     public static AtomicLong writePosition = new AtomicLong(0);
     public static Lock benchLock = new ReentrantLock();
+    public static ByteBuffer sampleHeapData = ByteBuffer.allocate(1024*1024);
 
     // FileChannel/Mapped
     // io size
@@ -183,7 +184,7 @@ public class SSDBench {
 
         log.info("test");
         {
-            long totalBenchSize = 512L * 1024L * 1024L; // 1GiB
+            long totalBenchSize = 1024L * 1024L * 1024L; // 1GiB
             int[] ioSizes = { 32 * 1024, 48 * 1024, 64 * 1024, 80 * 1024, 128 * 10244 };
             int[] numOfFiles = { 3, 4 };
 
@@ -664,6 +665,7 @@ public class SSDBench {
             long startTime = System.nanoTime();
             while (curPosition < maxPosition) {
                 UnsafeUtil.UNSAFE.copyMemory(bufAddr, mappedBufferAddr+curPosition, ioSize);
+                // UnsafeUtil.UNSAFE.copyMemory(sampleHeapData.array(), 16, null , mappedBufferAddr+curPosition, ioSize);
                 mappedByteBuffer.force();
                 curPosition += ioSize;
             }
