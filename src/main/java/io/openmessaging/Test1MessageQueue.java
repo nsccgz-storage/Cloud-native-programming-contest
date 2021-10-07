@@ -142,7 +142,7 @@ public class Test1MessageQueue extends MessageQueue {
         int minBufLength = 48*1024;
         int timeOutMS = 8;
         boolean fairLock = false;
-        int writeMethod = 7; 
+        int writeMethod = 8; 
  
 
         // version just for test
@@ -1650,11 +1650,11 @@ public class Test1MessageQueue extends MessageQueue {
             if (writerQueueLocalBuffer.get() == null){
                 writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
             }
-            if (localBatchWriters.get() == null){
-                localBatchWriters.set(new Writer[20]);
-            }
+            // if (localBatchWriters.get() == null){
+            //     localBatchWriters.set(new Writer[20]);
+            // }
 
-            Writer[] batchWriters = localBatchWriters.get();
+            // Writer[] batchWriters = localBatchWriters.get();
 
 
             ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
@@ -1696,6 +1696,7 @@ public class Test1MessageQueue extends MessageQueue {
 
 
                 boolean continueMerge = true;
+                Writer[] batchWriters = new Writer[maxBufNum];
                 // I am the head of the queue and need to write buffer to SSD
                 // build write batch
                 Iterator<Writer> iter = writerQueue.iterator();
