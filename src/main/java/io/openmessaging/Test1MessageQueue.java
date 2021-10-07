@@ -2013,6 +2013,7 @@ public class Test1MessageQueue extends MessageQueue {
 
     }
 
+    @Override
     public long append(String topic, int queueId, ByteBuffer data) {
         if (mqConfig.useStats){
             testStat.appendStart();
@@ -2092,6 +2093,7 @@ public class Test1MessageQueue extends MessageQueue {
      * @param offset   写入消息时返回的offset
      * @param fetchNum 读取消息个数，不超过100
      */
+    @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
         if (mqConfig.useStats){
             testStat.getRangeStart();
