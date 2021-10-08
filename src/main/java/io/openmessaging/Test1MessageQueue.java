@@ -2736,6 +2736,7 @@ public class Test1MessageQueue extends MessageQueue {
         public boolean isHot;
         public ByteBuffer maxOffsetData;
         public int dataFileId;
+        public DataFile df;
 
         MQQueue(int thisDataFileId) {
             isHot = false;
@@ -2744,6 +2745,14 @@ public class Test1MessageQueue extends MessageQueue {
             dataFileId = thisDataFileId;
             // hotDataCache = new HotDataCircleBuffer();
         }
+        MQQueue(DataFile dataFile){
+            isHot = false;
+            maxOffset = 0L;
+            queueMap = new HashMap<>();
+            df = dataFile;
+            // hotDataCache = new HotDataCircleBuffer();
+        }
+
     }
 
     public class MQTopic {
@@ -2751,6 +2760,7 @@ public class Test1MessageQueue extends MessageQueue {
         public HashMap<Integer, MQQueue> topicMap;
         public MQQueue[] queueArray;
         public int dataFileId;
+        public DataFile df;
 
         MQTopic(String name, int thisDataFileId) {
             topicName = name;
@@ -2758,6 +2768,13 @@ public class Test1MessageQueue extends MessageQueue {
             queueArray = new MQQueue[5002];
             dataFileId = thisDataFileId;
         }
+        MQTopic(String name, DataFile dataFile){
+            topicName = name;
+            // topicMap = new HashMap<Integer, MQQueue>();
+            queueArray = new MQQueue[5002];
+            df = dataFile;
+        }
+
     }
 
     private ConcurrentHashMap<String, MQTopic> mqMap;
@@ -2859,9 +2876,8 @@ public class Test1MessageQueue extends MessageQueue {
             // int threadId = updateThreadId();
             // int dataFileId = threadId / 10; //   0b11
             int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
-
-
-            mqTopic = new MQTopic(topic, dataFileId);
+            // mqTopic = new MQTopic(topic, dataFileId);
+            mqTopic = new MQTopic(topic, dataFiles[dataFileId]);
             mqMap.put(topic, mqTopic);
         }
         data = data.slice();
@@ -2870,7 +2886,8 @@ public class Test1MessageQueue extends MessageQueue {
         if (mqTopic.queueArray[queueId] == null){
             Integer queueIdObject = queueId;
             int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
-            q = new MQQueue(dataFileId);
+            // q = new MQQueue(dataFileId);
+            q = new MQQueue(dataFiles[dataFileId]);
             mqTopic.queueArray[queueId] = q;
         }
         // if (q.isHot){
@@ -2906,8 +2923,9 @@ public class Test1MessageQueue extends MessageQueue {
 
 
         // DataFile df = dataFiles[mqTopic.dataFileId];
-        DataFile df = dataFiles[q.dataFileId];
+        // DataFile df = dataFiles[q.dataFileId];
         // DataFile df = dataFiles[dataFileId];
+        DataFile df = q.df;
         
         long position = 0;
         switch (mqConfig.writeMethod) {
@@ -3031,8 +3049,9 @@ public class Test1MessageQueue extends MessageQueue {
         // Integer queueIdObject = queueId;
         // int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
         // DataFile df = dataFiles[mqTopic.dataFileId];
-        DataFile df = dataFiles[q.dataFileId];
+        // DataFile df = dataFiles[q.dataFileId];
         // DataFile df = dataFiles[dataFileId];
+        DataFile df = q.df;
 
         for (int i = 0; i < fetchNum; i++) {
             pos = q.queueMap.get(offset + i);
