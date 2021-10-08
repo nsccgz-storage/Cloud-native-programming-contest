@@ -145,7 +145,7 @@ public class Test1MessageQueue extends MessageQueue {
         int minBufLength = 52*1024;
         int timeOutMS = 8;
         boolean fairLock = true;
-        int writeMethod = 11; 
+        int writeMethod = 12; 
  
 
         // version just for test
@@ -1967,6 +1967,147 @@ public class Test1MessageQueue extends MessageQueue {
 
         }
 
+        public long syncSeqWritePushConcurrentQueueHeapBatchBuffer(ByteBuffer data){
+            if (writerQueueLocalBuffer.get() == null){
+                writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
+            }
+
+            ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
+
+            long position = 0L;
+            try {
+                Writer w = new Writer(data, Thread.currentThread());
+                // log.debug("try to add a new writer to queue");
+                writerConcurrentQueue.add(w);
+                // log.debug(writerQueue);
+                // log.debug(writerQueue.getFirst());
+                // addQueueTime = System.nanoTime();
+                while (!(w.done == 1 || w.equals(writerConcurrentQueue.peek()) )){
+                    // log.debug("wait for the leader of queue");
+                    LockSupport.park();
+                }
+                if (w.done == 1){
+                    // log.debug(w.position);
+                    return w.position;
+                }
+                // log.debug("I am the head");
+                // writeTime = System.nanoTime();
+                
+                // TODO: 调参
+                int bufLength = 0;
+                int maxBufLength = mqConfig.minBufLength; // 36 KiB
+                // if (w.data.remaining() < 1024){
+                //     maxBufLength = 32*1024;
+                // }
+                // if (w.data.remaining() > 16*1024){
+                //     maxBufLength = 64*1024;
+                // }
+                int bufNum = 0;
+                int maxBufNum = mqConfig.minBufNum;
+
+
+                boolean continueMerge = true;
+                Writer[] batchWriters = new Writer[maxBufNum];
+                // I am the head of the queue and need to write buffer to SSD
+                // build write batch
+                Iterator<Writer> iter = writerConcurrentQueue.iterator();
+                Writer lastWriter = null;
+                int dataLength = 0;
+                short metadataLength = Short.BYTES;
+                int writeLength = 0;
+
+                position = curPosition;
+                while ( continueMerge ){
+                    lastWriter = iter.next();
+                    dataLength = lastWriter.data.remaining();
+                    writeLength = metadataLength + dataLength;
+                    // log.debug(lastWriter);
+                    lastWriter.position = position;
+                    batchWriters[bufNum] = lastWriter;
+                    position += writeLength;
+                    bufLength += writeLength;
+                    bufNum += 1;
+                    if (bufNum >= maxBufNum){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
+                    }
+                    if (bufLength >= maxBufLength){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
+                    }
+                }
+                long writePosition = curPosition;
+                //  对齐到4K
+                // assert (curPosition % 4096 == 0);
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+                bufLength = bufLength + (4096 - bufLength % 4096);
+                curPosition += bufLength;
+                {
+                    // log.debug("need to flush, unlock !");
+                    // trueWriteStartTime = System.nanoTime();
+                    writerBuffer.position(0);
+                    writerBuffer.limit(writerBuffer.capacity());
+                    for (int i = 0; i < bufNum; i++){
+                        // writerBuffer.putInt(batchWriters[i].data.remaining());
+                        writerBuffer.putShort((short)batchWriters[i].data.remaining());
+                        writerBuffer.put(batchWriters[i].data);
+                    }
+                    writerBuffer.position(0);
+                    writerBuffer.limit(bufLength);
+                    dataFileChannel.write(writerBuffer, writePosition);
+                    dataFileChannel.force(true);
+                    // trueWriteEndTime = System.nanoTime();
+                    // log.debug("flush ok , get the lock again!");
+                }
+
+                while(true){
+                    Writer ready = writerConcurrentQueue.poll();
+                    if (!ready.equals(w)){
+                        ready.done = 1;
+                        LockSupport.unpark(ready.currentThread);
+                    }
+                    if (ready.equals(lastWriter)){
+                        break;
+                    }
+                }
+
+                if (!writerConcurrentQueue.isEmpty()){
+                    LockSupport.unpark(writerConcurrentQueue.peek().currentThread);
+                }
+                // log.debug(w.position);
+                position = w.position;
+
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            } finally {
+                long endTime = System.nanoTime();
+                // log.info("latency before get lock (ms) : " + (double)(beforeGetLockTime - startTime)/(1000*1000) );
+                // log.info("get lock then add queue (ms) : " + (double)(addQueueTime - getLockTime)/(1000*1000) );
+                // log.info("latency in write (ns) : " + (double)(endTime-startTime)/(1000*1000) );
+                // log.info("latency in lock (ns) : " + (double)(endTime-getLockTime)/(1000*1000) );
+                // log.info("wait lock (ns) : " + (double)(getLockTime-startTime)/(1000*1000));
+                // if (writeTime != 0L){
+                //     // log.info("write time (ns) : " + (double)(endTime-writeTime)/(1000*1000));
+                //     log.info("true write time (ns) : " + (double)(trueWriteEndTime-trueWriteStartTime)/(1000*1000));
+                // }
+            }
+            return position;
+
+        }
+
+
         public long syncSeqWritePushQueueMapped(ByteBuffer data){
             // long trueWriteStartTime = System.nanoTime();
             // long trueWriteEndTime = System.nanoTime();
@@ -2683,6 +2824,9 @@ public class Test1MessageQueue extends MessageQueue {
                 break;
             case 11:
                 position = df.asyncSeqWritePushQueueHeapBatchBuffer(data);
+                break;
+            case 12:
+                position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(data);
                 break;
             default:
                 position = df.syncSeqWrite(data);
