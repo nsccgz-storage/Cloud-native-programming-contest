@@ -137,12 +137,12 @@ public class Test1MessageQueue extends MessageQueue {
         // boolean fairLock = true;
         // int writeMethod = 4; 
     
-        int numOfDataFiles = 6;
+        int numOfDataFiles = 4;
         int minBufNum = 6;
-        int minBufLength = 32*1024;
+        int minBufLength = 52*1024;
         int timeOutMS = 8;
         boolean fairLock = true;
-        int writeMethod = 8; 
+        int writeMethod = 10; 
  
 
         // version just for test
@@ -669,6 +669,7 @@ public class Test1MessageQueue extends MessageQueue {
 
         public int writerQueueBufferCapacity;
         public ThreadLocal<ByteBuffer> writerQueueLocalBuffer;
+        public ThreadLocal<ByteBuffer> writerQueueLocalDirectBuffer;
 
 
         public ThreadLocal<Writer[]> localBatchWriters;
@@ -684,9 +685,9 @@ public class Test1MessageQueue extends MessageQueue {
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
                 dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
                 dataFileChannel.force(true);
-                // curPosition = 1*1024L*1024L*1024L;
-                // dataFileMappedBuffer = dataFileChannel.map(FileChannel.MapMode.READ_WRITE, 0, 1*1024L*1024L*1024L);
-                // curMappedPosition = 0L;
+                curPosition = (1*1024L+512)*1024L*1024L;
+                dataFileMappedBuffer = dataFileChannel.map(FileChannel.MapMode.READ_WRITE, 0, (1*1024L+512)*1024L*1024L);
+                curMappedPosition = 0L;
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
@@ -720,6 +721,9 @@ public class Test1MessageQueue extends MessageQueue {
 
             writerQueueBufferCapacity = 128*1024;
             writerQueueLocalBuffer = new ThreadLocal<>();
+
+
+            writerQueueLocalDirectBuffer = new ThreadLocal<>();
 
             localBatchWriters = new ThreadLocal<>();
 
@@ -1847,6 +1851,10 @@ public class Test1MessageQueue extends MessageQueue {
             if (writerQueueLocalBuffer.get() == null){
                 writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
             }
+            if (writerQueueLocalDirectBuffer.get() == null){
+                writerQueueLocalDirectBuffer.set(ByteBuffer.allocateDirect(4096));
+            }
+
             // if (localBatchWriters.get() == null){
             //     localBatchWriters.set(new Writer[20]);
             // }
@@ -1855,6 +1863,7 @@ public class Test1MessageQueue extends MessageQueue {
 
 
             ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
+            ByteBuffer writerDirectBuffer = writerQueueLocalDirectBuffer.get();
 
             long position = 0L;
             try {
@@ -1913,9 +1922,8 @@ public class Test1MessageQueue extends MessageQueue {
                     dataLength = lastWriter.data.remaining();
                     writeLength = metadataLength + dataLength;
                     // log.debug(lastWriter);
-                    lastWriter.position = position;
+                    lastWriter.position = bufLength;
                     batchWriters[bufNum] = lastWriter;
-                    position += writeLength;
                     bufLength += writeLength;
                     bufNum += 1;
                     if (bufNum >= maxBufNum){
@@ -1937,33 +1945,57 @@ public class Test1MessageQueue extends MessageQueue {
                         }
                     }
                 }
-                long writePosition = curPosition;
-                //  对齐到4K
-                // assert (curPosition % 4096 == 0);
+
                 if (mqConfig.useStats){
                     writeStat.addSample(bufLength);
                 }
-                bufLength = bufLength + (4096 - bufLength % 4096);
-                curPosition += bufLength;
-                {
-                    // log.debug("need to flush, unlock !");
-                    writerQueueLock.unlock();
-                    // trueWriteStartTime = System.nanoTime();
-                    writerBuffer.position(0);
-                    writerBuffer.limit(writerBuffer.capacity());
-                    for (int i = 0; i < bufNum; i++){
-                        // writerBuffer.putInt(batchWriters[i].data.remaining());
-                        writerBuffer.putShort((short)batchWriters[i].data.remaining());
-                        writerBuffer.put(batchWriters[i].data);
+
+                if (bufLength >= 4096){
+                    long writePosition = curPosition;
+                    bufLength = bufLength + (4096 - bufLength % 4096);
+                    //  对齐到4K
+                    // assert (curPosition % 4096 == 0);
+                    curPosition += bufLength;
+                    {
+                        // log.debug("need to flush, unlock !");
+                        writerQueueLock.unlock();
+                        // trueWriteStartTime = System.nanoTime();
+                        writerBuffer.clear();
+                        for (int i = 0; i < bufNum; i++){
+                            batchWriters[i].position += writePosition;
+                            // writerBuffer.putInt(batchWriters[i].data.remaining());
+                            writerBuffer.putShort((short)batchWriters[i].data.remaining());
+                            writerBuffer.put(batchWriters[i].data);
+                        }
+                        writerBuffer.flip();
+                        // writerBuffer.position(0);
+                        // writerBuffer.limit(bufLength);
+                        dataFileChannel.write(writerBuffer, writePosition);
+                        dataFileChannel.force(true);
+                        // trueWriteEndTime = System.nanoTime();
+                        writerQueueLock.lock();
+                        // log.debug("flush ok , get the lock again!");
                     }
-                    writerBuffer.position(0);
-                    writerBuffer.limit(bufLength);
-                    dataFileChannel.write(writerBuffer, writePosition);
-                    dataFileChannel.force(true);
-                    // trueWriteEndTime = System.nanoTime();
-                    writerQueueLock.lock();
-                    // log.debug("flush ok , get the lock again!");
+                } else {
+                    long writePosition = curMappedPosition;
+                    curMappedPosition += bufLength;
+                    assert (curMappedPosition >= (1024+512)*1024L*1024L);
+                    {
+                        writerQueueLock.unlock();
+                        writerDirectBuffer.clear();
+                        for (int i = 0; i < bufNum; i++){
+                            batchWriters[i].position += writePosition;
+                            writerDirectBuffer.putShort((short)batchWriters[i].data.remaining());
+                            writerDirectBuffer.put(batchWriters[i].data);
+                        }
+                        writerDirectBuffer.flip();
+                        dataFileMappedBuffer.put(writerDirectBuffer);
+                        dataFileMappedBuffer.force();
+                        writerQueueLock.lock();
+                    }
+
                 }
+
 
                 while(true){
                     Writer ready = writerQueue.poll();
@@ -2518,6 +2550,9 @@ public class Test1MessageQueue extends MessageQueue {
                 break;
             case 9:
                 position = df.syncSeqWritePushQueueBatch(data);
+                break;
+            case 10:
+                position = df.syncSeqWritePushQueueMapped(data);
                 break;
  
             default:
