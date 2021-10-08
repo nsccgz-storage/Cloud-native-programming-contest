@@ -49,53 +49,15 @@ public class Test1 {
 			buf.put(sampleData.clone());
 			buf.position(size);
 			oriPosition = size;
+			// for check
+
 			checkBuf = buf.duplicate();
+			// checkBuf = ByteBuffer.allocate(17408);
+			// checkBuf.put(sampleData.clone());
+			// checkBuf.position(size);
 		}
 	}
 
-	public static Vector<Message> generateOne() {
-		String topicName = "topic";
-		Vector<Message> msgs = new Vector<>();
-		for (long offset = 0; offset < 1; offset++) {
-			for (int queueId = 0; queueId < 99; queueId++) {
-				Message msg = new Message(topicName, queueId, offset);
-				msgs.add(msg);
-			}
-		}
-		return msgs;
-	}
-
-	public static void testOne() throws IOException{
-		//Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
-		//DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
-		SSDqueue2 mq = new SSDqueue2("/mnt/ssd/wyk2");
-		Vector<Message> msgs = generateOne();
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-			if (msg.getOffset != msg.offset) {
-				log.error("offset error !");
-			}
-		}
-		Map<Integer, ByteBuffer> result;
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-			if (result.get(0).compareTo(msg.buf) != 0) {
-
-				log.info("topic: " + msg.topic + " id: " + msg.queueId + " offset: " + msg.offset +" buffer: "  + result.get(0));
-		
-				byte[] tmp = msg.buf.array();
-							log.info("***************real*************************");
-							for(int ii=0;  ii < tmp.length; ++ii){
-								System.out.print(tmp[ii] + " ");
-							}
-							log.info("***************end*************************");
-				log.error("data error !");
-				System.exit(0);
-			}
-		}
-	}
 
 	public static Vector<Message> generateTopic(int i) {
 		String topicName = "topic" + i;
@@ -122,7 +84,7 @@ public class Test1 {
 	}
 	public static Vector<Message> generateQueueTestGetRangeMulti(int i) {
 		String topicName = "topic" + i;
-		int queueId = 23423;
+		int queueId = 2333;
 		Vector<Message> msgs = new Vector<>();
 		for (long offset = 0; offset < 999; offset++) {
 			Message msg = new Message(topicName, queueId, offset);
@@ -155,7 +117,9 @@ public class Test1 {
 					// Map<Integer, ByteBuffer> result;
 					// result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 					// msg.buf.position(msg.oriPosition);
-					// if (result.get(0).compareTo(msg.buf) != 0) {
+					// if (result.get(0).compareTo(msg.checkBuf) != 0) {
+					// 	log.error(result.get(0));
+					// 	log.error(msg.checkBuf);
 					// 	log.error("data error !");
 					// 	barrier.await();
 					// 	System.exit(0);
@@ -174,6 +138,9 @@ public class Test1 {
 					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 					msg.buf.position(msg.oriPosition);
 					if (result.get(0).compareTo(msg.checkBuf) != 0) {
+						log.error(result.get(0));
+						log.error(msg.checkBuf);
+
 						log.error("data error !");
 						System.exit(0);
 					}
@@ -190,65 +157,65 @@ public class Test1 {
 					msg.buf.position(0);
 				}
 			}
-			// {
+			{
 
-			// 	Map<Integer, ByteBuffer> result;
-			// 	barrier.await();
-			// 	Vector<Message> getRangeMsgs = generateQueueTestGetRangeMulti(threadId);
-			// 	barrier.await();
+				Map<Integer, ByteBuffer> result;
+				barrier.await();
+				Vector<Message> getRangeMsgs = generateQueueTestGetRangeMulti(threadId);
+				barrier.await();
 				
 				
-			// 	if (threadId == 0){
-			// 		log.info("begin getRangeFetchMulti!");
-			// 	}
-			// 	for (int i = 0; i < getRangeMsgs.size(); i++){
-			// 		log.debug("i : "+i);
-			// 		Message msg = getRangeMsgs.get(i);
-			// 		log.debug(msg.buf);
-			// 		msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-			// 		if (msg.getOffset != msg.offset) {
-			// 			log.error("offset error !");
-			// 			System.exit(0);
-			// 		}
-			// 		result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
-			// 		for (int j = 0; j <= i; j++){
-			// 			log.info(result.get(j));
-			// 			log.info(getRangeMsgs.get(j).checkBuf);
+				if (threadId == 0){
+					log.info("begin getRangeFetchMulti!");
+				}
+				for (int i = 0; i < getRangeMsgs.size(); i++){
+					log.debug("i : "+i);
+					Message msg = getRangeMsgs.get(i);
+					log.debug(msg.buf);
+					msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+					if (msg.getOffset != msg.offset) {
+						log.error("offset error !");
+						System.exit(0);
+					}
+					result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
+					for (int j = 0; j <= i; j++){
+						// log.info(result.get(j));
+						// log.info(getRangeMsgs.get(j).checkBuf);
 
-			// 			if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
-			// 				log.error("data error !");
-			// 				byte[] tmp = getRangeMsgs.get(j).checkBuf.array();
-			// 				log.info("***************real*************************");
-			// 				for(int ii=0;  ii < tmp.length; ++ii){
-			// 					System.out.print(tmp[ii] + " ");
-			// 				}
-			// 				log.info("***************end*************************");
-			// 				System.exit(0);
-			// 			}
+						if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
+							log.error("data error !");
+							byte[] tmp = getRangeMsgs.get(j).checkBuf.array();
+							log.info("***************real*************************");
+							for(int ii=0;  ii < tmp.length; ++ii){
+								System.out.print(tmp[ii] + " ");
+							}
+							log.info("***************end*************************");
+							System.exit(0);
+						}
 					
-			// 		}
-			// 		for (int k = 0; k <= 40 && k <= i; k++){
-			// 			log.debug("k : " + k);
-			// 			log.debug("i-k : " + (i-k));
-			// 			result = mq.getRange(msg.topic, msg.queueId, i-k, k+1);
-			// 			for (int j = 0; j <= 40 && j<= k ; j++){
-			// 				log.debug("j : "+j);
-			// 				log.debug(result.get(j));
-			// 				log.debug("i-k+j : "+ (i-k+j));
-			// 				log.debug(getRangeMsgs.get(i-k+j).checkBuf);
-			// 				if (result.get(j).compareTo(getRangeMsgs.get(i-k+j).checkBuf) != 0){
-			// 					log.error("data error !");
-			// 					System.exit(0);
-			// 				}
+					}
+					for (int k = 0; k <= 40 && k <= i; k++){
+						log.debug("k : " + k);
+						log.debug("i-k : " + (i-k));
+						result = mq.getRange(msg.topic, msg.queueId, i-k, k+1);
+						for (int j = 0; j <= 40 && j<= k ; j++){
+							log.debug("j : "+j);
+							log.debug(result.get(j));
+							log.debug("i-k+j : "+ (i-k+j));
+							log.debug(getRangeMsgs.get(i-k+j).checkBuf);
+							if (result.get(j).compareTo(getRangeMsgs.get(i-k+j).checkBuf) != 0){
+								log.error("data error !");
+								System.exit(0);
+							}
 
-			// 			}
+						}
 
-			// 		}
+					}
 	
-				// }
-			// 	barrier.await();
+				}
+				barrier.await();
 
-			// }
+			}
 
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -260,8 +227,7 @@ public class Test1 {
 
 	public static void testThreadPool(String dbPath) {
 		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
-		// int numOfThreads = 1;
-		int numOfThreads = 40;
+		int numOfThreads = 4;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();
@@ -294,6 +260,74 @@ public class Test1 {
 			sampleData[i] = (byte)i;
 		}
 	}
+	public static void writePerformanceTest(String dbPath){
+		MessageQueue mq = new Test1MessageQueueImpl(dbPath);
+		int numOfThreads = 40;
+		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
+		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
+		long startTime = System.nanoTime();
+		for (int i = 0; i < numOfThreads; i++) {
+			final int threadId = i;
+			executor.execute(() -> {
+				threadRunWritePerformanceTest(threadId, mq, barrier);
+
+			});
+		}
+		executor.shutdown();
+		try {
+			// Wait a while for existing tasks to terminate
+			while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+				System.out.println("Pool did not terminate, waiting ...");
+			}
+		} catch (InterruptedException ie) {
+			executor.shutdownNow();
+			ie.printStackTrace();
+		}
+		long elapsedTime = System.nanoTime() - startTime;
+		double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+
+		log.info("pass the test, successfully !!!");
+		log.info("time: " + elapsedTimeS);
+	}
+
+	public static void threadRunWritePerformanceTest(int threadId, MessageQueue mq, CyclicBarrier barrier) {
+		try {
+			{
+				String topicName = "topic" + threadId;
+				Vector<Message> msgs = new Vector<>();
+				for (long offset = 0; offset < 999; offset++) {
+					for (int queueId = 0; queueId < 99; queueId++) {
+						Message msg = new Message(topicName, queueId, offset);
+						msgs.add(msg);
+					}
+				}
+				if (threadId == 0) {
+					log.info("init messages ok");
+				}
+				barrier.await();
+
+				if (threadId == 0) {
+					log.info("begin write!");
+				}
+				for (int i = 0; i < msgs.size(); i++) {
+					Message msg = msgs.get(i);
+					msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+					if (msg.getOffset != msg.offset) {
+						log.error("offset error !");
+						System.exit(0);
+					}
+
+				}
+				barrier.await();
+			}
+
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+
+	}
 	public static void main(String[] args) {
 		init();
 		// log.setLevel(Level.DEBUG);
@@ -306,8 +340,8 @@ public class Test1 {
 		String dbPath = args[0] ;
 
 		try {
-			// testOne();
-			testThreadPool(dbPath);
+			writePerformanceTest(dbPath);
+			// testThreadPool(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();
