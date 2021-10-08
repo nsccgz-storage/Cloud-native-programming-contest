@@ -144,17 +144,17 @@ public class Test1MessageQueue extends MessageQueue {
         // boolean fairLock = true;
         // int writeMethod = 4; 
     
-        // int numOfDataFiles = 4;
-        // int minBufNum = 6;
-        // int minBufLength = 50*1024;
-        // boolean fairLock = true;
-        // int writeMethod = 12; 
- 
-        int numOfDataFiles = 3;
-        int minBufNum = 9;
-        int minBufLength = 72*1024;
+        int numOfDataFiles = 4;
+        int minBufNum = 6;
+        int minBufLength = 50*1024;
         boolean fairLock = true;
         int writeMethod = 12; 
+ 
+        // int numOfDataFiles = 3;
+        // int minBufNum = 9;
+        // int minBufLength = 72*1024;
+        // boolean fairLock = true;
+        // int writeMethod = 12; 
  
         // version just for test
         // int numOfDataFiles = 4;
