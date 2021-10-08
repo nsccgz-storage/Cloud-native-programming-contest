@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.nio.ByteBuffer;
@@ -24,7 +25,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 
@@ -142,7 +145,7 @@ public class Test1MessageQueue extends MessageQueue {
         int minBufLength = 52*1024;
         int timeOutMS = 8;
         boolean fairLock = true;
-        int writeMethod = 8; 
+        int writeMethod = 11; 
  
 
         // version just for test
@@ -594,9 +597,16 @@ public class Test1MessageQueue extends MessageQueue {
             Condition cv;
             int done;
             long position;
+            Thread currentThread;
             Writer(ByteBuffer d, Condition v){
                 data = d;
                 cv = v;
+                done = 0;
+                position = 0L;
+            }
+            Writer(ByteBuffer d, Thread t){
+                data = d;
+                currentThread = t;
                 done = 0;
                 position = 0L;
             }
@@ -676,6 +686,10 @@ public class Test1MessageQueue extends MessageQueue {
 
         public WriteStat writeStat;
 
+        public Queue<Writer> writerConcurrentQueue;
+        public Thread backgroundFlushThread;
+        Object backgroundFlushNotify;
+
         DataFile(String dataFileName) {
             // atomicCurPosition = new AtomicLong(0);
             File dataFile = new File(dataFileName);
@@ -728,6 +742,102 @@ public class Test1MessageQueue extends MessageQueue {
             localBatchWriters = new ThreadLocal<>();
 
             writeStat = new WriteStat();
+
+            writerConcurrentQueue = new ConcurrentLinkedQueue<>();
+
+            Runnable backgroundFlushRunnable = new Runnable()
+            {
+                public void run()
+                {
+                    try {
+                        if (writerQueueLocalBuffer.get() == null){
+                            writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
+                        }
+                        ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
+                        int bufLength = 0;
+                        int maxBufLength = mqConfig.minBufLength;
+                        int bufNum = 0;
+                        int maxBufNum = mqConfig.minBufNum;
+                        boolean continueMerge = true;
+                        Writer[] batchWriters = new Writer[maxBufNum];
+
+                        while (true)
+                        {
+                            bufLength = 0;
+                            bufNum = 0;
+                            continueMerge = true;
+                            while (writerConcurrentQueue.isEmpty()){
+                                log.debug("the queue is empty !");
+                                LockSupport.park();
+                            }
+                            log.debug("wake up and the queue is not empty");
+
+                            int dataLength = 0;
+                            short metadataLength = Short.BYTES;
+                            int writeLength = 0;
+                            while ( continueMerge ){
+                                Writer w = writerConcurrentQueue.poll();
+                                dataLength = w.data.remaining();
+                                writeLength = dataLength  + metadataLength;
+                                w.position = bufLength;
+                                batchWriters[bufNum] = w;
+
+                                bufLength += writeLength;
+                                bufNum += 1;
+                                if (bufNum >= maxBufNum){
+                                    continueMerge = false;
+                                    if (mqConfig.useStats){
+                                        writeStat.incExceedBufNumCount();
+                                    }
+                                }
+                                if (bufLength >= maxBufLength){
+                                    continueMerge = false;
+                                    if (mqConfig.useStats){
+                                        writeStat.incExceedBufLengthCount();
+                                    }
+                                }
+                                if (writerConcurrentQueue.isEmpty()){
+                                    continueMerge = false;
+                                    if (mqConfig.useStats){
+                                        writeStat.incEmptyQueueCount();
+                                    }
+                                }
+                            }
+                            if (mqConfig.useStats){
+                                writeStat.addSample(bufLength);
+                            }
+                            long writePosition = curPosition;
+                            bufLength = bufLength + (4096 - bufLength % 4096);
+                            //  对齐到4K
+                            // assert (curPosition % 4096 == 0);
+                            curPosition += bufLength;
+                            log.debug("need to flush!");
+                            writerBuffer.clear();
+                            for (int i = 0; i < bufNum; i++){
+                                batchWriters[i].position += writePosition;
+                                writerBuffer.putShort((short)batchWriters[i].data.remaining());
+                                writerBuffer.put(batchWriters[i].data);
+                            }
+                            writerBuffer.flip();
+                            // writerBuffer.limit(bufLength);
+                            dataFileChannel.write(writerBuffer, writePosition);
+                            dataFileChannel.force(true);
+                            // trueWriteEndTime = System.nanoTime();
+                            log.debug("flush ok!");
+                            log.debug("bufNum : " + bufNum);
+                            for (int i = 0; i < bufNum; i++){
+                                batchWriters[i].done = 1;
+                                LockSupport.unpark(batchWriters[i].currentThread);
+                                log.debug("wake up the thread : " + batchWriters[i].currentThread);
+                            }
+                        }
+                    } catch (IOException ie){
+                        ie.printStackTrace();
+                    }
+                }
+            };
+            backgroundFlushThread = new Thread(backgroundFlushRunnable);
+            backgroundFlushThread.start();
         }
 
         // public long allocate(long size) {
@@ -741,6 +851,23 @@ public class Test1MessageQueue extends MessageQueue {
         // ie.printStackTrace();
         // }
         // }
+        public long asyncSeqWritePushQueueHeapBatchBuffer(ByteBuffer data){
+            Writer w = new Writer(data, Thread.currentThread());
+            // only for debug            
+            // fileLock.lock();
+            // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
+            // fileLock.unlock();
+            writerConcurrentQueue.add(w);
+            LockSupport.unpark(backgroundFlushThread);
+            while (w.done != 1){
+                log.debug("waiting : " + Thread.currentThread());
+                LockSupport.park(w.currentThread);
+                log.debug("w.done : " + w.done);
+            }
+            return w.position;
+        }
+ 
+ 
 
         public Long syncSeqWrite(ByteBuffer data) {
             fileLock.lock();
@@ -2554,7 +2681,9 @@ public class Test1MessageQueue extends MessageQueue {
             case 10:
                 position = df.syncSeqWritePushQueueMapped(data);
                 break;
- 
+            case 11:
+                position = df.asyncSeqWritePushQueueHeapBatchBuffer(data);
+                break;
             default:
                 position = df.syncSeqWrite(data);
                 break;
