@@ -58,6 +58,9 @@ public class SSDqueue{
 
     TestStat testStat;
 
+    AtomicLong hitHotCount = new AtomicLong(0L);
+    AtomicLong totalReadCount = new AtomicLong(0L);
+
     public SSDqueue(String dirPath){
         
         this.numOfDataFileChannels = 4;
@@ -71,7 +74,7 @@ public class SSDqueue{
                 // recover
                 // 读盘，建表 
                 logger.info("reover");
-                RECOVER = true;
+//                RECOVER = true; // TODO: 得分需要取消此行注释
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 this.mqMeta = new MetaTopicQueue(this.metaFileChannel);
 
@@ -167,11 +170,13 @@ public class SSDqueue{
             testStat.getRangeStart();
             DataMeta dataMeta = qTopicQueueDataMap.get(key);
             if(dataMeta == null) return result;
-           
+
+            totalReadCount.incrementAndGet();
             if(!RECOVER && hotDataMap.get(key).offset == offset){
                 byte[] array = hotDataMap.get(key).data;
                 ByteBuffer tmp = ByteBuffer.wrap(array);
                 result.put(0, tmp);
+                hitHotCount.incrementAndGet();
             }else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data resData = new Data(dataSpaces[fcId], dataMeta);
@@ -723,10 +728,13 @@ public class SSDqueue{
                     curWriteBandwidth, thisElapsedTimeS, curAppendThroughput, curAppendLatency, curGetRangeThroughput,
                     curGetRangeLatency);
 
+            String hitRateStr = String.format("Hit rate = %d / %d = %.3f",
+                    hitHotCount.get(),totalReadCount.get(),(double)(hitHotCount.get())/totalReadCount.get());
             logger.info("appendStat   :"+appendStat);
             logger.info("getRangeStat :"+getRangeStat);
             logger.info("csvStat      :"+csvStat);
             logger.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
+            logger.info(hitRateStr);
 
             // report write stat
              for (int i = 0; i < dataSpaces.length; i++){
