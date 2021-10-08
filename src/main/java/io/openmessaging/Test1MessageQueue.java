@@ -142,7 +142,7 @@ public class Test1MessageQueue extends MessageQueue {
         int minBufLength = 52*1024;
         int timeOutMS = 8;
         boolean fairLock = true;
-        int writeMethod = 10; 
+        int writeMethod = 8; 
  
 
         // version just for test
@@ -684,10 +684,10 @@ public class Test1MessageQueue extends MessageQueue {
                 // FIXME: resource leak ??
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
                 dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
-                dataFileChannel.force(true);
                 curPosition = (1*1024L+512)*1024L*1024L;
                 dataFileMappedBuffer = dataFileChannel.map(FileChannel.MapMode.READ_WRITE, 0, (1*1024L+512)*1024L*1024L);
                 curMappedPosition = 0L;
+                dataFileChannel.force(true);
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
