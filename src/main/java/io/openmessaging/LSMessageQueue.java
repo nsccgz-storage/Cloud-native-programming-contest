@@ -65,6 +65,7 @@ public class LSMessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(LSMessageQueue.class);
     public class MQConfig {
         Level logLevel = Level.INFO;
+        // Level logLevel = Level.DEBUG;
         boolean useStats = true;
         int writeMethod = 12;
         int numOfDataFiles = 4;
@@ -87,6 +88,10 @@ public class LSMessageQueue extends MessageQueue {
             offset2position = new ArrayList<>(512);
             df = dataFile;
         }
+        MQQueue(){
+            maxOffset = 0L;
+            offset2position = new ArrayList<>(512);
+        }
 
     }
 
@@ -103,6 +108,7 @@ public class LSMessageQueue extends MessageQueue {
             df = dataFile;
         }
 
+
     }
 
     MQConfig mqConfig;
@@ -116,53 +122,146 @@ public class LSMessageQueue extends MessageQueue {
         init(dbDirPath);
 
     }
-    public void init(String dbDirPath){
 
-        topic2object = new ConcurrentHashMap<String, MQTopic>();
-        String metadataFileName = dbDirPath + "/meta";
-    
-        Boolean crash = false;
-        // whether the MQ is recover from existed file/db ?
-        File metadataFile = new File(metadataFileName);
-        if (metadataFile.exists() && !metadataFile.isDirectory()) {
-            crash = true;
-        }
-        // init datafile
-        numOfDataFiles = mqConfig.numOfDataFiles;
+    public void init(String dbDirPath) {
+        try {
+            log.setLevel(mqConfig.logLevel);
 
-        if (crash){
-            log.debug("recover !!");
-        } else {
-            try {
-                log.debug("create data files");
-                dataFiles = new DataFile[numOfDataFiles];                
-                for (int i = 0; i < numOfDataFiles; i++) {
-                    String dataFileName = dbDirPath + "/db" + i;
-                    log.info("Initializing datafile: " + dataFileName);
-                    dataFiles[i] = new DataFile(dataFileName);
-                }
+            topic2object = new ConcurrentHashMap<String, MQTopic>();
+            String metadataFileName = dbDirPath + "/meta";
 
-                log.info("create metadata file");
-                metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
-            } catch (IOException ie){
-                ie.printStackTrace();
+            Boolean crash = false;
+            // whether the MQ is recover from existed file/db ?
+            File metadataFile = new File(metadataFileName);
+            if (metadataFile.exists() && !metadataFile.isDirectory()) {
+                crash = true;
             }
+            // init datafile
+            numOfDataFiles = mqConfig.numOfDataFiles;
+            log.debug("create data files");
+            dataFiles = new DataFile[numOfDataFiles];
+            for (int i = 0; i < numOfDataFiles; i++) {
+                String dataFileName = dbDirPath + "/db" + i;
+                log.info("Initializing datafile: " + dataFileName);
+                dataFiles[i] = new DataFile(dataFileName);
+            }
+
+            log.info("Initializing metadata file");
+            metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
+            if (crash) {
+                log.info("recover !!");
+                recover();
+            }
+            localThreadId = new ThreadLocal<>();
+            numOfThreads = new AtomicInteger();
+            numOfThreads.set(0);
+            numOfTopics = new AtomicInteger();
+            numOfTopics.set(1);
+
+            if (mqConfig.useStats) {
+                testStat = new TestStat(dataFiles);
+            }
+
+        } catch (IOException ie) {
+            ie.printStackTrace();
         }
-
-        localThreadId = new ThreadLocal<>();
-        numOfThreads = new AtomicInteger();
-        numOfThreads.set(0);
-        numOfTopics = new AtomicInteger();
-        numOfTopics.set(1);
-
-
-        if (mqConfig.useStats){
-            testStat = new TestStat(dataFiles);
-        }
-
 
         log.info("init ok!");
     }
+
+    public void recover(){
+        try {
+            // topic2object
+            HashMap<Short, String> id2topic = new HashMap<>();
+            {
+                // TODO: read metadata to get this mapping
+                ByteBuffer strBuffer = ByteBuffer.allocate(128);
+                strBuffer.clear();
+                int ret = 0;
+                short topicId = 1;
+                while ((ret = metadataFileChannel.read(strBuffer)) != -1){
+                    log.debug("ret : " + ret);
+                    log.debug(strBuffer);
+                    strBuffer.flip();
+                    log.debug(strBuffer);
+                    int strLength = strBuffer.getInt();
+                    log.debug("strLength :"+strLength);
+                    byte[] strBytes = new byte[strLength];
+                    strBuffer.get(strBytes);
+                    String topic = new String(strBytes);
+                    id2topic.put(topicId, topic);
+                    topicId += 1;
+                    log.debug("recover topic : "+topic);
+                    strBuffer.clear();
+                }
+            }
+            
+
+            // topicId -> topic
+
+            ByteBuffer bufMetadata = ByteBuffer.allocate(8);
+            ByteBuffer msgMetadata = ByteBuffer.allocate(8);
+            for (int i = 0; i < numOfDataFiles; i++){
+                long curPosition = 0L;
+                FileChannel fc = dataFiles[i].dataFileChannel;
+                int ret = 0;
+                while ((ret = fc.read(bufMetadata, curPosition)) != -1){
+                    bufMetadata.flip();
+                    int bufLength = bufMetadata.getInt();
+                    int bufNum = bufMetadata.getInt();
+                    log.debug("bufLength : "+bufLength);
+                    log.debug("bufNum : "+bufNum);
+                    long bufPosition = curPosition+8;
+                    for (int k = 0; k < bufNum; k++){
+                        msgMetadata.clear();
+                        fc.read(msgMetadata, bufPosition);
+                        msgMetadata.flip();
+                        short topicId = msgMetadata.getShort();
+                        int queueId = msgMetadata.getInt();
+                        short length = msgMetadata.getShort();
+                        String topic = id2topic.get(topicId);
+                        replayAppend(i, topicId, topic, queueId, bufPosition);
+                        bufPosition += 8+length;
+                    }
+                    curPosition += bufLength;
+                    bufMetadata.clear();
+                }
+            }
+
+
+        } catch (IOException ie) {
+            ie.printStackTrace();
+        }
+
+
+    }
+
+    public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position) {
+        log.debug("append : " + topic + "," + queueId + "," + position);
+        MQTopic mqTopic;
+        MQQueue q;
+        mqTopic = topic2object.get(topic);
+        if (mqTopic == null) {
+            // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+            // mqTopic = new MQTopic(topic, dataFileId);
+            mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
+            topic2object.put(topic, mqTopic);
+        }
+
+        q = mqTopic.id2queue.get(queueId);
+        if (q == null){
+            // q = new MQQueue(dataFileId);
+            // q = new MQQueue(dataFiles[dataFileId]);
+            q = new MQQueue();
+            mqTopic.id2queue.put(queueId, q);
+        }
+
+        q.offset2position.add(position);
+        long ret = q.maxOffset;
+        q.maxOffset++;
+        return ret;
+    }
+
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
@@ -177,7 +276,7 @@ public class LSMessageQueue extends MessageQueue {
         if (mqTopic == null) {
             int threadId = updateThreadId();
             int dataFileId = threadId / 10; 
-            short topicId = getAndUpdateTopicId();
+            short topicId = getAndUpdateTopicId(topic);
             // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
             // mqTopic = new MQTopic(topic, dataFileId);
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
@@ -262,9 +361,21 @@ public class LSMessageQueue extends MessageQueue {
 
     private AtomicInteger numOfTopics;
 
-    public short getAndUpdateTopicId() {
-            int topicId = numOfTopics.getAndAdd(1);
+    public short getAndUpdateTopicId(String topic) {
+        int topicId = numOfTopics.getAndAdd(1);
+        try {
+            ByteBuffer buf = ByteBuffer.allocate(128);
+            buf.putInt(topic.length());
+            buf.put(topic.getBytes());
+            buf.position(0);
+            log.debug(buf);
+            metadataFileChannel.write(buf, (topicId-1)*128);
+            metadataFileChannel.force(true);
             log.info("get topic id : " + topicId );
+
+        } catch (IOException ie){
+            ie.printStackTrace();
+        }
         return (short)topicId;
     }
 
@@ -276,7 +387,8 @@ public class LSMessageQueue extends MessageQueue {
         public int writerQueueBufferCapacity;
         public Queue<Writer> writerConcurrentQueue;
 
-        public int globalMetadataLength;
+        public int bufMetadataLength; // 8B
+        public int globalMetadataLength; // 8B
 
 
         public WriteStat writeStat;
@@ -305,7 +417,7 @@ public class LSMessageQueue extends MessageQueue {
                 curPosition = 0L;
                 // FIXME: resource leak ??
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
-                dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
+                // dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
                 dataFileChannel.force(true);
                 writerQueueBufferCapacity = 128*1024;
                 commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
@@ -314,6 +426,7 @@ public class LSMessageQueue extends MessageQueue {
                 writerConcurrentQueue = new ConcurrentLinkedQueue<>();
 
                 globalMetadataLength = Short.BYTES + Integer.BYTES + Short.BYTES; // 8 byte
+                bufMetadataLength = Integer.BYTES + Integer.BYTES;
                 writeStat = new WriteStat();
                 log.debug("init data file : " + dataFileName + " ok !");
 
@@ -328,7 +441,7 @@ public class LSMessageQueue extends MessageQueue {
 
             ByteBuffer writerBuffer = commonWriteBuffer;
 
-            long position = 0L;
+            long position = bufMetadataLength;
             try {
                 Writer w = new Writer(topicIndex, queueId, data, Thread.currentThread());
                 writerConcurrentQueue.offer(w);
@@ -339,7 +452,7 @@ public class LSMessageQueue extends MessageQueue {
                     return w.position;
                 }
                 
-                int bufLength = 0;
+                int bufLength = bufMetadataLength;
                 int maxBufLength = mqConfig.maxBufLength;
                 int bufNum = 0;
                 int maxBufNum = mqConfig.maxBufNum;
@@ -351,7 +464,7 @@ public class LSMessageQueue extends MessageQueue {
                 int dataLength = 0;
                 int writeLength = 0;
 
-                position = curPosition;
+                position += curPosition;
                 while ( continueMerge ){
                     lastWriter = iter.next();
                     dataLength = lastWriter.length;
@@ -390,6 +503,8 @@ public class LSMessageQueue extends MessageQueue {
                 curPosition += bufLength;
                 {
                     writerBuffer.clear();
+                    writerBuffer.putInt(bufLength);
+                    writerBuffer.putInt(bufNum);
                     for (int i = 0; i < bufNum; i++){
                         Writer thisW = batchWriters[i];
                         writerBuffer.putShort(thisW.topicIndex);

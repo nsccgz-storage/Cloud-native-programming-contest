@@ -114,16 +114,16 @@ public class WYFTest {
 						log.error("offset error !");
 						System.exit(0);
 					}
-					// Map<Integer, ByteBuffer> result;
-					// result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-					// msg.buf.position(msg.oriPosition);
-					// if (result.get(0).compareTo(msg.checkBuf) != 0) {
-					// 	log.error(result.get(0));
-					// 	log.error(msg.checkBuf);
-					// 	log.error("data error !");
-					// 	barrier.await();
-					// 	System.exit(0);
-					// }
+					Map<Integer, ByteBuffer> result;
+					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+					msg.buf.position(msg.oriPosition);
+					if (result.get(0).compareTo(msg.checkBuf) != 0) {
+						log.error(result.get(0));
+						log.error(msg.checkBuf);
+						log.error("data error !");
+						barrier.await();
+						System.exit(0);
+					}
 	
 				}
 				barrier.await();
@@ -328,6 +328,156 @@ public class WYFTest {
 		}
 
 	}
+
+	public static void testRecover(String dbPath){
+		int numOfThreads = 4;
+		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
+		Vector<Message>[] msgss = new Vector[numOfThreads];
+
+		{
+			MessageQueue mq = new LSMessageQueue(dbPath);
+			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
+			long startTime = System.nanoTime();
+			for (int i = 0; i < numOfThreads; i++) {
+				final int threadId = i;
+				executor.execute(() -> {
+					String topicName = "topic" + threadId;
+					Vector<Message> msgs = new Vector<>();
+					for (long offset = 0; offset < 99; offset++) {
+						for (int queueId = 0; queueId < 99; queueId++) {
+							Message msg = new Message(topicName, queueId, offset);
+							msgs.add(msg);
+						}
+					}
+					msgss[threadId] = msgs;
+					threadRunBeforeRecover(threadId, mq, barrier, msgs);
+	
+				});
+			}
+			executor.shutdown();
+			try {
+				// Wait a while for existing tasks to terminate
+				while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+					System.out.println("Pool did not terminate, waiting ...");
+				}
+			} catch (InterruptedException ie) {
+				executor.shutdownNow();
+				ie.printStackTrace();
+			}
+			long elapsedTime = System.nanoTime() - startTime;
+			double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+			log.info("time: " + elapsedTimeS);
+		}
+		{
+			MessageQueue mq = new LSMessageQueue(dbPath);
+			// read
+			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
+			for (int i = 0; i < numOfThreads; i++) {
+				final int threadId = i;
+				executor.execute(() -> {
+					threadRunAfterRecover(threadId, mq, barrier, msgss[threadId]);
+	
+				});
+			}
+			executor.shutdown();
+			try {
+				// Wait a while for existing tasks to terminate
+				while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+					System.out.println("Pool did not terminate, waiting ...");
+				}
+			} catch (InterruptedException ie) {
+				executor.shutdownNow();
+				ie.printStackTrace();
+			}
+		}
+
+
+
+		log.info("pass the test, successfully !!!");
+	
+
+
+	}
+
+	public static void threadRunBeforeRecover(int threadId, MessageQueue mq, CyclicBarrier barrier, Vector<Message> msgs) {
+		try {
+			{
+				if (threadId == 0) {
+					log.info("init messages ok");
+				}
+				barrier.await();
+
+				if (threadId == 0) {
+					log.info("[]begin write!");
+				}
+				for (int i = 0; i < msgs.size(); i++) {
+					Message msg = msgs.get(i);
+					msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+					if (msg.getOffset != msg.offset) {
+						log.error("offset error !");
+						System.exit(0);
+					}
+					Map<Integer, ByteBuffer> result;
+					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+					msg.buf.position(msg.oriPosition);
+					if (result.get(0).compareTo(msg.checkBuf) != 0) {
+						log.error(result.get(0));
+						log.error(msg.checkBuf);
+						log.error("data error !");
+						barrier.await();
+						System.exit(0);
+					}
+
+
+				}
+				barrier.await();
+			}
+
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+
+	}
+
+	public static void threadRunAfterRecover(int threadId, MessageQueue mq, CyclicBarrier barrier, Vector<Message> msgs) {
+		try {
+			{
+				if (threadId == 0) {
+					log.info("init messages ok");
+				}
+				barrier.await();
+				if (threadId == 0){
+					log.info("begin read!");
+				}
+				Map<Integer, ByteBuffer> result;
+				for (int i = 0; i < msgs.size(); i++) {
+					Message msg = msgs.get(i);
+	
+					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+					msg.buf.position(msg.oriPosition);
+					if (result.get(0).compareTo(msg.checkBuf) != 0) {
+						log.error(result.get(0));
+						log.error(msg.checkBuf);
+
+						log.error("data error !");
+						System.exit(0);
+					}
+				}
+				barrier.await();
+			}
+
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+
+	}
+
+
+
 	public static void main(String[] args) {
 		init();
 		// log.setLevel(Level.DEBUG);
@@ -340,8 +490,9 @@ public class WYFTest {
 		String dbPath = args[0] ;
 
 		try {
-			writePerformanceTest(dbPath);
+			// writePerformanceTest(dbPath);
 			// testThreadPool(dbPath);
+			testRecover(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();
