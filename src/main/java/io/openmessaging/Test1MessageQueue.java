@@ -2931,7 +2931,8 @@ public class Test1MessageQueue extends MessageQueue {
         // DataFile df = dataFiles[mqTopic.dataFileId];
         // DataFile df = dataFiles[q.dataFileId];
         // DataFile df = dataFiles[dataFileId];
-        DataFile df = q.df;
+        // DataFile df = q.df;
+        DataFile df = mqTopic.df;
         
         long position = 0;
         switch (mqConfig.writeMethod) {
@@ -3057,7 +3058,8 @@ public class Test1MessageQueue extends MessageQueue {
         // DataFile df = dataFiles[mqTopic.dataFileId];
         // DataFile df = dataFiles[q.dataFileId];
         // DataFile df = dataFiles[dataFileId];
-        DataFile df = q.df;
+        // DataFile df = q.df;
+        DataFile df = mqTopic.df;
 
         for (int i = 0; i < fetchNum; i++) {
             pos = q.queueMap.get(offset + i);

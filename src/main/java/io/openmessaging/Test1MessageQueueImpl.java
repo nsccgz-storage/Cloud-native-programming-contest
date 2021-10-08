@@ -50,6 +50,7 @@ public class Test1MessageQueueImpl extends MessageQueue {
     public void init(String dirPath){
         // ssdQueue = new SSDqueue(dirPath);
         mq = new Test1MessageQueue(dirPath);
+        System.gc();
     }
 
 
