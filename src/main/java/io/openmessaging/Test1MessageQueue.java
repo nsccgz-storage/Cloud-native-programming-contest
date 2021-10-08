@@ -687,6 +687,7 @@ public class Test1MessageQueue extends MessageQueue {
 
 
         public ThreadLocal<Writer[]> localBatchWriters;
+        public ByteBuffer commonWriteBuffer;
 
         public WriteStat writeStat;
 
@@ -758,6 +759,8 @@ public class Test1MessageQueue extends MessageQueue {
 
             writerQueueBufferCapacity = 128*1024;
             writerQueueLocalBuffer = new ThreadLocal<>();
+            commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
+            commonWriteBuffer.clear();
 
 
             writerQueueLocalDirectBuffer = new ThreadLocal<>();
@@ -956,8 +959,8 @@ public class Test1MessageQueue extends MessageQueue {
             };
 
             // backgroundFlushThread = new Thread(backgroundFlushRunnable);
-            backgroundFlushThread = new Thread(backgroundPriorityFlushRunnable);
-            backgroundFlushThread.start();
+            // backgroundFlushThread = new Thread(backgroundPriorityFlushRunnable);
+            // backgroundFlushThread.start();
         }
 
         // public long allocate(long size) {
@@ -2089,11 +2092,11 @@ public class Test1MessageQueue extends MessageQueue {
         }
 
         public long syncSeqWritePushConcurrentQueueHeapBatchBuffer(ByteBuffer data){
-            if (writerQueueLocalBuffer.get() == null){
-                writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
-            }
+            // if (writerQueueLocalBuffer.get() == null){
+            //     writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
+            // }
 
-            ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
+            ByteBuffer writerBuffer = commonWriteBuffer;
 
             long position = 0L;
             try {
@@ -2179,15 +2182,13 @@ public class Test1MessageQueue extends MessageQueue {
                 {
                     // log.debug("need to flush, unlock !");
                     // trueWriteStartTime = System.nanoTime();
-                    writerBuffer.position(0);
-                    writerBuffer.limit(writerBuffer.capacity());
+                    writerBuffer.clear();
                     for (int i = 0; i < bufNum; i++){
                         // writerBuffer.putInt(batchWriters[i].data.remaining());
                         writerBuffer.putShort((short)batchWriters[i].data.remaining());
                         writerBuffer.put(batchWriters[i].data);
                     }
-                    writerBuffer.position(0);
-                    writerBuffer.limit(bufLength);
+                    writerBuffer.flip();
                     dataFileChannel.write(writerBuffer, writePosition);
                     dataFileChannel.force(true);
                     // trueWriteEndTime = System.nanoTime();
@@ -2214,7 +2215,7 @@ public class Test1MessageQueue extends MessageQueue {
             } catch (IOException ie) {
                 ie.printStackTrace();
             } finally {
-                long endTime = System.nanoTime();
+                // long endTime = System.nanoTime();
                 // log.info("latency before get lock (ms) : " + (double)(beforeGetLockTime - startTime)/(1000*1000) );
                 // log.info("get lock then add queue (ms) : " + (double)(addQueueTime - getLockTime)/(1000*1000) );
                 // log.info("latency in write (ns) : " + (double)(endTime-startTime)/(1000*1000) );
