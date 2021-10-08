@@ -154,11 +154,23 @@ public class LSMessageQueue extends MessageQueue {
         numOfThreads.set(0);
         numOfTopics = new AtomicInteger();
         numOfTopics.set(1);
+
+
+        if (mqConfig.useStats){
+            testStat = new TestStat(dataFiles);
+        }
+
+
         log.info("init ok!");
     }
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
+        log.debug("append : "+topic+","+queueId + data);
+        if (mqConfig.useStats){
+            testStat.appendStart();
+            testStat.appendUpdateStat(topic, queueId, data);
+        }
         MQTopic mqTopic;
         MQQueue q;
         mqTopic = topic2object.get(topic);
@@ -193,6 +205,11 @@ public class LSMessageQueue extends MessageQueue {
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
+        log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
+        if (mqConfig.useStats){
+            testStat.getRangeStart();
+            testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
+        }
         Map<Integer, ByteBuffer> ret = new HashMap<>();
         MQTopic mqTopic;
         MQQueue q;
@@ -495,5 +512,387 @@ public class LSMessageQueue extends MessageQueue {
 
     }
 
+    private TestStat testStat;
+    private class TestStat {
+        // report throughput per second
+        ThreadLocal<Integer> threadId;
+        AtomicInteger numOfThreads;
+        Long startTime;
+        Long endTime;
+        Long opCount;
+        AtomicBoolean reported;
+        int[] oldTotalWriteBucketCount;
+        MemoryUsage memoryUsage;
+
+        private class ThreadStat {
+            Long appendStartTime;
+            Long appendEndTime;
+            int appendCount;
+            Long getRangeStartTime;
+            Long getRangeEndTime;
+            int getRangeCount;
+            int hitHotDataCount;
+            int hotDataAllocCount;
+            Long writeBytes;
+            public int[] bucketBound;
+            public int[] bucketCount;
+
+            ThreadStat() {
+                appendStartTime = 0L;
+                appendEndTime = 0L;
+                appendCount = 0;
+                getRangeStartTime = 0L;
+                getRangeEndTime = 0L;
+                getRangeCount = 0;
+                writeBytes = 0L;
+                hitHotDataCount = 0;
+                hotDataAllocCount = 0;
+                reported = new AtomicBoolean();
+                reported.set(false);
+
+                bucketBound = new int[19];
+                bucketBound[0] = 100;
+                bucketBound[1] = 512;
+                for (int i = 1; i <= 17; i++){
+                    bucketBound[i+1] = i*1024;
+                }
+                bucketCount = new int[bucketBound.length-1];
+                for (int i = 0; i < bucketCount.length; i++){
+                    bucketCount[i] = 0;
+                }
+                MemoryMXBean memory = ManagementFactory.getMemoryMXBean();
+                memoryUsage = memory.getHeapMemoryUsage();
+            }
+
+            public ThreadStat clone() {
+                ThreadStat ret = new ThreadStat();
+                ret.appendStartTime = this.appendStartTime;
+                ret.appendEndTime = this.appendEndTime;
+                ret.appendCount = this.appendCount;
+                ret.getRangeStartTime = this.getRangeStartTime;
+                ret.getRangeEndTime = this.getRangeEndTime;
+                ret.getRangeCount = this.getRangeCount;
+                ret.writeBytes = this.writeBytes;
+                ret.bucketBound = this.bucketBound.clone();
+                ret.bucketCount = this.bucketCount.clone();
+                return ret;
+            }
+            public void addSample(int len){
+                for (int i = 0; i < bucketCount.length; i++){
+                    if (len < bucketBound[i+1]){
+                        bucketCount[i]++;
+                        break;
+                    }
+                }
+            }
+        }
+
+        ThreadStat[] oldStats;
+        Long oldEndTime;
+        ThreadStat[] stats;
+
+        DataFile[] myDataFiles;
+        DataFile.WriteStat[] oldWriteStats;
+
+        // ThreadLocal< HashMap<Integer, Long> >
+        // report operation per second
+        TestStat(DataFile[] dataFiles) {
+            threadId = new ThreadLocal<>();
+            numOfThreads = new AtomicInteger();
+            numOfThreads.set(0);
+            stats = new ThreadStat[100];
+            for (int i = 0; i < 100; i++) {
+                stats[i] = new ThreadStat();
+            }
+            startTime = 0L;
+            endTime = 0L;
+            oldEndTime = 0L;
+            opCount = 0L;
+            myDataFiles = dataFiles;
+            oldWriteStats = new DataFile.WriteStat[myDataFiles.length];
+        }
+
+        void updateThreadId() {
+            if (threadId.get() == null) {
+                int thisNumOfThread = numOfThreads.getAndAdd(1);
+                threadId.set(thisNumOfThread);
+                log.info("init thread id : " + thisNumOfThread);
+            }
+        }
+
+        void appendStart() {
+            updateThreadId();
+            int id = threadId.get();
+            if (stats[id].appendStartTime == 0L) {
+                stats[id].appendStartTime = System.nanoTime();
+                // log.info("init append time");
+            }
+        }
+
+        void getRangeStart() {
+            updateThreadId();
+            int id = threadId.get();
+            if (stats[id].getRangeStartTime == 0L) {
+                stats[id].getRangeStartTime = System.nanoTime();
+                // log.info("init getRange time");
+            }
+        }
+
+        void appendUpdateStat(String topic, int queueId, ByteBuffer data) {
+            int id = threadId.get();
+            stats[id].addSample(data.remaining());
+            stats[id].appendEndTime = System.nanoTime();
+            stats[id].appendCount += 1;
+            stats[id].writeBytes += data.remaining();
+            stats[id].writeBytes += Integer.BYTES; // metadata
+            update();
+        }
+
+        void getRangeUpdateStat(String topic, int queueId, long offset, int fetchNum) {
+            int id = threadId.get();
+            stats[id].getRangeEndTime = System.nanoTime();
+            stats[id].getRangeCount += 1;
+            update();
+        }
+
+        void hitHotData(String topic, int queueId){
+            int id = threadId.get();
+            stats[id].hitHotDataCount += 1;
+        }
+
+
+        synchronized void update() {
+            if (reported.get() == true){
+                return;
+            }
+            if (startTime == 0L) {
+                startTime = System.nanoTime();
+                endTime = System.nanoTime();
+            }
+            opCount += 1;
+            if (opCount % 10 == 0){
+                return ;
+            }
+            Long curTime = System.nanoTime();
+            if (curTime - endTime > 5L * 1000L * 1000L * 1000L) {
+                endTime = curTime;
+                reported.set(true);
+                report();
+                reported.set(false);
+            }
+        }
+
+        synchronized void report() {
+            // throughput, iops for append/getRange
+            // writeBandwidth
+            int getNumOfThreads = numOfThreads.get();
+            double[] appendTpPerThread = new double[getNumOfThreads];
+            double[] getRangeTpPerThread = new double[getNumOfThreads];
+            double[] appendLatencyPerThread = new double[getNumOfThreads];
+            double[] getRangeLatencyPerThread = new double[getNumOfThreads];
+            double[] bandwidthPerThread = new double[getNumOfThreads];
+
+
+            double appendThroughput = 0;
+            double getRangeThroughput = 0;
+            double appendLatency = 0;
+            double getRangeLatency = 0;
+            double writeBandwidth = 0; // MiB/s
+
+            // total
+
+            double elapsedTimeS = (endTime - startTime) / (double) (1000 * 1000 * 1000);
+            for (int i = 0; i < getNumOfThreads; i++) {
+                double appendElapsedTimeS = (stats[i].appendEndTime - stats[i].appendStartTime)
+                        / ((double) (1000 * 1000 * 1000));
+                double appendElapsedTimeMS = (stats[i].appendEndTime - stats[i].appendStartTime)
+                        / ((double) (1000 * 1000));
+                appendTpPerThread[i] = stats[i].appendCount / appendElapsedTimeS;
+                appendLatencyPerThread[i] = appendElapsedTimeMS / stats[i].appendCount;
+                double getRangeElapsedTimeS = (stats[i].getRangeEndTime - stats[i].getRangeStartTime)
+                        / ((double) (1000 * 1000 * 1000));
+                double getRangeElapsedTimeMS = (stats[i].getRangeEndTime - stats[i].getRangeStartTime)
+                        / ((double) (1000 * 1000));
+                getRangeTpPerThread[i] = stats[i].getRangeCount / getRangeElapsedTimeS;
+                getRangeLatencyPerThread[i] = getRangeElapsedTimeMS / stats[i].getRangeCount;
+                double dataSize = stats[i].writeBytes / (double) (1024 * 1024);
+                bandwidthPerThread[i] = dataSize / elapsedTimeS;
+            }
+
+            for (int i = 0; i < getNumOfThreads; i++) {
+                appendThroughput += appendTpPerThread[i];
+                getRangeThroughput += getRangeTpPerThread[i];
+                appendLatency += appendLatencyPerThread[i];
+                getRangeLatency += getRangeLatencyPerThread[i];
+                writeBandwidth += bandwidthPerThread[i];
+            }
+            // appendThroughput /= getNumOfThreads;
+            // getRangeThroughput /= getNumOfThreads;
+            appendLatency /= getNumOfThreads;
+            getRangeLatency /= getNumOfThreads;
+            // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
+            
+            // 报告总的写入大小分布
+            int[] totalWriteBucketCount = new int[100];
+            int[] myBucketBound = stats[0].bucketBound;
+            for (int i = 0; i < 100; i++){
+                totalWriteBucketCount[i] = 0;
+            }
+            int numOfBucket = stats[0].bucketCount.length;
+            for (int i = 0; i < getNumOfThreads; i++){
+                for (int j = 0; j < numOfBucket; j++){
+                    totalWriteBucketCount[j] += stats[i].bucketCount[j];
+                }
+            }
+
+            String totalWriteBucketReport = "";
+            totalWriteBucketReport += myBucketBound[0] + " < ";
+            for (int i = 0; i < numOfBucket; i++){
+                totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
+                totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
+            }
+            log.info("[Total Append Data Dist]" + totalWriteBucketReport);
+
+            if (oldTotalWriteBucketCount != null) {
+                int[] curWriteBucketCount = new int[100];
+                for (int i = 0; i < numOfBucket; i++) {
+                    curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
+                }
+                String curWriteBucketReport = "";
+                curWriteBucketReport += myBucketBound[0] + " < ";
+                for (int i = 0; i < numOfBucket; i++) {
+                    curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
+                    curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
+                }
+
+                log.info("[Current Append Data Dist]" + curWriteBucketReport);
+
+            }
+
+            oldTotalWriteBucketCount = totalWriteBucketCount;
+
+            double curAppendThroughput = 0;
+            double curGetRangeThroughput = 0;
+            double curAppendLatency = 0;
+            double curGetRangeLatency = 0;
+            double curWriteBandwidth = 0; // MiB/s
+            double thisElapsedTimeS = 0;
+
+            int[] curAppendCount = new int[getNumOfThreads];
+            int[] curGetRangeCount = new int[getNumOfThreads];
+
+            // current
+            // get the stat for this period
+            if (oldStats != null) {
+                thisElapsedTimeS = (endTime - oldEndTime) / (double) (1000 * 1000 * 1000);
+                for (int i = 0; i < getNumOfThreads; i++) {
+                    double appendElapsedTimeMS = (stats[i].appendEndTime - oldStats[i].appendEndTime)
+                            / ((double) (1000 * 1000));
+                    double appendElapsedTimeS = (stats[i].appendEndTime - oldStats[i].appendEndTime)
+                            / ((double) (1000 * 1000 * 1000));
+                    double appendCount = stats[i].appendCount - oldStats[i].appendCount;
+                    curAppendCount[i] = stats[i].appendCount - oldStats[i].appendCount;
+                    appendTpPerThread[i] = (appendCount) / appendElapsedTimeS;
+                    appendLatencyPerThread[i] = appendElapsedTimeMS / appendCount;
+                    double getRangeElapsedTimeMS = (stats[i].getRangeEndTime - oldStats[i].getRangeEndTime)
+                            / ((double) (1000 * 1000));
+                    double getRangeElapsedTimeS = (stats[i].getRangeEndTime - oldStats[i].getRangeEndTime)
+                            / ((double) (1000 * 1000 * 1000));
+                    double getRangeCount = stats[i].getRangeCount - oldStats[i].getRangeCount;
+                    curGetRangeCount[i] = stats[i].getRangeCount - oldStats[i].getRangeCount;
+                    getRangeTpPerThread[i] = getRangeCount / getRangeElapsedTimeS;
+                    getRangeLatencyPerThread[i] = getRangeElapsedTimeMS / getRangeCount;
+                    double dataSize = (stats[i].writeBytes - oldStats[i].writeBytes) / (double) (1024 * 1024);
+                    bandwidthPerThread[i] = dataSize / thisElapsedTimeS;
+                }
+                for (int i = 0; i < getNumOfThreads; i++) {
+                    curAppendThroughput += appendTpPerThread[i];
+                    curGetRangeThroughput += getRangeTpPerThread[i];
+                    curAppendLatency += appendLatencyPerThread[i];
+                    curGetRangeLatency += getRangeLatencyPerThread[i];
+                    curWriteBandwidth += bandwidthPerThread[i];
+                }
+                // curAppendThroughput /= getNumOfThreads;
+                // curGetRangeThroughput /= getNumOfThreads;
+                curAppendLatency /= getNumOfThreads;
+                curGetRangeLatency /= getNumOfThreads;
+            }
+            
+            String appendStat = "";
+            String getRangeStat = "";
+            for (int i = 0; i < getNumOfThreads; i++){
+                appendStat += String.format("%d,", curAppendCount[i]);
+                getRangeStat += String.format("%d,", curGetRangeCount[i]);
+            }
+            String csvStat = String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+                    writeBandwidth, elapsedTimeS, appendThroughput, appendLatency, getRangeThroughput, getRangeLatency,
+                    curWriteBandwidth, thisElapsedTimeS, curAppendThroughput, curAppendLatency, curGetRangeThroughput,
+                    curGetRangeLatency);
+
+            log.info("appendStat   :"+appendStat);
+            log.info("getRangeStat :"+getRangeStat);
+            log.info("csvStat      :"+csvStat);
+            log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
+
+            // report write stat
+            for (int i = 0; i < dataFiles.length; i++){
+                if (oldWriteStats[i] != null){
+                    // get total write stat and cur write stat
+                    
+                    DataFile.WriteStat curWriteStat = dataFiles[i].writeStat;
+                    DataFile.WriteStat oldWriteStat = oldWriteStats[i];
+                    String writeReport = "";
+                    writeReport += "[Total ] File " + i;
+                    writeReport += " " + "emptyQueueCount : " + curWriteStat.emptyQueueCount;
+                    writeReport += " " + "exceedBufNumCount : " + curWriteStat.exceedBufNumCount;
+                    writeReport += " " + "exceedBufLengthCount : " + curWriteStat.exceedBufLengthCount;
+                    log.info(writeReport);
+                    log.info("Write Size Dist : "+curWriteStat.toString());
+
+                    // current
+
+                    oldWriteStat.emptyQueueCount = curWriteStat.emptyQueueCount - oldWriteStat.emptyQueueCount;
+                    oldWriteStat.exceedBufLengthCount = curWriteStat.exceedBufLengthCount - oldWriteStat.exceedBufLengthCount;
+                    oldWriteStat.exceedBufNumCount = curWriteStat.exceedBufNumCount - oldWriteStat.exceedBufNumCount;
+                    for (int j = 0; j < oldWriteStat.bucketCount.length; j++){
+                        oldWriteStat.bucketCount[j] = curWriteStat.bucketCount[j] - oldWriteStat.bucketCount[j];
+                    }
+
+                    curWriteStat = oldWriteStat;
+                    writeReport = "";
+                    writeReport += "[Current ] File " + i;
+                    writeReport += " " + "emptyQueueCount : " + curWriteStat.emptyQueueCount;
+                    writeReport += " " + "exceedBufNumCount : " + curWriteStat.exceedBufNumCount;
+                    writeReport += " " + "exceedBufLengthCount : " + curWriteStat.exceedBufLengthCount;
+                    log.info(writeReport);
+                    log.info("Write Size Dist : "+curWriteStat.toString());
+
+ 
+                }
+                oldWriteStats[i] = dataFiles[i].writeStat.clone();
+            }
+
+            // report hit hot data ratio
+            String hotDataReport = "";
+            for (int i = 0; i < getNumOfThreads; i++){
+                hotDataReport += String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount);
+            }
+            log.info("[hit hot data] : " + hotDataReport);
+
+
+
+
+            // log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
+
+            // deep copy
+            oldStats = stats.clone();
+            for (int i = 0; i < 100; i++) {
+                oldStats[i] = stats[i].clone();
+            }
+            oldEndTime = endTime;
+        }
+
+        // report topic stat per second
+    }
 
 }

@@ -49,8 +49,8 @@ rm -rf  ${PMDIR}/*
 
 ls -l ${DBDIR}
 
-mvn clean package assembly:single test
-#mvn clean package assembly:single -DskipTests
+#mvn clean package assembly:single test
+mvn clean package assembly:single -DskipTests
 
 
 # mvn exec:java -Dexec.mainClass="io.openmessaging.Test1" -Dexec.args="${DBDIR}" -Dexec.classpathScope=test  -e
