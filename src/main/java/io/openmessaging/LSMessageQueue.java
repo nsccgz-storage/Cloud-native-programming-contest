@@ -113,9 +113,10 @@ public class LSMessageQueue extends MessageQueue {
 
     LSMessageQueue(String dbDirPath){
         mqConfig = new MQConfig();
+        init(dbDirPath);
 
     }
-    public void init(String dbDirPath , MQConfig config){
+    public void init(String dbDirPath){
 
         topic2object = new ConcurrentHashMap<String, MQTopic>();
         String metadataFileName = dbDirPath + "/meta";
@@ -147,6 +148,7 @@ public class LSMessageQueue extends MessageQueue {
                 ie.printStackTrace();
             }
         }
+
         localThreadId = new ThreadLocal<>();
         numOfThreads = new AtomicInteger();
         numOfThreads.set(0);
@@ -248,9 +250,6 @@ public class LSMessageQueue extends MessageQueue {
             log.info("get topic id : " + topicId );
         return (short)topicId;
     }
-
-
-
 
 
     public class DataFile {

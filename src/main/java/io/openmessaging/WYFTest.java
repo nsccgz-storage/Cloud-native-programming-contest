@@ -261,7 +261,7 @@ public class WYFTest {
 		}
 	}
 	public static void writePerformanceTest(String dbPath){
-		MessageQueue mq = new SSDqueue(dbPath);
+		MessageQueue mq = new LSMessageQueue(dbPath);
 		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -340,8 +340,8 @@ public class WYFTest {
 		String dbPath = args[0] ;
 
 		try {
-			// writePerformanceTest(dbPath);
-			testThreadPool(dbPath);
+			writePerformanceTest(dbPath);
+			// testThreadPool(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();
