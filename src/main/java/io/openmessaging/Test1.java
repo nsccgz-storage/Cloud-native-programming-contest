@@ -68,7 +68,7 @@ public class Test1 {
 	public static void testOne() throws IOException{
 		//Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
 		//DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
-		SSDqueue mq = new SSDqueue("/mnt/ssd/wyk2");
+		SSDqueue2 mq = new SSDqueue2("/mnt/ssd/wyk2");
 		Vector<Message> msgs = generateOne();
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
