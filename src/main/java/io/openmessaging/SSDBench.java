@@ -174,6 +174,33 @@ public class SSDBench {
         }
         benchLock.unlock();
     }
+    public static void runStandardBench(String dbPath) {
+
+        benchLock.lock();
+        System.out.println("dbPathDir : " + dbPath);
+
+        log.info("type,thread,ioSize,bandwidth,iops,latency(us)");
+
+        log.info("test");
+        {
+            long totalBenchSize = 512L * 1024L * 1024L; // 1GiB
+            int[] ioSizes = {48 * 1024, 64 * 1024};
+            int[] numOfFiles = { 4 };
+
+            for (int i = 0; i < numOfFiles.length; i++) {
+                for (int j = 0; j < ioSizes.length; j++) {
+                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], false);
+                    benchFileChannelWriteMultiFile(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j], true);
+                    // benchFileChannelWriteMappedMultiFileUnsafe(dbPath, totalBenchSize, numOfFiles[i], ioSizes[j]);
+                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],ioSizes[j], false);
+                    // benchFileChannelWriteMappedMultiFile(dbPath, totalBenchSize, numOfFiles[i],ioSizes[j],true);
+
+                }
+            }
+        }
+        benchLock.unlock();
+    }
+
 
     public static void runBench1(String dbPath) {
 
