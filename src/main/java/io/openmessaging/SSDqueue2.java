@@ -124,14 +124,15 @@ public class SSDqueue2{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data writeData = new Data(dataSpaces[fcId]);
                 result = writeData.put(data);
-                mqMeta.put(key, writeData.getMetaOffset());      
 
+                mqMeta.put(key, writeData.getMetaOffset());
                 //////// 更新 DRAM map
                 ConcurrentHashMap<Long, Long> tmp2 = new ConcurrentHashMap<>();
                 tmp2.put(result, writeData.tail);
                 allDataOffsetMap.put(key, tmp2);
 
-                qTopicQueueDataMap.put(key, writeData.getMeta());
+                qTopicQueueDataMap.put(key, writeData.getMeta());            
+                mqMeta.force();
 
             }else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
@@ -186,7 +187,7 @@ public class SSDqueue2{
         private FileChannel metaFc;
         private AtomicLong META_FREE_OFFSET;
         private AtomicLong totalNum;
-        long keySize = 128;
+        long keySize = 64;
         
         long arrayStartOffset = Long.BYTES;
         
@@ -204,14 +205,16 @@ public class SSDqueue2{
                 e.printStackTrace();
             }
         }
-
+        public void force() throws IOException{
+            this.metaFc.force(true);
+        }
         MetaTopicQueue(FileChannel fc, long startOffset){
             this.metaFc = fc;
             META_FREE_OFFSET = new AtomicLong(startOffset);
             this.totalNum = new AtomicLong(0L);
             //arrayStartOffset = startOffset;
         }
-        public long put(String key, long offset) throws IOException{
+        synchronized public long put(String key, long offset) throws IOException{
             long res = META_FREE_OFFSET.getAndAdd( keySize + Long.BYTES);
 
             // TODO: 填充 key
@@ -231,12 +234,12 @@ public class SSDqueue2{
             long ret = totalNum.getAndIncrement();
 
             // 持久化 totalNum
-            buffer.clear();
+            buffer = ByteBuffer.allocate(Long.BYTES);
             buffer.putLong(totalNum.get());
             buffer.flip();
             metaFc.write(buffer, 0L);
 
-            metaFc.force(true);
+            //metaFc.force(true);
 
             return ret;
         }
@@ -252,13 +255,13 @@ public class SSDqueue2{
                     //TODO: handle exception
                     e.printStackTrace();
                 }
-                
                 buffer.flip();
                 long value = buffer.getLong();
                 byte[] bytes = new byte[(int) keySize];
                 buffer.get(bytes);
                 String key = new String(bytes).trim();
                 res.put(key, new DataMeta(value, value, -1, -1));
+                startOffset += keySize + Long.BYTES;
             }
             return res;
         }
