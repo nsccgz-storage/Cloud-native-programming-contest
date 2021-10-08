@@ -43,6 +43,7 @@ public class Test1MessageQueueImpl extends MessageQueue {
     }
 
     public Test1MessageQueueImpl(String dirPath){
+        SSDBench.runStandardBench(dirPath);
         init(dirPath);
     }
 

@@ -35,7 +35,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
 
 //        String dirPath = "/home/wangxr/桌面/pmem_test";
        String dirPath = "/essd";
-        SSDBench.runStandardBench(dirPath);
+        // SSDBench.runStandardBench(dirPath);
         // String dirPath = "/mnt/ssd/wxr";
         // ssdQueue = new SSDqueue(dirPath);
         mq = new Test1MessageQueueImpl(dirPath);
