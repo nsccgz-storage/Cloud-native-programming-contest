@@ -30,13 +30,13 @@ import org.apache.log4j.Logger;
 public class DefaultMessageQueueImpl extends MessageQueue {
     // Initialization
     
-    public SSDqueue2 ssdQueue;
+    public SSDqueue ssdQueue;
     public DefaultMessageQueueImpl(){
 
 //        String dirPath = "/home/wangxr/桌面/pmem_test";
        String dirPath = "/essd";
         // String dirPath = "/mnt/ssd/wxr";
-        ssdQueue = new SSDqueue2(dirPath);
+        ssdQueue = new SSDqueue(dirPath);
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
