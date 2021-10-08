@@ -58,8 +58,8 @@ public class SSDqueue{
 
     TestStat testStat;
 
-    AtomicLong hitHotCount = new AtomicLong(0L);
-    AtomicLong totalReadCount = new AtomicLong(0L);
+    AtomicLong hitHotCount = new AtomicLong(1L);
+    AtomicLong totalReadCount = new AtomicLong(1L);
 
     public SSDqueue(String dirPath){
         
