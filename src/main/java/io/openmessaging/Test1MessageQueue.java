@@ -2879,9 +2879,9 @@ public class Test1MessageQueue extends MessageQueue {
         MQQueue q;
         mqTopic = mqMap.get(topic);
         if (mqTopic == null) {
-            // int threadId = updateThreadId();
-            // int dataFileId = threadId / 10; //   0b11
-            int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+            int threadId = updateThreadId();
+            int dataFileId = threadId / 10; //   0b11
+            // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
             // mqTopic = new MQTopic(topic, dataFileId);
             mqTopic = new MQTopic(topic, dataFiles[dataFileId]);
             mqMap.put(topic, mqTopic);
