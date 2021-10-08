@@ -51,6 +51,7 @@ import java.util.Deque;
 import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
 
+// import org.jctools.queues.MpscArrayQueue;
 
 public class Test1MessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
@@ -744,6 +745,7 @@ public class Test1MessageQueue extends MessageQueue {
             writeStat = new WriteStat();
 
             writerConcurrentQueue = new ConcurrentLinkedQueue<>();
+            // writerConcurrentQueue = new MpscArrayQueue<>(50);
 
             Runnable backgroundFlushRunnable = new Runnable()
             {
@@ -1978,7 +1980,8 @@ public class Test1MessageQueue extends MessageQueue {
             try {
                 Writer w = new Writer(data, Thread.currentThread());
                 // log.debug("try to add a new writer to queue");
-                writerConcurrentQueue.add(w);
+                writerConcurrentQueue.offer(w);
+                // writerConcurrentQueue.add(w);
                 // log.debug(writerQueue);
                 // log.debug(writerQueue.getFirst());
                 // addQueueTime = System.nanoTime();
