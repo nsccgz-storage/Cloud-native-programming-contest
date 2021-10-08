@@ -79,12 +79,12 @@ public class LSMessageQueue extends MessageQueue {
 
     public class MQQueue {
         public Long maxOffset = 0L;
-        public LinkedList<Long> offset2position;
+        public ArrayList<Long> offset2position;
         public DataFile df;
 
         MQQueue(DataFile dataFile){
             maxOffset = 0L;
-            offset2position = new LinkedList<>();
+            offset2position = new ArrayList<>(512);
             df = dataFile;
         }
 
