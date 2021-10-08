@@ -58,6 +58,9 @@ public class SSDqueue{
 
     TestStat testStat;
 
+    AtomicLong hitHotCount = new AtomicLong(0L);
+    AtomicLong totalReadCount = new AtomicLong(0L);
+
     public SSDqueue(String dirPath){
         
         this.numOfDataFileChannels = 4;
@@ -71,7 +74,7 @@ public class SSDqueue{
                 // recover
                 // 读盘，建表 
                 logger.info("reover");
-                RECOVER = true;
+//                RECOVER = true; // 得分需取消注释此行
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 this.mqMeta = new MetaTopicQueue(this.metaFileChannel);
 
@@ -167,8 +170,10 @@ public class SSDqueue{
             testStat.getRangeStart();
             DataMeta dataMeta = qTopicQueueDataMap.get(key);
             if(dataMeta == null) return result;
-           
+
+            totalReadCount.incrementAndGet();
             if(!RECOVER && hotDataMap.get(key).offset == offset){
+                hitHotCount.incrementAndGet();
                 byte[] array = hotDataMap.get(key).data;
                 ByteBuffer tmp = ByteBuffer.wrap(array);
                 result.put(0, tmp);
@@ -723,10 +728,13 @@ public class SSDqueue{
                     curWriteBandwidth, thisElapsedTimeS, curAppendThroughput, curAppendLatency, curGetRangeThroughput,
                     curGetRangeLatency);
 
+            String hitHotStr = String.format("Hit hot rate: %d / %d = %.3f",
+                    hitHotCount.get(), totalReadCount.get(), ((double)hitHotCount.get())/totalReadCount.get());
             logger.info("appendStat   :"+appendStat);
             logger.info("getRangeStat :"+getRangeStat);
             logger.info("csvStat      :"+csvStat);
             logger.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
+            logger.info(hitHotStr);
 
             // report write stat
              for (int i = 0; i < dataSpaces.length; i++){
