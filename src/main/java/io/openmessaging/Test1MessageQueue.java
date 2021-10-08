@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -51,7 +52,9 @@ import java.util.Deque;
 import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
 
-// import org.jctools.queues.MpscArrayQueue;
+import java.util.Comparator;
+
+// import org.jctools.queues.MpmcArrayQueue;
 
 public class Test1MessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(Test1MessageQueue.class);
@@ -143,7 +146,7 @@ public class Test1MessageQueue extends MessageQueue {
     
         int numOfDataFiles = 4;
         int minBufNum = 6;
-        int minBufLength = 52*1024;
+        int minBufLength = 50*1024;
         int timeOutMS = 8;
         boolean fairLock = true;
         int writeMethod = 12; 
@@ -688,8 +691,27 @@ public class Test1MessageQueue extends MessageQueue {
         public WriteStat writeStat;
 
         public Queue<Writer> writerConcurrentQueue;
+        public Queue<Writer> writerConcurrentPriorityQueue;
         public Thread backgroundFlushThread;
         Object backgroundFlushNotify;
+
+
+
+        public class WriterComparator implements Comparator<Writer> {
+            @Override
+            public int compare(Writer x, Writer y) {
+                // Assume neither string is null. Real code should
+                // probably be more robust
+                // You could also just return x.length() - y.length(),
+                // which would be more efficient.
+
+                return x.data.remaining() - y.data.remaining();
+                // 小顶堆
+
+                // return y.data.remaining() - x.data.remaining();
+                // 大顶堆
+            }
+        }
 
         DataFile(String dataFileName) {
             // atomicCurPosition = new AtomicLong(0);
@@ -744,8 +766,10 @@ public class Test1MessageQueue extends MessageQueue {
 
             writeStat = new WriteStat();
 
+            WriterComparator comp = new WriterComparator();
             writerConcurrentQueue = new ConcurrentLinkedQueue<>();
-            // writerConcurrentQueue = new MpscArrayQueue<>(50);
+            // writerConcurrentQueue = new MpmcArrayQueue<>(50);
+            writerConcurrentPriorityQueue = new PriorityBlockingQueue<>(50, comp);
 
             Runnable backgroundFlushRunnable = new Runnable()
             {
@@ -838,7 +862,101 @@ public class Test1MessageQueue extends MessageQueue {
                     }
                 }
             };
-            backgroundFlushThread = new Thread(backgroundFlushRunnable);
+
+            Runnable backgroundPriorityFlushRunnable = new Runnable()
+            {
+                public void run()
+                {
+                    try {
+                        if (writerQueueLocalBuffer.get() == null){
+                            writerQueueLocalBuffer.set(ByteBuffer.allocate(writerQueueBufferCapacity));
+                        }
+                        ByteBuffer writerBuffer = writerQueueLocalBuffer.get();
+                        int bufLength = 0;
+                        int maxBufLength = mqConfig.minBufLength;
+                        int bufNum = 0;
+                        int maxBufNum = mqConfig.minBufNum;
+                        boolean continueMerge = true;
+                        Writer[] batchWriters = new Writer[maxBufNum];
+
+                        while (true)
+                        {
+                            bufLength = 0;
+                            bufNum = 0;
+                            continueMerge = true;
+                            while (writerConcurrentPriorityQueue.isEmpty()){
+                                log.debug("the queue is empty !");
+                                LockSupport.park();
+                            }
+                            log.debug("wake up and the queue is not empty");
+
+                            int dataLength = 0;
+                            short metadataLength = Short.BYTES;
+                            int writeLength = 0;
+                            while ( continueMerge ){
+                                Writer w = writerConcurrentPriorityQueue.poll();
+                                dataLength = w.data.remaining();
+                                writeLength = dataLength  + metadataLength;
+                                w.position = bufLength;
+                                batchWriters[bufNum] = w;
+
+                                bufLength += writeLength;
+                                bufNum += 1;
+                                if (bufNum >= maxBufNum){
+                                    continueMerge = false;
+                                    if (mqConfig.useStats){
+                                        writeStat.incExceedBufNumCount();
+                                    }
+                                }
+                                if (bufLength >= maxBufLength){
+                                    continueMerge = false;
+                                    if (mqConfig.useStats){
+                                        writeStat.incExceedBufLengthCount();
+                                    }
+                                }
+                                if (writerConcurrentPriorityQueue.isEmpty()){
+                                    continueMerge = false;
+                                    if (mqConfig.useStats){
+                                        writeStat.incEmptyQueueCount();
+                                    }
+                                }
+                            }
+                            if (mqConfig.useStats){
+                                writeStat.addSample(bufLength);
+                            }
+                            long writePosition = curPosition;
+                            bufLength = bufLength + (4096 - bufLength % 4096);
+                            //  对齐到4K
+                            // assert (curPosition % 4096 == 0);
+                            curPosition += bufLength;
+                            log.debug("need to flush!");
+                            writerBuffer.clear();
+                            for (int i = 0; i < bufNum; i++){
+                                batchWriters[i].position += writePosition;
+                                writerBuffer.putShort((short)batchWriters[i].data.remaining());
+                                writerBuffer.put(batchWriters[i].data);
+                            }
+                            writerBuffer.flip();
+                            // writerBuffer.limit(bufLength);
+                            dataFileChannel.write(writerBuffer, writePosition);
+                            dataFileChannel.force(true);
+                            // trueWriteEndTime = System.nanoTime();
+                            log.debug("flush ok!");
+                            log.debug("bufNum : " + bufNum);
+                            for (int i = 0; i < bufNum; i++){
+                                batchWriters[i].done = 1;
+                                LockSupport.unpark(batchWriters[i].currentThread);
+                                log.debug("wake up the thread : " + batchWriters[i].currentThread);
+                            }
+                        }
+                    } catch (IOException ie){
+                        ie.printStackTrace();
+                    }
+                }
+            };
+
+            // backgroundFlushThread = new Thread(backgroundFlushRunnable);
+            backgroundFlushThread = new Thread(backgroundPriorityFlushRunnable);
             backgroundFlushThread.start();
         }
 
@@ -859,7 +977,8 @@ public class Test1MessageQueue extends MessageQueue {
             // fileLock.lock();
             // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
             // fileLock.unlock();
-            writerConcurrentQueue.add(w);
+            writerConcurrentPriorityQueue.offer(w);
+            // writerConcurrentQueue.offer(w);
             LockSupport.unpark(backgroundFlushThread);
             while (w.done != 1){
                 log.debug("waiting : " + Thread.currentThread());
