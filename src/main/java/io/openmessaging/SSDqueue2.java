@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -50,7 +51,7 @@ public class SSDqueue2{
     ConcurrentHashMap<String,DataMeta> qTopicQueueDataMap;
     MetaTopicQueue mqMeta;
     private String markSpilt = "$@#";
-    ConcurrentHashMap<String, ConcurrentHashMap<Long,Long>> allDataOffsetMap; // 加速 getRange
+    ConcurrentHashMap<String, ConcurrentHashMap<Long,Long[]>> allDataOffsetMap; // 加速 getRange
     
     boolean RECOVER = false;
     ConcurrentHashMap<String, HotData> hotDataMap;
@@ -107,6 +108,7 @@ public class SSDqueue2{
     }    
 
     public Long append(String topicName, int queueId, ByteBuffer data){
+        int dataSize = data.remaining();
         testStat.appendStart(data.remaining());
         byte[] hotData = new byte[data.remaining()];
         data.mark();
@@ -127,8 +129,8 @@ public class SSDqueue2{
 
                 mqMeta.put(key, writeData.getMetaOffset());
                 //////// 更新 DRAM map
-                ConcurrentHashMap<Long, Long> tmp2 = new ConcurrentHashMap<>();
-                tmp2.put(result, writeData.tail);
+                ConcurrentHashMap<Long, Long[]> tmp2 = new ConcurrentHashMap<>();
+                tmp2.put(result,new Long[]{writeData.tail, (long) dataSize});
                 allDataOffsetMap.put(key, tmp2);
 
                 qTopicQueueDataMap.put(key, writeData.getMeta());            
@@ -139,8 +141,8 @@ public class SSDqueue2{
                 Data writeData = new Data(dataSpaces[fcId], tmpD);
                 result = writeData.put(data);
                 
-                ConcurrentHashMap<Long, Long> tmp2 = allDataOffsetMap.get(key);
-                tmp2.put(result, writeData.tail);
+                ConcurrentHashMap<Long, Long[]> tmp2 = allDataOffsetMap.get(key);
+                tmp2.put(result, new Long[]{writeData.tail, (long) dataSize});
                 allDataOffsetMap.put(key, tmp2);
                 
                 qTopicQueueDataMap.put(key, writeData.getMeta());
@@ -343,30 +345,18 @@ public class SSDqueue2{
         public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
             Map<Integer, ByteBuffer> res = new HashMap<>();
 
-            Map<Long, Long> map = allDataOffsetMap.get(key);
+            Map<Long, Long[]> map = allDataOffsetMap.get(key);
 
-            Long startOffset = map.get(offset);
-            if(startOffset == null){
-                return res;
-            }
+            Long[] dataInfo = map.get(offset);
+           
+            for(int i=0; i<fetchNum && dataInfo != null; ++i){
 
-            //Long cnt = offset;
-            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
-            for(int i=0; i<fetchNum && startOffset != -1L; ++i){
-                buffer.clear();
-                int len1 = ds.read(buffer, startOffset);
-                buffer.flip();
-
-                long dataSize = buffer.getLong();
-                long nextOffset = buffer.getLong();
-
-                ByteBuffer tmp1 = ByteBuffer.allocate((int) dataSize);
-                int len2 = ds.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
+                ByteBuffer tmp1 = ByteBuffer.allocate(dataInfo[1].intValue());
+                int len2 = ds.read(tmp1, dataInfo[0]  + Long.BYTES + Long.BYTES);
                 tmp1.flip();
                 res.put(i, tmp1);
-                // if(startOffset == tail) break;
-                startOffset = nextOffset;
-
+                offset++;
+                dataInfo = map.get(offset);
             }
             return res;
         }
