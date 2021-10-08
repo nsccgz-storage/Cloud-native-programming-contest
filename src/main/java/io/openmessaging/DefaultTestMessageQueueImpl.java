@@ -30,7 +30,7 @@ public class DefaultTestMessageQueueImpl extends MessageQueue {
     // Initialization
     
     public MessageQueue mq;
-    public SSDqueue2 ssdQueue;
+    public SSDqueue ssdQueue;
 
     public DefaultTestMessageQueueImpl(){
 
@@ -46,7 +46,7 @@ public class DefaultTestMessageQueueImpl extends MessageQueue {
     }
 
     public void init(String dirPath){
-        ssdQueue = new SSDqueue2(dirPath);
+        ssdQueue = new SSDqueue(dirPath);
         // mq = new Test1MessageQueue(dirPath);
     }
 
