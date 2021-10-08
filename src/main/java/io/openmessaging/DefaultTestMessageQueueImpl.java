@@ -34,10 +34,10 @@ public class DefaultTestMessageQueueImpl extends MessageQueue {
 
     public DefaultTestMessageQueueImpl(){
 
-//        String dirPath = "/home/wangxr/桌面/pmem_test";
 //        String dirPath = "/essd";
-        String dirPath = "/mnt/nvme/mq";
-        // String dirPath = "/mnt/ssd/wxr";
+        //String dirPath = "/mnt/nvme/mq";
+        String dirPath = "/mnt/ssd/wyk";
+        //String dirPath = "/home/ubuntu/test";
         init(dirPath);
     }
 
