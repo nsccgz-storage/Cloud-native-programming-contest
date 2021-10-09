@@ -68,9 +68,9 @@ public class LSMessageQueue extends MessageQueue {
         // Level logLevel = Level.DEBUG;
         boolean useStats = true;
         int writeMethod = 12;
-        int numOfDataFiles = 4;
-        int maxBufNum = 6;
-        int maxBufLength = 50*1024;
+        int numOfDataFiles = 5;
+        int maxBufNum = 5;
+        int maxBufLength = 32*1024;
         boolean fairLock = true;
         public String toString() {
             return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
@@ -118,6 +118,7 @@ public class LSMessageQueue extends MessageQueue {
     ConcurrentHashMap<String, MQTopic> topic2object;
 
     LSMessageQueue(String dbDirPath){
+        SSDBench.runStandardBench(dbDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath);
 
