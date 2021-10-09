@@ -83,6 +83,7 @@ public class LSMessageQueue extends MessageQueue {
         public Long maxOffset = 0L;
         public ArrayList<Long> offset2position;
         public DataFile df;
+        public byte[] maxOffsetData;
 
         MQQueue(DataFile dataFile){
             maxOffset = 0L;
@@ -281,6 +282,15 @@ public class LSMessageQueue extends MessageQueue {
             testStat.appendStart();
             testStat.appendUpdateStat(topic, queueId, data);
         }
+    
+        int dataSize = data.remaining();
+        byte[] hotData = new byte[dataSize];
+        data.mark();
+        data.get(hotData);
+        data.reset();
+
+
+
         MQTopic mqTopic;
         MQQueue q;
         mqTopic = topic2object.get(topic);
@@ -310,6 +320,7 @@ public class LSMessageQueue extends MessageQueue {
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
         long ret = q.maxOffset;
+        q.maxOffsetData = hotData;
         q.maxOffset++;
         return ret;
     }
@@ -338,6 +349,14 @@ public class LSMessageQueue extends MessageQueue {
         }
         if (offset + fetchNum-1 >= q.maxOffset){
             fetchNum = (int)(q.maxOffset-offset);
+        }
+
+        if (q.maxOffsetData != null && offset == q.maxOffset-1){
+            if (mqConfig.useStats){
+                testStat.hitHotData(topic, queueId);
+            }
+            ret.put(0, ByteBuffer.wrap(q.maxOffsetData));
+            return ret;
         }
 
         DataFile df = mqTopic.df;
