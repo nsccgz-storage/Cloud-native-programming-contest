@@ -69,7 +69,7 @@ public class LSMessageQueue extends MessageQueue {
         boolean useStats = true;
         int writeMethod = 12;
         int numOfDataFiles = 4;
-        int maxBufNum = 8;
+        int maxBufNum = 9;
         int maxBufLength = 68*1024;
         boolean fairLock = true;
         public String toString() {
@@ -609,6 +609,7 @@ public class LSMessageQueue extends MessageQueue {
                             continue;
                         }
                     } else {
+                        // 取离4K边界最近的
                         if (cur4KDiff < min4KDiff){
                             min4KDiff = cur4KDiff;
                             bufLength = curBufLength;
