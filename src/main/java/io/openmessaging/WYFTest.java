@@ -225,8 +225,8 @@ public class WYFTest {
 
 	}
 
-	public static void testThreadPool(String dbPath) {
-		MessageQueue mq = new LSMessageQueue(dbPath);
+	public static void testThreadPool(String dbPath, String pmDirPath) {
+		MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 		int numOfThreads = 4;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -260,8 +260,8 @@ public class WYFTest {
 			sampleData[i] = (byte)i;
 		}
 	}
-	public static void writePerformanceTest(String dbPath){
-		MessageQueue mq = new LSMessageQueue(dbPath);
+	public static void writePerformanceTest(String dbPath, String pmDirPath){
+		MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -329,13 +329,13 @@ public class WYFTest {
 
 	}
 
-	public static void testRecover(String dbPath){
+	public static void testRecover(String dbPath, String pmDirPath){
 		int numOfThreads = 4;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		Vector<Message>[] msgss = new Vector[numOfThreads];
 
 		{
-			MessageQueue mq = new LSMessageQueue(dbPath);
+			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 			long startTime = System.nanoTime();
 			for (int i = 0; i < numOfThreads; i++) {
@@ -369,7 +369,7 @@ public class WYFTest {
 			log.info("time: " + elapsedTimeS);
 		}
 		{
-			MessageQueue mq = new LSMessageQueue(dbPath);
+			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 			// read
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 			for (int i = 0; i < numOfThreads; i++) {
@@ -482,17 +482,19 @@ public class WYFTest {
 		init();
 		// log.setLevel(Level.DEBUG);
 		log.setLevel(Level.INFO);
-		if (args.length < 1){
-			System.out.println("java SSDBench ${dbPath}");
+		if (args.length < 2){
+			System.out.println("java SSDBench ${dbPath} ${pmDirPath}");
 			return ;
 		}
 		System.out.println("dbPath : " + args[0]);
+		System.out.println("pmDIrPath : " + args[1]);
 		String dbPath = args[0] ;
+		String pmDirPath = args[1] ;
 
 		try {
-			// writePerformanceTest(dbPath);
-			// testThreadPool(dbPath);
-			testRecover(dbPath);
+			writePerformanceTest(dbPath, pmDirPath);
+			// testThreadPool(dbPath, pmDirPath);
+			// testRecover(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();
