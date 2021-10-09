@@ -118,7 +118,7 @@ public class LSMessageQueue extends MessageQueue {
     ConcurrentHashMap<String, MQTopic> topic2object;
 
     LSMessageQueue(String dbDirPath){
-        SSDBench.runStandardBench(dbDirPath);
+        // SSDBench.runStandardBench(dbDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath);
 
