@@ -323,7 +323,8 @@ public class LSMessageQueue extends MessageQueue {
 
         DataFile df = mqTopic.df;
 
-        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
+        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
+        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
         long ret = q.maxOffset;
@@ -468,6 +469,7 @@ public class LSMessageQueue extends MessageQueue {
             int done;
             long position;
             Thread currentThread;
+            MQQueue q;
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Thread t){
                 topicIndex = myTopicIndex;
                 queueId = myQueueId;
@@ -476,6 +478,16 @@ public class LSMessageQueue extends MessageQueue {
                 currentThread = t;
                 done = 0;
                 position = 0L;
+            }
+            Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Thread t, MQQueue myQ){
+                topicIndex = myTopicIndex;
+                queueId = myQueueId;
+                length = (short)myData.remaining();
+                data = myData;
+                currentThread = t;
+                done = 0;
+                position = 0L;
+                q = myQ;
             }
         }
         DataFile(String dataFileName){
@@ -608,6 +620,108 @@ public class LSMessageQueue extends MessageQueue {
 
         }
 
+        public long syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(Short topicIndex, int queueId, ByteBuffer data, MQQueue q){
+
+            ByteBuffer writerBuffer = commonWriteBuffer;
+
+            long position = bufMetadataLength;
+            try {
+                Writer w = new Writer(topicIndex, queueId, data, Thread.currentThread(),q);
+                writerConcurrentQueue.offer(w);
+                while (!(w.done == 1 || w.equals(writerConcurrentQueue.peek()) )){
+                    LockSupport.park();
+                }
+                if (w.done == 1){
+                    return w.position;
+                }
+                
+                int bufLength = bufMetadataLength;
+                int maxBufLength = mqConfig.maxBufLength;
+                int bufNum = 0;
+                int maxBufNum = mqConfig.maxBufNum;
+
+                boolean continueMerge = true;
+                Writer[] batchWriters = new Writer[maxBufNum];
+                Iterator<Writer> iter = writerConcurrentQueue.iterator();
+                Writer lastWriter = null;
+                int dataLength = 0;
+                int writeLength = 0;
+
+                position += curPosition;
+                while ( continueMerge ){
+                    lastWriter = iter.next();
+                    dataLength = lastWriter.length;
+                    writeLength = globalMetadataLength + dataLength;
+                    lastWriter.position = position;
+                    batchWriters[bufNum] = lastWriter;
+                    position += writeLength;
+                    bufLength += writeLength;
+                    bufNum += 1;
+                    if (bufNum >= maxBufNum){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
+                    }
+                    if (bufLength >= maxBufLength){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
+                    }
+                }
+                long writePosition = curPosition;
+                //  对齐到4K
+                // assert (curPosition % 4096 == 0);
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+                bufLength = bufLength + (4096 - bufLength % 4096);
+                curPosition += bufLength;
+                {
+                    writerBuffer.clear();
+                    writerBuffer.putInt(bufLength);
+                    writerBuffer.putInt(bufNum);
+                    for (int i = 0; i < bufNum; i++){
+                        Writer thisW = batchWriters[i];
+                        writerBuffer.putShort(thisW.topicIndex);
+                        writerBuffer.putInt(thisW.queueId);
+                        writerBuffer.putShort(thisW.length);
+                        writerBuffer.put(batchWriters[i].data);
+                    }
+                    writerBuffer.flip();
+                    dataFileChannel.write(writerBuffer, writePosition);
+                    dataFileChannel.force(true);
+                }
+
+                while(true){
+                    Writer ready = writerConcurrentQueue.poll();
+                    if (!ready.equals(w)){
+                        ready.done = 1;
+                        LockSupport.unpark(ready.currentThread);
+                    }
+                    if (ready.equals(lastWriter)){
+                        break;
+                    }
+                }
+
+                if (!writerConcurrentQueue.isEmpty()){
+                    LockSupport.unpark(writerConcurrentQueue.peek().currentThread);
+                }
+                position = w.position;
+
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            }
+            return position;
+
+        }
 
         public long syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(Short topicIndex, int queueId, ByteBuffer data){
 
