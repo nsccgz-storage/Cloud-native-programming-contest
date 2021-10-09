@@ -361,18 +361,18 @@ public class LSMessageQueue extends MessageQueue {
         // 有40%的getRange能够命中这个cache
         // 估计要采用这种方案
 
-        int dataSize = data.capacity();
-        ByteBuffer hotDataBuf;
-        if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
-            hotDataBuf = ByteBuffer.allocate(dataSize);
-        } else {
-            hotDataBuf = q.maxOffsetData;
-        }
-        data.rewind();
-        hotDataBuf.clear();
-        hotDataBuf.put(data);
-        hotDataBuf.flip();
-        q.maxOffsetData = hotDataBuf;
+        // int dataSize = data.capacity();
+        // ByteBuffer hotDataBuf;
+        // if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
+        //     hotDataBuf = ByteBuffer.allocate(dataSize);
+        // } else {
+        //     hotDataBuf = q.maxOffsetData;
+        // }
+        // data.rewind();
+        // hotDataBuf.clear();
+        // hotDataBuf.put(data);
+        // hotDataBuf.flip();
+        // q.maxOffsetData = hotDataBuf;
 
         q.maxOffset++;
         return ret;
@@ -985,6 +985,7 @@ public class LSMessageQueue extends MessageQueue {
         }
 
     }
+
 
     private TestStat testStat;
     private class TestStat {
