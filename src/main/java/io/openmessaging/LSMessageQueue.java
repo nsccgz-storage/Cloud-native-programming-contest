@@ -345,7 +345,7 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         // 热读方案2：每次append都留一个热读区，如果上次申请的空间够用就不重新分配，否则重新分配
-        // （可以加上，如果后期发现不热了，就把空间释放出来）
+        // （TODO:如果后期发现不热了，就把空间释放出来？）
 
         // int dataSize = data.capacity();
         // ByteBuffer hotDataBuf;
