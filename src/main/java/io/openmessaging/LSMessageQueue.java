@@ -68,8 +68,8 @@ public class LSMessageQueue extends MessageQueue {
     public class MQConfig {
         Level logLevel = Level.INFO;
         // Level logLevel = Level.DEBUG;
-        // boolean useStats = true;
-        boolean useStats = false;
+        boolean useStats = true;
+        // boolean useStats = false;
         int writeMethod = 12;
         int numOfDataFiles = 4;
         int maxBufNum = 8;
@@ -372,9 +372,9 @@ public class LSMessageQueue extends MessageQueue {
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
         // to see the trace online
-        if (localThreadId.get() == 1){
-            log.info("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
-        }
+        // if (localThreadId.get() == 1){
+        //     log.info("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
+        // }
         if (mqConfig.useStats){
             testStat.getRangeStart();
             testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
