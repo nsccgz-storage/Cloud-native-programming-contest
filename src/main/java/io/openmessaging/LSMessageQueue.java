@@ -117,6 +117,14 @@ public class LSMessageQueue extends MessageQueue {
     int numOfDataFiles;
     ConcurrentHashMap<String, MQTopic> topic2object;
 
+    LSMessageQueue(String dbDirPath, MQConfig config){
+        SSDBench.runStandardBench(dbDirPath);
+        mqConfig = config;
+        init(dbDirPath);
+
+    }
+
+
     LSMessageQueue(String dbDirPath){
         SSDBench.runStandardBench(dbDirPath);
         mqConfig = new MQConfig();
@@ -127,6 +135,7 @@ public class LSMessageQueue extends MessageQueue {
     public void init(String dbDirPath) {
         try {
             log.setLevel(mqConfig.logLevel);
+            log.info(mqConfig);
 
             topic2object = new ConcurrentHashMap<String, MQTopic>();
             String metadataFileName = dbDirPath + "/meta";
