@@ -421,7 +421,6 @@ public class LSMessageQueue extends MessageQueue {
         DataFile df = mqTopic.df;
 
         long pos = 0;
-        assert (offset < Integer.BYTES);
         for (int i = 0; i < fetchNum; i++){
             long curOffset = offset + i;
             int intCurOffset = (int)curOffset;
