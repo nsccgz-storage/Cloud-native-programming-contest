@@ -24,7 +24,7 @@ import java.io.RandomAccessFile;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
-public class SSDqueue{
+public class SSDqueue extends MessageQueue {
     private static final Logger logger = Logger.getLogger(SSDqueue.class);
     
     // FileChannel spaceMetaFc;
@@ -107,7 +107,8 @@ public class SSDqueue{
         
     }    
 
-    public Long append(String topicName, int queueId, ByteBuffer data){
+    @Override
+    public long append(String topicName, int queueId, ByteBuffer data){
         int dataSize = data.remaining();
         testStat.appendStart(data.remaining());
         byte[] hotData = new byte[data.remaining()];
@@ -150,7 +151,7 @@ public class SSDqueue{
             
         } catch (Exception e) {
             e.printStackTrace();
-            return null;
+            return 0L;
         }
 
         hotDataMap.put(key, new HotData(result, hotData));
@@ -159,7 +160,8 @@ public class SSDqueue{
         return result;
     }
     
-    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
+    @Override
+    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, long offset, int fetchNum){
         Map<Integer, ByteBuffer> result = new HashMap<>();
         String key = topicName + markSpilt + queueId;
         
