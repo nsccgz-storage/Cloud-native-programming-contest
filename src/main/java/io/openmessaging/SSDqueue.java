@@ -52,18 +52,21 @@ public class SSDqueue{
     MetaTopicQueue mqMeta;
     private String markSpilt = "$@#";
     ConcurrentHashMap<String, ConcurrentHashMap<Long,Long[]>> allDataOffsetMap; // 加速 getRange
+    ConcurrentHashMap<String, Boolean>isColdQueue;
+    ConcurrentHashMap<String, ConcurrentHashMap<Long,Long>> pmemPositionMap;
     
     boolean RECOVER = false;
     ConcurrentHashMap<String, HotData> hotDataMap;
+    PmemManager pmem;
 
     TestStat testStat;
 
     public SSDqueue(String dirPath){
-        
+
         this.numOfDataFileChannels = 4;
         try {
             //init(dirPath);
-            
+            pmem = new PmemManager("/pmem");
             dataSpaces = new DataSpace[numOfDataFileChannels];
             testStat = new TestStat(dataSpaces);
             boolean flag = new File(dirPath + "/meta").exists();
@@ -85,6 +88,8 @@ public class SSDqueue{
                 logger.info("create a new queue");
                 
                 this.allDataOffsetMap = new ConcurrentHashMap<>();
+                this.isColdQueue = new ConcurrentHashMap<>();
+                this.pmemPositionMap = new ConcurrentHashMap<>();
                 
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 this.mqMeta = new MetaTopicQueue(this.metaFileChannel, Long.BYTES);
@@ -132,6 +137,11 @@ public class SSDqueue{
                 ConcurrentHashMap<Long, Long[]> tmp2 = new ConcurrentHashMap<>();
                 tmp2.put(result,new Long[]{writeData.tail, (long) dataSize});
                 allDataOffsetMap.put(key, tmp2);
+                isColdQueue.put(key, true);
+                ConcurrentHashMap<Long, Long> queuePosOfPmem = new ConcurrentHashMap<>();
+//                long handle = pmem.write() // TODO: 此处改为异步写操作
+                queuePosOfPmem.put(result, -1L);
+                pmemPositionMap.put(key, queuePosOfPmem);
 
                 qTopicQueueDataMap.put(key, writeData.getMeta());            
                 mqMeta.force();
@@ -144,7 +154,10 @@ public class SSDqueue{
                 ConcurrentHashMap<Long, Long[]> tmp2 = allDataOffsetMap.get(key);
                 tmp2.put(result, new Long[]{writeData.tail, (long) dataSize});
                 allDataOffsetMap.put(key, tmp2);
-                
+                // handle // TODO： 此处改为异步写操作
+//                pmemPositionMap.get(key).put(result, handle);
+                pmemPositionMap.get(key).put(result, -1L);
+
                 qTopicQueueDataMap.put(key, writeData.getMeta());
             }
             
@@ -170,9 +183,47 @@ public class SSDqueue{
            
             if(!RECOVER && hotDataMap.get(key).offset == offset){
                 byte[] array = hotDataMap.get(key).data;
+                isColdQueue.put(key,false);
                 ByteBuffer tmp = ByteBuffer.wrap(array);
                 result.put(0, tmp);
-            }else{
+            }
+            else if(!RECOVER && isColdQueue.get(key)){ // read data from pmem
+                long totalLength = 0;
+                ConcurrentHashMap<Long, Long[]> queueDataMap = allDataOffsetMap.get(key);
+                ConcurrentHashMap<Long,Long>queuePosOfPmem = pmemPositionMap.get(key);
+                int i  = 0;
+                while(queuePosOfPmem.get(offset+i)!=null && i < fetchNum){
+                    long handle = queuePosOfPmem.get(offset+i);
+                    if(handle != -1){
+                        totalLength += queueDataMap.get(offset+i)[1];
+                    }else{
+                        break;
+                    }
+                    i++;
+                }
+                if(i == 0){ // no cold data
+                    int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
+                    Data resData = new Data(dataSpaces[fcId], dataMeta);
+                    result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRange(key, offset, fetchNum);
+                }
+                else{ // some data are cold
+                    byte[]bytes = pmem.read(topicId, queueId, queuePosOfPmem.get(offset), totalLength); //
+                    int startOffset = 0;
+                    for(int k = 0;k < i;k++){
+                        int len = queueDataMap.get(offset+k)[1].intValue();
+                        ByteBuffer buffer = ByteBuffer.allocate(len);
+                        buffer.put(bytes, startOffset, len);
+                        startOffset += len;
+                        buffer.flip();
+                        result.put(k, buffer);
+                    }
+                    int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
+                    Data resData = new Data(dataSpaces[fcId], dataMeta);
+                    resData.getRange(key, offset, i, fetchNum-i, result);
+                }
+                // TODO: pmem pre read
+            }
+            else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data resData = new Data(dataSpaces[fcId], dataMeta);
                 result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRange(key, offset, fetchNum);
@@ -341,6 +392,24 @@ public class SSDqueue{
             return res;
         }
 
+        public void getRange(String key, Long index, int startNum, int fetchNum, Map<Integer, ByteBuffer>res) throws IOException{
+//            Map<Integer, ByteBuffer> res = new HashMap<>();
+
+            Map<Long, Long[]> map = allDataOffsetMap.get(key);
+
+            Long[] dataInfo = map.get(index);
+
+            for(int i=0; i<fetchNum && dataInfo != null; ++i){
+
+                ByteBuffer tmp1 = ByteBuffer.allocate(dataInfo[1].intValue());
+                int len2 = ds.read(tmp1, dataInfo[0]  + Long.BYTES + Long.BYTES);
+                tmp1.flip();
+                res.put(i+startNum, tmp1);
+                index++;
+                dataInfo = map.get(index);
+            }
+//            return res;
+        }
 
         public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
             Map<Integer, ByteBuffer> res = new HashMap<>();
