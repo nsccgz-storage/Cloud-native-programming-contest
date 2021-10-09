@@ -73,7 +73,8 @@ public class LSMessageQueue extends MessageQueue {
         int maxBufLength = 68*1024;
         boolean fairLock = true;
         public String toString() {
-            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
+            // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
+            return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | align to 4K !! ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
         }
     }
 
@@ -305,7 +306,8 @@ public class LSMessageQueue extends MessageQueue {
 
         DataFile df = mqTopic.df;
 
-        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
+        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
+        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
         long ret = q.maxOffset;
         q.maxOffset++;
@@ -550,6 +552,146 @@ public class LSMessageQueue extends MessageQueue {
 
         }
 
+
+        public long syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(Short topicIndex, int queueId, ByteBuffer data){
+
+            ByteBuffer writerBuffer = commonWriteBuffer;
+
+            long position = 0L;
+            try {
+                Writer w = new Writer(topicIndex, queueId, data, Thread.currentThread());
+                writerConcurrentQueue.offer(w);
+                while (!(w.done == 1 || w.equals(writerConcurrentQueue.peek()) )){
+                    LockSupport.park();
+                }
+                if (w.done == 1){
+                    return w.position;
+                }
+                
+                int maxBufLength = mqConfig.maxBufLength;
+                int maxBufNum = mqConfig.maxBufNum;
+
+                Writer[] batchWriters = new Writer[maxBufNum];
+                Iterator<Writer> iter = writerConcurrentQueue.iterator();
+                Writer nextWriter = null;
+
+                int min4KDiff = Integer.MAX_VALUE;
+                int cur4KDiff = 0;
+
+                int bufNum = 0;
+                int bufLength = bufMetadataLength;
+
+                int curBufNum = 0;
+                int curBufLength = bufMetadataLength;
+
+
+                // 确定聚合多少个，大于48KiB，小于64KiB，尽量靠近4K边界
+                while (true){
+                    if (!iter.hasNext()){
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
+                        break;
+                    }
+                    nextWriter = iter.next();
+                    curBufLength += globalMetadataLength + nextWriter.length;
+                    curBufNum += 1;
+                    cur4KDiff = 4096 - curBufLength % 4096;
+                    if (curBufLength < 50*1024){
+                        bufLength = curBufLength;
+                        bufNum = curBufNum;
+                        if (curBufNum >= maxBufNum){
+                            if (mqConfig.useStats){
+                                writeStat.incExceedBufNumCount();
+                            }
+                            break;
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        if (cur4KDiff < min4KDiff){
+                            min4KDiff = cur4KDiff;
+                            bufLength = curBufLength;
+                            bufNum = curBufNum;
+                        }
+                        // 该停了
+                        if (curBufLength >= maxBufLength){
+                            if (mqConfig.useStats){
+                                writeStat.incExceedBufLengthCount();
+                            }
+                            break;
+                        }
+                        if (curBufNum >= maxBufNum){
+                            if (mqConfig.useStats){
+                                writeStat.incExceedBufNumCount();
+                            }
+                            break;
+                        }
+                    }
+                }
+                // 给出bufNum和bufLength就够了
+
+                position = curPosition;
+                position += bufMetadataLength;
+
+                Writer lastWriter = null;
+                int writeLength = 0;
+                iter = writerConcurrentQueue.iterator();
+                for (int i = 0; i <bufNum; i++){
+                    lastWriter = iter.next();
+                    writeLength = globalMetadataLength + lastWriter.length;
+                    lastWriter.position = position;
+                    batchWriters[i] = lastWriter;
+                    position += writeLength;
+                }
+
+                long writePosition = curPosition;
+                //  对齐到4K
+                // assert (curPosition % 4096 == 0);
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+                bufLength = bufLength + (4096 - bufLength % 4096);
+                curPosition += bufLength;
+                {
+                    writerBuffer.clear();
+                    writerBuffer.putInt(bufLength);
+                    writerBuffer.putInt(bufNum);
+                    for (int i = 0; i < bufNum; i++){
+                        Writer thisW = batchWriters[i];
+                        writerBuffer.putShort(thisW.topicIndex);
+                        writerBuffer.putInt(thisW.queueId);
+                        writerBuffer.putShort(thisW.length);
+                        writerBuffer.put(batchWriters[i].data);
+                    }
+                    writerBuffer.flip();
+                    dataFileChannel.write(writerBuffer, writePosition);
+                    dataFileChannel.force(true);
+                }
+
+                while(true){
+                    Writer ready = writerConcurrentQueue.poll();
+                    if (!ready.equals(w)){
+                        ready.done = 1;
+                        LockSupport.unpark(ready.currentThread);
+                    }
+                    if (ready.equals(lastWriter)){
+                        break;
+                    }
+                }
+
+                if (!writerConcurrentQueue.isEmpty()){
+                    LockSupport.unpark(writerConcurrentQueue.peek().currentThread);
+                }
+                position = w.position;
+
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            }
+            return position;
+
+        }
+
         public ThreadLocal<ByteBuffer> threadLocalReadMetaBuf;
 
         public ByteBuffer read(long position) {
@@ -582,7 +724,8 @@ public class LSMessageQueue extends MessageQueue {
             public int exceedBufNumCount;
             public int exceedBufLengthCount;
             WriteStat(){
-                bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 56*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024};
+                bucketBound = new int[]{4*1024, 16*1024, 32*1024, 48*1024, 52*1024, 56*1024, 60*1024, 64*1024, 68*1024, 72*1024 ,80*1024};
+                // bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 56*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024};
                 // bucketBound = new int[]{100, 512, 1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 48*1024, 64*1024, 80*1024 , 96*1024, 112*1024, 128*1024, 256*1024, 512*1024};
 
                 bucketCount = new int[bucketBound.length-1];
