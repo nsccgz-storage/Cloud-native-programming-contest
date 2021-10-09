@@ -332,6 +332,7 @@ public class LSMessageQueue extends MessageQueue {
         q.offset2position.add(position);
         long ret = q.maxOffset;
 
+        // 热读方案1：需要时才分配内存
         if (q.type == 1){
             // is hot queue
             if (q.maxOffsetData == null){
@@ -342,6 +343,9 @@ public class LSMessageQueue extends MessageQueue {
             q.maxOffsetData.put(data);
             q.maxOffsetData.flip();
         }
+
+        // 热读方案2：每次append都留一个热读区，如果上次申请的空间够用就不重新分配，否则重新分配
+        // （可以加上，如果后期发现不热了，就把空间释放出来）
 
         // int dataSize = data.capacity();
         // ByteBuffer hotDataBuf;
@@ -354,8 +358,8 @@ public class LSMessageQueue extends MessageQueue {
         // hotDataBuf.clear();
         // hotDataBuf.put(data);
         // hotDataBuf.flip();
-
         // q.maxOffsetData = hotDataBuf;
+
         q.maxOffset++;
         return ret;
     }
