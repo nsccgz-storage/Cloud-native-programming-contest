@@ -69,8 +69,8 @@ public class LSMessageQueue extends MessageQueue {
         boolean useStats = true;
         int writeMethod = 12;
         int numOfDataFiles = 4;
-        int maxBufNum = 9;
-        int maxBufLength = 68*1024;
+        int maxBufNum = 8;
+        int maxBufLength = 62*1024;
         boolean fairLock = true;
         public String toString() {
             // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
