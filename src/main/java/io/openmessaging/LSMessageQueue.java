@@ -333,32 +333,36 @@ public class LSMessageQueue extends MessageQueue {
         long ret = q.maxOffset;
 
         // 热读方案1：需要时才分配内存
-        if (q.type == 1){
-            // is hot queue
-            if (q.maxOffsetData == null){
-                q.maxOffsetData = ByteBuffer.allocate(17408);
-            }
-            q.maxOffsetData.clear();
-            data.rewind();
-            q.maxOffsetData.put(data);
-            q.maxOffsetData.flip();
-        }
+        // 只有20%的getRange能够命中这个cache
+
+        // if (q.type == 1){
+        //     // is hot queue
+        //     if (q.maxOffsetData == null){
+        //         q.maxOffsetData = ByteBuffer.allocate(17408);
+        //     }
+        //     q.maxOffsetData.clear();
+        //     data.rewind();
+        //     q.maxOffsetData.put(data);
+        //     q.maxOffsetData.flip();
+        // }
 
         // 热读方案2：每次append都留一个热读区，如果上次申请的空间够用就不重新分配，否则重新分配
         // （TODO:如果后期发现不热了，就把空间释放出来？）
+        // 有40%的getRange能够命中这个cache
+        // 估计要采用这种方案
 
-        // int dataSize = data.capacity();
-        // ByteBuffer hotDataBuf;
-        // if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
-        //     hotDataBuf = ByteBuffer.allocate(dataSize);
-        // } else {
-        //     hotDataBuf = q.maxOffsetData;
-        // }
-        // data.rewind();
-        // hotDataBuf.clear();
-        // hotDataBuf.put(data);
-        // hotDataBuf.flip();
-        // q.maxOffsetData = hotDataBuf;
+        int dataSize = data.capacity();
+        ByteBuffer hotDataBuf;
+        if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
+            hotDataBuf = ByteBuffer.allocate(dataSize);
+        } else {
+            hotDataBuf = q.maxOffsetData;
+        }
+        data.rewind();
+        hotDataBuf.clear();
+        hotDataBuf.put(data);
+        hotDataBuf.flip();
+        q.maxOffsetData = hotDataBuf;
 
         q.maxOffset++;
         return ret;
