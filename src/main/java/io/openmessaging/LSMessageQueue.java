@@ -84,13 +84,16 @@ public class LSMessageQueue extends MessageQueue {
         public ArrayList<Long> offset2position;
         public DataFile df;
         public byte[] maxOffsetData;
+        public int type;
 
         MQQueue(DataFile dataFile){
+            type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
             df = dataFile;
         }
         MQQueue(){
+            type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
         }
@@ -283,6 +286,7 @@ public class LSMessageQueue extends MessageQueue {
             testStat.appendUpdateStat(topic, queueId, data);
         }
     
+        // FIXME: 申请内存需要占用额外时间，因为这段内存不能被重复使用，生命周期较短，还可能频繁触发GC
         int dataSize = data.remaining();
         byte[] hotData = new byte[dataSize];
         data.mark();
