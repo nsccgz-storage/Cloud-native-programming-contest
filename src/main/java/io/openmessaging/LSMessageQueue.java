@@ -59,6 +59,8 @@ import java.util.Deque;
 import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
 
+import io.openmessaging.SSDBench;
+
 
 import java.util.Comparator;
 
@@ -68,8 +70,8 @@ public class LSMessageQueue extends MessageQueue {
     public class MQConfig {
         Level logLevel = Level.INFO;
         // Level logLevel = Level.DEBUG;
-        // boolean useStats = true;
-        boolean useStats = false;
+        boolean useStats = true;
+        // boolean useStats = false;
         int writeMethod = 12;
         int numOfDataFiles = 4;
         int maxBufNum = 8;
@@ -126,16 +128,18 @@ public class LSMessageQueue extends MessageQueue {
     int numOfDataFiles;
     ConcurrentHashMap<String, MQTopic> topic2object;
 
-    LSMessageQueue(String dbDirPath, MQConfig config){
+    LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         // SSDBench.runStandardBench(dbDirPath);
+        // PMBench.runStandardBench(pmDirPath);
         mqConfig = config;
         init(dbDirPath);
 
     }
 
 
-    LSMessageQueue(String dbDirPath){
+    LSMessageQueue(String dbDirPath, String pmDirPath){
         SSDBench.runStandardBench(dbDirPath);
+        PMBench.runStandardBench(pmDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath);
 
@@ -324,9 +328,9 @@ public class LSMessageQueue extends MessageQueue {
             }
         }
 
-        if (localThreadId.get() == 1){
-            log.info("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
-        }
+        // if (localThreadId.get() == 1){
+        //     log.info("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
+        // }
 
 
         DataFile df = mqTopic.df;
@@ -392,10 +396,10 @@ public class LSMessageQueue extends MessageQueue {
         if (q == null){
             return ret;
         }
-        // to see the trace online
-        if (localThreadId.get() == 1){
-            log.info("getRange : "+topic+","+queueId+","+offset+","+fetchNum+" maxOffset: "+(q.maxOffset-1));
-        }
+        // // to see the trace online
+        // if (localThreadId.get() == 1){
+        //     log.info("getRange : "+topic+","+queueId+","+offset+","+fetchNum+" maxOffset: "+(q.maxOffset-1));
+        // }
         
         if (offset >= q.maxOffset){
             return ret;

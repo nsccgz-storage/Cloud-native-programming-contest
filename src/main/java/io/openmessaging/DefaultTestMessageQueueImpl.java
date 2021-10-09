@@ -37,17 +37,18 @@ public class DefaultTestMessageQueueImpl extends MessageQueue {
 //        String dirPath = "/essd";
         //String dirPath = "/mnt/nvme/mq";
         String dirPath = "/mnt/ssd/wyk";
+        String pmDirPath = "/mnt/pmem/mq";
         //String dirPath = "/home/ubuntu/test";
-        init(dirPath);
+        init(dirPath, pmDirPath);
     }
 
-    public DefaultTestMessageQueueImpl(String dirPath){
-        init(dirPath);
+    public DefaultTestMessageQueueImpl(String dirPath, String pmDirPath){
+        init(dirPath, pmDirPath);
     }
 
-    public void init(String dirPath){
+    public void init(String dirPath, String pmDirPath){
         // ssdQueue = new SSDqueue(dirPath);
-        mq = new LSMessageQueue(dirPath);
+        mq = new LSMessageQueue(dirPath,pmDirPath);
     }
 
 
