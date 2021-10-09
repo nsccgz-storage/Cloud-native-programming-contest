@@ -38,6 +38,8 @@ import java.util.ArrayList;
 
 import org.apache.log4j.spi.LoggerFactory;
 
+import io.openmessaging.SSDqueue.HotData;
+
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
@@ -323,25 +325,37 @@ public class LSMessageQueue extends MessageQueue {
 
         DataFile df = mqTopic.df;
 
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
+
+        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
         long ret = q.maxOffset;
 
-        int dataSize = data.capacity();
-        ByteBuffer hotDataBuf;
-        if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
-            hotDataBuf = ByteBuffer.allocate(dataSize);
-        } else {
-            hotDataBuf = q.maxOffsetData;
+        if (q.type == 1){
+            // is hot queue
+            if (q.maxOffsetData == null){
+                q.maxOffsetData = ByteBuffer.allocate(17408);
+            }
+            q.maxOffsetData.clear();
+            data.rewind();
+            q.maxOffsetData.put(data);
+            q.maxOffsetData.flip();
         }
-        data.rewind();
-        hotDataBuf.clear();
-        hotDataBuf.put(data);
-        hotDataBuf.flip();
 
-        q.maxOffsetData = hotDataBuf;
+        // int dataSize = data.capacity();
+        // ByteBuffer hotDataBuf;
+        // if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
+        //     hotDataBuf = ByteBuffer.allocate(dataSize);
+        // } else {
+        //     hotDataBuf = q.maxOffsetData;
+        // }
+        // data.rewind();
+        // hotDataBuf.clear();
+        // hotDataBuf.put(data);
+        // hotDataBuf.flip();
+
+        // q.maxOffsetData = hotDataBuf;
         q.maxOffset++;
         return ret;
     }
@@ -1146,6 +1160,8 @@ public class LSMessageQueue extends MessageQueue {
         synchronized void report() {
             // throughput, iops for append/getRange
             // writeBandwidth
+            log.info("============================================================================");
+            log.info("==================================report====================================");
             int getNumOfThreads = numOfThreads.get();
             double[] appendTpPerThread = new double[getNumOfThreads];
             double[] getRangeTpPerThread = new double[getNumOfThreads];
@@ -1194,43 +1210,41 @@ public class LSMessageQueue extends MessageQueue {
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
             
             // 报告总的写入大小分布
-            int[] totalWriteBucketCount = new int[100];
-            int[] myBucketBound = stats[0].bucketBound;
-            for (int i = 0; i < 100; i++){
-                totalWriteBucketCount[i] = 0;
-            }
-            int numOfBucket = stats[0].bucketCount.length;
-            for (int i = 0; i < getNumOfThreads; i++){
-                for (int j = 0; j < numOfBucket; j++){
-                    totalWriteBucketCount[j] += stats[i].bucketCount[j];
-                }
-            }
+            // int[] totalWriteBucketCount = new int[100];
+            // int[] myBucketBound = stats[0].bucketBound;
+            // for (int i = 0; i < 100; i++){
+            //     totalWriteBucketCount[i] = 0;
+            // }
+            // int numOfBucket = stats[0].bucketCount.length;
+            // for (int i = 0; i < getNumOfThreads; i++){
+            //     for (int j = 0; j < numOfBucket; j++){
+            //         totalWriteBucketCount[j] += stats[i].bucketCount[j];
+            //     }
+            // }
 
-            String totalWriteBucketReport = "";
-            totalWriteBucketReport += myBucketBound[0] + " < ";
-            for (int i = 0; i < numOfBucket; i++){
-                totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
-                totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
-            }
-            log.info("[Total Append Data Dist]" + totalWriteBucketReport);
+            // String totalWriteBucketReport = "";
+            // totalWriteBucketReport += myBucketBound[0] + " < ";
+            // for (int i = 0; i < numOfBucket; i++){
+            //     totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
+            //     totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
+            // }
+            // log.info("[Total Append Data Dist]" + totalWriteBucketReport);
 
-            if (oldTotalWriteBucketCount != null) {
-                int[] curWriteBucketCount = new int[100];
-                for (int i = 0; i < numOfBucket; i++) {
-                    curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
-                }
-                String curWriteBucketReport = "";
-                curWriteBucketReport += myBucketBound[0] + " < ";
-                for (int i = 0; i < numOfBucket; i++) {
-                    curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
-                    curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
-                }
+            // if (oldTotalWriteBucketCount != null) {
+            //     int[] curWriteBucketCount = new int[100];
+            //     for (int i = 0; i < numOfBucket; i++) {
+            //         curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
+            //     }
+            //     String curWriteBucketReport = "";
+            //     curWriteBucketReport += myBucketBound[0] + " < ";
+            //     for (int i = 0; i < numOfBucket; i++) {
+            //         curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
+            //         curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
+            //     }
+            //     log.info("[Current Append Data Dist]" + curWriteBucketReport);
+            // }
 
-                log.info("[Current Append Data Dist]" + curWriteBucketReport);
-
-            }
-
-            oldTotalWriteBucketCount = totalWriteBucketCount;
+            // oldTotalWriteBucketCount = totalWriteBucketCount;
 
             double curAppendThroughput = 0;
             double curGetRangeThroughput = 0;
@@ -1279,20 +1293,38 @@ public class LSMessageQueue extends MessageQueue {
                 curGetRangeLatency /= getNumOfThreads;
             }
             
-            String appendStat = "";
-            String getRangeStat = "";
+            StringBuilder totalAppendStat = new StringBuilder();
+            StringBuilder totalGetRangeStat = new StringBuilder();
+            StringBuilder appendStat = new StringBuilder();
+            StringBuilder getRangeStat = new StringBuilder();
             for (int i = 0; i < getNumOfThreads; i++){
-                appendStat += String.format("%d,", curAppendCount[i]);
-                getRangeStat += String.format("%d,", curGetRangeCount[i]);
+                appendStat.append(String.format("%d,", curAppendCount[i]));
+                getRangeStat.append(String.format("%d,", curGetRangeCount[i]));
+                totalAppendStat.append(String.format("%d,", stats[i].appendCount));
+                totalGetRangeStat.append(String.format("%d,", stats[i].getRangeCount));
             }
             String csvStat = String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
                     writeBandwidth, elapsedTimeS, appendThroughput, appendLatency, getRangeThroughput, getRangeLatency,
                     curWriteBandwidth, thisElapsedTimeS, curAppendThroughput, curAppendLatency, curGetRangeThroughput,
                     curGetRangeLatency);
 
+            log.info("csvStat      :"+csvStat);
             log.info("appendStat   :"+appendStat);
             log.info("getRangeStat :"+getRangeStat);
-            log.info("csvStat      :"+csvStat);
+            log.info("total appendStat   :"+ totalAppendStat);
+            log.info("total getRangeStat :"+totalGetRangeStat);
+
+            // report hit hot data ratio
+            StringBuilder hotDataHitCountReport = new StringBuilder();
+            StringBuilder hotDataReport = new StringBuilder();
+            for (int i = 0; i < getNumOfThreads; i++){
+                hotDataHitCountReport.append(String.format("%d,",(stats[i].hitHotDataCount)));
+                hotDataReport.append(String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount));
+            }
+            log.info("[hit hot data counter] : " + hotDataHitCountReport);
+            log.info("[hit hot data] : " + hotDataReport);
+
+
             log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
 
             // report write stat
@@ -1333,12 +1365,6 @@ public class LSMessageQueue extends MessageQueue {
                 oldWriteStats[i] = dataFiles[i].writeStat.clone();
             }
 
-            // report hit hot data ratio
-            String hotDataReport = "";
-            for (int i = 0; i < getNumOfThreads; i++){
-                hotDataReport += String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount);
-            }
-            log.info("[hit hot data] : " + hotDataReport);
 
             StringBuilder queueCountReport = new StringBuilder();
             StringBuilder hotQueueCountReport = new StringBuilder();
