@@ -68,8 +68,8 @@ public class LSMessageQueue extends MessageQueue {
     public class MQConfig {
         Level logLevel = Level.INFO;
         // Level logLevel = Level.DEBUG;
-        boolean useStats = true;
-        // boolean useStats = false;
+        // boolean useStats = true;
+        boolean useStats = false;
         int writeMethod = 12;
         int numOfDataFiles = 4;
         int maxBufNum = 8;
@@ -259,6 +259,7 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position) {
+
         log.debug("append : " + topic + "," + queueId + "," + position);
         MQTopic mqTopic;
         MQQueue q;
@@ -287,6 +288,7 @@ public class LSMessageQueue extends MessageQueue {
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
+
         log.debug("append : "+topic+","+queueId + data);
         if (mqConfig.useStats){
             testStat.appendStart();
@@ -322,6 +324,9 @@ public class LSMessageQueue extends MessageQueue {
             }
         }
 
+        if (localThreadId.get() == 1){
+            log.info("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
+        }
 
 
         DataFile df = mqTopic.df;
@@ -371,10 +376,7 @@ public class LSMessageQueue extends MessageQueue {
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        // to see the trace online
-        // if (localThreadId.get() == 1){
-        //     log.info("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
-        // }
+
         if (mqConfig.useStats){
             testStat.getRangeStart();
             testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
@@ -389,6 +391,10 @@ public class LSMessageQueue extends MessageQueue {
         q = mqTopic.id2queue.get(queueId);
         if (q == null){
             return ret;
+        }
+        // to see the trace online
+        if (localThreadId.get() == 1){
+            log.info("getRange : "+topic+","+queueId+","+offset+","+fetchNum+" maxOffset: "+(q.maxOffset-1));
         }
         
         if (offset >= q.maxOffset){
