@@ -184,7 +184,7 @@ public class SSDBench {
         log.info("test");
         {
             long totalBenchSize = 512L * 1024L * 1024L; // 1GiB
-            int[] ioSizes = {48 * 1024, 56 * 1024, 64 * 1024};
+            int[] ioSizes = {48 * 1024, 52*1024, 56 * 1024, 60*1024, 64 * 1024};
             int[] numOfFiles = { 4 };
 
             for (int i = 0; i < numOfFiles.length; i++) {
