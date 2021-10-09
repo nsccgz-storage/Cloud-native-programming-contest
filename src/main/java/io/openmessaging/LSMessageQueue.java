@@ -83,7 +83,8 @@ public class LSMessageQueue extends MessageQueue {
         public Long maxOffset = 0L;
         public ArrayList<Long> offset2position;
         public DataFile df;
-        public byte[] maxOffsetData;
+        // public byte[] maxOffsetData;
+        public ByteBuffer maxOffsetData;
         public int type;
 
         MQQueue(DataFile dataFile){
@@ -123,7 +124,7 @@ public class LSMessageQueue extends MessageQueue {
     ConcurrentHashMap<String, MQTopic> topic2object;
 
     LSMessageQueue(String dbDirPath, MQConfig config){
-        SSDBench.runStandardBench(dbDirPath);
+        // SSDBench.runStandardBench(dbDirPath);
         mqConfig = config;
         init(dbDirPath);
 
@@ -165,7 +166,8 @@ public class LSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                recover();
+                System.exit(-1);
+                // recover();
             }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
@@ -180,6 +182,8 @@ public class LSMessageQueue extends MessageQueue {
         } catch (IOException ie) {
             ie.printStackTrace();
         }
+
+        System.gc();
 
         log.info("init ok!");
     }
@@ -287,12 +291,6 @@ public class LSMessageQueue extends MessageQueue {
         }
     
         // FIXME: 申请内存需要占用额外时间，因为这段内存不能被重复使用，生命周期较短，还可能频繁触发GC
-        int dataSize = data.remaining();
-        byte[] hotData = new byte[dataSize];
-        data.mark();
-        data.get(hotData);
-        data.reset();
-
 
 
         MQTopic mqTopic;
@@ -316,7 +314,12 @@ public class LSMessageQueue extends MessageQueue {
             // q = new MQQueue(dataFileId);
             q = new MQQueue(dataFiles[dataFileId]);
             mqTopic.id2queue.put(queueId, q);
+            if (mqConfig.useStats){
+                testStat.incQueueCount();
+            }
         }
+
+
 
         DataFile df = mqTopic.df;
 
@@ -324,7 +327,20 @@ public class LSMessageQueue extends MessageQueue {
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
         long ret = q.maxOffset;
-        q.maxOffsetData = hotData;
+
+        int dataSize = data.capacity();
+        ByteBuffer hotDataBuf;
+        if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
+            hotDataBuf = ByteBuffer.allocate(dataSize);
+        } else {
+            hotDataBuf = q.maxOffsetData;
+        }
+        data.rewind();
+        hotDataBuf.clear();
+        hotDataBuf.put(data);
+        hotDataBuf.flip();
+
+        q.maxOffsetData = hotDataBuf;
         q.maxOffset++;
         return ret;
     }
@@ -355,12 +371,28 @@ public class LSMessageQueue extends MessageQueue {
             fetchNum = (int)(q.maxOffset-offset);
         }
 
-        if (q.maxOffsetData != null && offset == q.maxOffset-1){
-            if (mqConfig.useStats){
-                testStat.hitHotData(topic, queueId);
+        if (offset == q.maxOffset-1){
+            if (q.type == 0){
+                q.type = 1; // hot
+                if (mqConfig.useStats){
+                    testStat.incHotQueueCount();
+                }
             }
-            ret.put(0, ByteBuffer.wrap(q.maxOffsetData));
-            return ret;
+            if (q.maxOffsetData != null){
+                if (mqConfig.useStats){
+                    testStat.hitHotData(topic, queueId);
+                }
+                ret.put(0, q.maxOffsetData);
+                return ret;
+            }
+        }
+        if (offset == 0){
+            if (q.type == 0){
+                q.type = 2; // cold
+                if (mqConfig.useStats){
+                    testStat.incColdQueueCount();
+                }
+            }
         }
 
         DataFile df = mqTopic.df;
@@ -826,6 +858,9 @@ public class LSMessageQueue extends MessageQueue {
             int getRangeCount;
             int hitHotDataCount;
             int hotDataAllocCount;
+            int queueCount;
+            int coldQueueCount;
+            int hotQueueCount;
             Long writeBytes;
             public int[] bucketBound;
             public int[] bucketCount;
@@ -840,6 +875,9 @@ public class LSMessageQueue extends MessageQueue {
                 writeBytes = 0L;
                 hitHotDataCount = 0;
                 hotDataAllocCount = 0;
+                queueCount = 0;
+                coldQueueCount = 0;
+                hotQueueCount = 0;
                 reported = new AtomicBoolean();
                 reported.set(false);
 
@@ -912,6 +950,22 @@ public class LSMessageQueue extends MessageQueue {
                 log.info("init thread id : " + thisNumOfThread);
             }
         }
+
+        void incQueueCount(){
+            int id = threadId.get();
+            stats[id].queueCount++;
+        }
+        void incHotQueueCount(){
+            int id = threadId.get();
+            stats[id].hotQueueCount++;
+        }
+        void incColdQueueCount(){
+            int id = threadId.get();
+            stats[id].coldQueueCount++;
+        }
+
+
+
 
         void appendStart() {
             updateThreadId();
@@ -1171,6 +1225,25 @@ public class LSMessageQueue extends MessageQueue {
                 hotDataReport += String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount);
             }
             log.info("[hit hot data] : " + hotDataReport);
+
+            StringBuilder queueCountReport = new StringBuilder();
+            StringBuilder hotQueueCountReport = new StringBuilder();
+            StringBuilder coldQueueCountReport = new StringBuilder();
+            StringBuilder otherQueueCountReport = new StringBuilder();
+            queueCountReport.append("[queueCount report]");
+            hotQueueCountReport.append("[hot queueCount report]");
+            coldQueueCountReport.append("[cold queueCount report]");
+            otherQueueCountReport.append("[other queueCount report]");
+            for (int i = 0; i < getNumOfThreads; i++){
+                queueCountReport.append(String.format("%d,",stats[i].queueCount));
+                hotQueueCountReport.append(String.format("%d,",stats[i].hotQueueCount));
+                coldQueueCountReport.append(String.format("%d,",stats[i].coldQueueCount));
+                otherQueueCountReport.append(String.format("%d,",stats[i].queueCount-stats[i].hotQueueCount-stats[i].coldQueueCount));
+            }
+            log.info(queueCountReport);
+            log.info(hotQueueCountReport);
+            log.info(coldQueueCountReport);
+            log.info(otherQueueCountReport);
 
 
 
