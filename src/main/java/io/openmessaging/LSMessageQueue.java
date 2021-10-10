@@ -533,7 +533,7 @@ public class LSMessageQueue extends MessageQueue {
             head = 0;
             tail = 0;
             length = 0;
-            maxLength = 6;
+            maxLength = 7;
             msgLengths = new int[maxLength];
             slotSize = 17*1024;
             // FIXME: 性能很差，考虑换掉
