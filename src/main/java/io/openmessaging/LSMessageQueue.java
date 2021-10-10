@@ -3,10 +3,13 @@ package io.openmessaging;
 
 
 import java.io.IOException;
-
+import java.nio.channels.AsynchronousFileChannel;
+import java.nio.file.StandardOpenOption;
+import java.nio.channels.CompletionHandler;
 import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
 import java.io.RandomAccessFile;
+import java.util.concurrent.Future;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
@@ -24,7 +27,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -58,6 +60,7 @@ import java.util.Deque;
 
 import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
+import com.intel.pmem.llpl.MemoryPool;
 
 import io.openmessaging.SSDBench;
 
@@ -67,6 +70,9 @@ import java.util.Comparator;
 
 public class LSMessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(LSMessageQueue.class);
+    // private static final MemoryPool pmPool = MemoryPool.createPool("/mnt/pmem/data", 60L*1024L*1024L);
+    private static final Heap pmHeap = Heap.createHeap("/mnt/pmem/mq/data", 60L*1024L*1024L*1024L);
+
     public class MQConfig {
         Level logLevel = Level.INFO;
         // Level logLevel = Level.DEBUG;
@@ -91,17 +97,24 @@ public class LSMessageQueue extends MessageQueue {
         // public byte[] maxOffsetData;
         public ByteBuffer maxOffsetData;
         public int type;
+        public long consumeOffset;
+        public long prefetchOffset;
+        public QueuePrefetchBuffer prefetchBuffer;
 
         MQQueue(DataFile dataFile){
+            consumeOffset = 0L;
             type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
             df = dataFile;
+            prefetchBuffer = new QueuePrefetchBuffer(this, df);
         }
         MQQueue(){
+            consumeOffset = 0L;
             type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
+            prefetchBuffer = new QueuePrefetchBuffer(this, df);
         }
 
     }
@@ -138,8 +151,8 @@ public class LSMessageQueue extends MessageQueue {
 
 
     LSMessageQueue(String dbDirPath, String pmDirPath){
-        SSDBench.runStandardBench(dbDirPath);
-        PMBench.runStandardBench(pmDirPath);
+        // SSDBench.runStandardBench(dbDirPath);
+        // PMBench.runStandardBench(pmDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath);
 
@@ -314,14 +327,16 @@ public class LSMessageQueue extends MessageQueue {
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
             topic2object.put(topic, mqTopic);
         }
-        data = data.slice();
+        // data = data.slice();
+        data.mark();
 
         q = mqTopic.id2queue.get(queueId);
         if (q == null){
             Integer queueIdObject = queueId;
             int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
             // q = new MQQueue(dataFileId);
-            q = new MQQueue(dataFiles[dataFileId]);
+            // q = new MQQueue(dataFiles[dataFileId]);
+            q = new MQQueue(mqTopic.df); // 要和topic用一样的df
             mqTopic.id2queue.put(queueId, q);
             if (mqConfig.useStats){
                 testStat.incQueueCount();
@@ -332,47 +347,28 @@ public class LSMessageQueue extends MessageQueue {
         //     log.info("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
         // }
 
+        log.debug("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
 
         DataFile df = mqTopic.df;
 
-        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
+        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(mqTopic.topicId, queueId, data, q);
+
+        // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
+        // data.position(0);
+        // if (!q.prefetchBuffer.isFull()){
+        //     q.prefetchBuffer.prefetch();
+        //     if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
+        //         q.prefetchBuffer.directAddData(data);
+        //         q.prefetchOffset++;
+        //     }
+        // }
+
+        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
 
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
         long ret = q.maxOffset;
-
-        // 热读方案1：需要时才分配内存
-        // 只有20%的getRange能够命中这个cache
-
-        // if (q.type == 1){
-        //     // is hot queue
-        //     if (q.maxOffsetData == null){
-        //         q.maxOffsetData = ByteBuffer.allocate(17408);
-        //     }
-        //     q.maxOffsetData.clear();
-        //     data.rewind();
-        //     q.maxOffsetData.put(data);
-        //     q.maxOffsetData.flip();
-        // }
-
-        // 热读方案2：每次append都留一个热读区，如果上次申请的空间够用就不重新分配，否则重新分配
-        // （TODO:如果后期发现不热了，就把空间释放出来？）
-        // 有40%的getRange能够命中这个cache
-        // 估计要采用这种方案
-
-        // int dataSize = data.capacity();
-        // ByteBuffer hotDataBuf;
-        // if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
-        //     hotDataBuf = ByteBuffer.allocate(dataSize);
-        // } else {
-        //     hotDataBuf = q.maxOffsetData;
-        // }
-        // data.rewind();
-        // hotDataBuf.clear();
-        // hotDataBuf.put(data);
-        // hotDataBuf.flip();
-        // q.maxOffsetData = hotDataBuf;
 
         q.maxOffset++;
         return ret;
@@ -400,13 +396,39 @@ public class LSMessageQueue extends MessageQueue {
         // if (localThreadId.get() == 1){
         //     log.info("getRange : "+topic+","+queueId+","+offset+","+fetchNum+" maxOffset: "+(q.maxOffset-1));
         // }
+
         
+        log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum+" maxOffset: "+(q.maxOffset-1));
+        // 更新一下offset和fetchNum，略去那些肯定没有的
         if (offset >= q.maxOffset){
             return ret;
         }
         if (offset + fetchNum-1 >= q.maxOffset){
             fetchNum = (int)(q.maxOffset-offset);
         }
+
+        int fetchStartIndex = 0;
+
+        // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
+        // 如果有东西在prefetchBuffer的话
+        // 需要的数据:      [offset, offset+fetchNum-1]
+        // 已经预取好的数据: [consumeOffset, prefetchOffset-1]
+        // 暂时只考虑 offset == consumeOffset 的情况
+        assert (offset == q.consumeOffset);
+        if (offset == q.consumeOffset){
+            // 目前消费的offset刚好和我预取好的消息相匹配
+            // 所以前面的消息都不用取了
+            int prefetchNum = q.prefetchBuffer.consume(ret, fetchNum);
+            fetchStartIndex += prefetchNum;
+            q.consumeOffset += prefetchNum;
+        }
+
+        // // 假定从 consumeOffset 开始消费
+        // if (offset != q.consumeOffset){
+        //     // 这应该是热读，或者发生了不连续读
+        //     q.consumeOffset = offset;
+        // }
+
 
         if (offset == q.maxOffset-1){
             if (q.type == 0){
@@ -435,7 +457,7 @@ public class LSMessageQueue extends MessageQueue {
         DataFile df = mqTopic.df;
 
         long pos = 0;
-        for (int i = 0; i < fetchNum; i++){
+        for (int i = fetchStartIndex; i < fetchNum; i++){
             long curOffset = offset + i;
             int intCurOffset = (int)curOffset;
             pos = q.offset2position.get(intCurOffset);
@@ -443,6 +465,7 @@ public class LSMessageQueue extends MessageQueue {
             if (buf != null){
                 buf.position(0);
                 buf.limit(buf.capacity());
+                q.consumeOffset ++;
                 ret.put(i, buf);
             }
         }
@@ -480,6 +503,181 @@ public class LSMessageQueue extends MessageQueue {
             ie.printStackTrace();
         }
         return (short)topicId;
+    }
+    public class QueuePrefetchBuffer{
+        public long[] addrBuffer;
+        public int[] msgLengths;
+
+        public long headOffset; // == consumeOffset
+        public long tailOffset;
+        // 缓存 [headOffset, tailOffset] 的内容
+        public int head;
+        public int tail;
+        public int length;
+
+        public MemoryBlock block;
+        public int maxLength;
+        public MQQueue q;
+        public DataFile df;
+        public int slotSize;
+
+        QueuePrefetchBuffer(MQQueue myQ, DataFile myDf){
+            head = 0;
+            tail = 0;
+            length = 0;
+            maxLength = 6;
+            msgLengths = new int[maxLength];
+            slotSize = 17*1024;
+            // FIXME: 性能很差，考虑换掉
+            q = myQ;
+            df = myDf;
+            block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+        }
+
+        public int consume(Map<Integer, ByteBuffer> ret, int fetchNum){
+            log.debug("tail : " + tail + " head : "+head + " length : " + length);
+            log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
+            log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
+
+            // read from consume Offset
+            // 假定 刚好匹配，一定是从headOffset开始读取
+            // 想要fetchNum那么多个，但不一定有这么多
+            int consumeNum = Math.min(fetchNum, length);
+            for (int i = 0; i < consumeNum; i++){
+                ByteBuffer buf = this.poll();
+                log.debug(buf);
+                ret.put(i, buf);
+            }
+            // return number of msg  read from buffer
+            log.debug("consume " + consumeNum + " msgs in prefetch buffer");
+            log.debug("tail : " + tail + " head : "+head + " length : " + length);
+            log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
+            log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
+
+
+            return consumeNum;
+
+        }
+
+        public void prefetch(){
+            log.debug("try to prefetch !!");
+            log.debug("tail : " + tail + " head : "+head + " length : " + length);
+            log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
+            log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
+            // 先看看能prefetch多少个？
+            // 数一下从consumeOffset开始后面有多少有效消息
+            // 再看看队列还能放多少个
+            long prefetchNum = (q.maxOffset-1)-q.prefetchOffset;
+            log.debug("prefetchNum : " + prefetchNum);
+            // 得到能够被预取的消息数量
+            if (prefetchNum <= 0){
+                // 没有需要预取的消息，或者所有消息都被预取了
+                return;
+            }
+            // 检查consumeOffset和队列的headOffset是否对应，如果不对应则释放相关数据
+            // 被消费的时候应当释放队列相关资源
+            assert (q.consumeOffset == headOffset);
+            // 预取的数量最大为当前buffer剩余的空间，再多的也没法预取，确定真正要预取这么多个消息
+            prefetchNum = Math.min(prefetchNum, (maxLength-length));
+            if (prefetchNum <= 0){
+                log.debug("the prefetch buffer is full");
+                return ;
+            }
+
+            log.debug("prefetchNum : " + prefetchNum);
+
+            // 从prefetchOffset开始prefetch，填满数组
+
+            for (int i = 0; i < prefetchNum; i++){
+                // FIXME: long转int，不太好
+                long pos = q.offset2position.get((int)q.prefetchOffset); 
+                ByteBuffer buf = df.read(pos);
+                log.debug(buf);
+                this.offer(buf);
+                q.prefetchOffset++;
+            }
+            log.debug("prefetch " + prefetchNum + " msgs");
+
+            return ;
+        }
+
+        public void directAddData(ByteBuffer data){
+            // 如果刚好需要预取这个数据，而且预取数量还不够，那就把这个数据加进去
+            this.offer(data);
+            q.prefetchOffset++;
+
+            return ;
+        }
+
+
+        public boolean offer(ByteBuffer data){
+            data.reset();
+            if (isEmpty()){
+                // 把一个消息放到队列末尾
+                log.debug(data);
+                msgLengths[tail] = data.remaining();
+                block.copyFromArray(data.array(), data.position(), tail*slotSize, msgLengths[tail] );
+                length ++;
+                return true;
+            }
+            if (isFull()){
+                return false;
+            }
+            // 把一个消息放到队列末尾
+            tail += 1;
+            tail = tail % maxLength;
+            log.debug("put data on tail : " + tail);
+            log.debug(data);
+            msgLengths[tail] = data.remaining();
+            block.copyFromArray(data.array(), data.position(), tail*slotSize, msgLengths[tail] );
+            tailOffset ++;
+            length ++;
+            return true;
+        }
+
+        public ByteBuffer poll(){
+            if (isEmpty()){
+                return null;
+            }
+            // 把一个消息从队列头部去掉
+            int msgLength = msgLengths[head];
+            log.debug("msgLength : " + msgLength + " head : " + head);
+            ByteBuffer buf = ByteBuffer.allocate(msgLength);
+            block.copyToArray(head*slotSize, buf.array(), 0, msgLength);
+            log.debug("get buffer from prefetchqueue : " + buf);
+
+            if (length == 1){
+                length --;
+                return buf;
+            }
+
+            head ++;
+            head = head % maxLength;
+            headOffset ++;
+            length --;
+            return buf;
+        }
+
+        public  void reset(long consumeOffset){
+            headOffset = consumeOffset;
+            tailOffset = consumeOffset;
+            head = 0;
+            tail = 0;
+            length = 0;
+        }
+
+
+        public boolean isFull(){
+            return length == maxLength;
+        }
+        public boolean isEmpty(){
+            return length == 0;
+        }
+
+
+
+
+
     }
 
 
@@ -550,6 +748,129 @@ public class LSMessageQueue extends MessageQueue {
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
+        }
+
+
+
+        public long syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(Short topicIndex, int queueId, ByteBuffer data, MQQueue q){
+
+            ByteBuffer writerBuffer = commonWriteBuffer;
+
+            long position = bufMetadataLength;
+            try {
+                Writer w = new Writer(topicIndex, queueId, data, Thread.currentThread(),q);
+                writerConcurrentQueue.offer(w);
+                while (!(w.done == 1 || w.equals(writerConcurrentQueue.peek()) )){
+                    LockSupport.park();
+                }
+                if (w.done == 1){
+                    return w.position;
+                }
+                
+                int bufLength = bufMetadataLength;
+                int maxBufLength = mqConfig.maxBufLength;
+                int bufNum = 0;
+                int maxBufNum = mqConfig.maxBufNum;
+
+                boolean continueMerge = true;
+                Writer[] batchWriters = new Writer[maxBufNum];
+                Iterator<Writer> iter = writerConcurrentQueue.iterator();
+                Writer lastWriter = null;
+                int dataLength = 0;
+                int writeLength = 0;
+
+                position += curPosition;
+                while ( continueMerge ){
+                    lastWriter = iter.next();
+                    dataLength = lastWriter.length;
+                    writeLength = globalMetadataLength + dataLength;
+                    lastWriter.position = position;
+                    batchWriters[bufNum] = lastWriter;
+                    position += writeLength;
+                    bufLength += writeLength;
+                    bufNum += 1;
+                    if (bufNum >= maxBufNum){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
+                    }
+                    if (bufLength >= maxBufLength){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+                    }
+                    if (!iter.hasNext()){
+                        continueMerge = false;
+                        if (mqConfig.useStats){
+                            writeStat.incEmptyQueueCount();
+                        }
+                    }
+                }
+                long writePosition = curPosition;
+                //  对齐到4K
+                // assert (curPosition % 4096 == 0);
+                if (mqConfig.useStats){
+                    writeStat.addSample(bufLength);
+                }
+                bufLength = bufLength + (4096 - bufLength % 4096);
+                curPosition += bufLength;
+                {
+                    writerBuffer.clear();
+                    writerBuffer.putInt(bufLength);
+                    writerBuffer.putInt(bufNum);
+                    for (int i = 0; i < bufNum; i++){
+                        Writer thisW = batchWriters[i];
+                        writerBuffer.putShort(thisW.topicIndex);
+                        writerBuffer.putInt(thisW.queueId);
+                        writerBuffer.putShort(thisW.length);
+                        writerBuffer.put(batchWriters[i].data);
+                    }
+                    writerBuffer.flip();
+                    dataFileChannel.write(writerBuffer, writePosition);
+                    dataFileChannel.force(true);
+                }
+
+                // // 预取内容，以后可以跑出一个异步任务来处理，写数据完成后再等待异步任务完成
+                for (int i = 0; i < bufNum; i++){
+                    Writer thisW = batchWriters[i];
+                    if (!thisW.q.prefetchBuffer.isFull()){
+                        // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                        thisW.q.prefetchBuffer.prefetch();
+                        long thisOffset = thisW.q.maxOffset;
+                        if (!thisW.q.prefetchBuffer.isFull() && thisOffset == thisW.q.prefetchOffset){
+                            log.debug("double write !");
+                            // 如果目前要写入的数据刚好就是下一个要预取的内容
+                            // 双写
+                            thisW.data.reset();
+                            log.debug(thisW.data);
+                            thisW.q.prefetchBuffer.directAddData(thisW.data);
+                        }
+                    }
+                }
+
+                while(true){
+                    Writer ready = writerConcurrentQueue.poll();
+                    if (!ready.equals(w)){
+                        ready.done = 1;
+                        LockSupport.unpark(ready.currentThread);
+                    }
+                    if (ready.equals(lastWriter)){
+                        break;
+                    }
+                }
+
+                if (!writerConcurrentQueue.isEmpty()){
+                    LockSupport.unpark(writerConcurrentQueue.peek().currentThread);
+                }
+                position = w.position;
+
+            } catch (Throwable ie) {
+                ie.printStackTrace();
+            }
+            return position;
+
         }
 
         public long syncSeqWritePushConcurrentQueueHeapBatchBuffer(Short topicIndex, int queueId, ByteBuffer data){
