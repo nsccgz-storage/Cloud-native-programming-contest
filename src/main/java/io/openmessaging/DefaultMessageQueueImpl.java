@@ -31,21 +31,26 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     // Initialization
     
     public SSDqueue ssdQueue;
+    public MessageQueue mq;
     public DefaultMessageQueueImpl(){
 
        String dirPath = "/essd";
-        ssdQueue = new SSDqueue(dirPath);
+        // SSDBench.runStandardBench(dirPath);
+        // String dirPath = "/mnt/ssd/wxr";
+        // ssdQueue = new SSDqueue(dirPath);
+        mq = new LSMessageQueue(dirPath);
+
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
-        return ssdQueue.append(topic, queueId, data);
-        // return mq.append(topic, queueId, data);
+        // return ssdQueue.append(topic, queueId, data);
+        return mq.append(topic, queueId, data);
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum){
         // return ssdQueue.getRange(topic, queueId, offset, fetchNum);
-        // return mq.getRange(topic, queueId, offset, fetchNum);
-        return null;
+        return mq.getRange(topic, queueId, offset, fetchNum);
+        // return null;
     }
 }
