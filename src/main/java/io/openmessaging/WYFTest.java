@@ -499,12 +499,14 @@ public class WYFTest {
 
 		// 	System.exit(0);
 		// }
+		long currentGetRangeOffset = 0L;
 		for (int i = 0; i < 10; i++){
 			mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
 		}
 
-		ret = mq.getRange("topic1", 0, 0, 3);
-		for (int i = 0; i < 3; i++){
+
+		ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+		for (int i = 0; i < 4; i++){
 			if (msgs.get(i).checkBuf.compareTo(msgs.get(i).buf) != 0) {
 				log.error("bug1");
 			}
@@ -518,9 +520,24 @@ public class WYFTest {
 
 		}
 
-		// for (int i = 10; i < 11; i++){
-		// 	mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
-		// }
+		for (int i = 10; i < 11; i++){
+			mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		}
+		currentGetRangeOffset += 4;
+
+		ret = mq.getRange("topic1", 0, currentGetRangeOffset, 3);
+		for (int i = 0; i < 3; i++){
+			int msgId = (int)currentGetRangeOffset + i;
+			if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+				log.error(msgs.get(i).buf);
+				log.error(ret.get(i));
+				log.error(msgs.get(i).checkBuf);
+				log.error("data error !");
+				System.exit(0);
+			}
+
+		}
+
 
 		return ;
 	}
@@ -549,9 +566,9 @@ public class WYFTest {
 		String pmDirPath = args[1] ;
 
 		try {
-			// testPrefetch(dbPath, pmDirPath);
+			testPrefetch(dbPath, pmDirPath);
 			// writePerformanceTest(dbPath, pmDirPath);
-			testThreadPool(dbPath, pmDirPath);
+			// testThreadPool(dbPath, pmDirPath);
 			// testRecover(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception

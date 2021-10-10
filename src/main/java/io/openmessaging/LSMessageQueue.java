@@ -73,8 +73,8 @@ public class LSMessageQueue extends MessageQueue {
     // private static final MemoryPool pmPool = MemoryPool.createPool("/mnt/pmem/data", 60L*1024L*1024L);
 
     public class MQConfig {
-        Level logLevel = Level.INFO;
-        // Level logLevel = Level.DEBUG;
+        // Level logLevel = Level.INFO;
+        Level logLevel = Level.DEBUG;
         boolean useStats = true;
         // boolean useStats = false;
         int writeMethod = 12;
@@ -596,6 +596,8 @@ public class LSMessageQueue extends MessageQueue {
                 long pos = q.offset2position.get((int)q.prefetchOffset); 
                 ByteBuffer buf = df.read(pos);
                 log.debug(buf);
+                buf.position(0);
+                buf.mark();
                 this.offer(buf);
                 q.prefetchOffset++;
             }
