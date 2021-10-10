@@ -525,8 +525,8 @@ public class LSMessageQueue extends MessageQueue {
             pos = q.offset2position.get(intCurOffset);
             ByteBuffer buf = df.read(pos);
             if (buf != null){
-                buf.position(0);
-                buf.limit(buf.capacity());
+                //buf.position(0);
+                //buf.limit(buf.capacity());
                 q.consumeOffset ++;
                 ret.put(i, buf);
             }
@@ -705,8 +705,6 @@ public class LSMessageQueue extends MessageQueue {
                 long pos = q.offset2position.get((int)q.prefetchOffset); 
                 ByteBuffer buf = df.read(pos);
                 log.debug(buf);
-                buf.position(0);
-                buf.mark();
                 this.offer(buf);
                 q.prefetchOffset++;
             }
@@ -757,8 +755,11 @@ public class LSMessageQueue extends MessageQueue {
             int msgLength = msgLengths[head];
             log.debug("msgLength : " + msgLength + " head : " + head);
             ByteBuffer buf = q.bbPool.allocate(msgLength);
-            block.copyToArray(head*slotSize, buf.array(), buf.arrayOffset(), msgLength);
-            // ByteBuffer buf = ByteBuffer.allocate(msgLength);
+            log.debug(buf);
+            //ByteBuffer buf = ByteBuffer.allocate(msgLength);
+            block.copyToArray(head*slotSize, buf.array(), buf.arrayOffset()+buf.position(), msgLength);
+            log.debug(buf.arrayOffset());
+            log.debug(buf);
             // block.copyToArray(head*slotSize, buf.array(), 0, msgLength);
             log.debug("get buffer from prefetchqueue : " + buf);
 
@@ -808,13 +809,16 @@ public class LSMessageQueue extends MessageQueue {
             head = 0;
             // head.set(0);
             slotSize = 17*1024;
-            maxLength = 200;
+            maxLength = 400;
             capacity = maxLength * slotSize;
             buffer = new byte[capacity];
         }
         public  ByteBuffer allocate(int dataLength){
             // int thisHead = head.getAndAdd(1);
             ByteBuffer ret = ByteBuffer.wrap(buffer, head*slotSize, dataLength);
+            ret.mark();
+	    assert (ret.arrayOffset() == head*slotSize );
+	    // log.info(ret.arrayOffset());
             head++;
             head = head % maxLength;
             return ret;
@@ -1439,7 +1443,9 @@ public class LSMessageQueue extends MessageQueue {
                 int dataLength = readMeta.getShort();
                 // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ByteBuffer tmp = bufPool.allocate(dataLength);
+                tmp.mark();
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
+                tmp.reset();
                 // log.debug(ret);
                 return tmp;
             } catch (IOException ie) {

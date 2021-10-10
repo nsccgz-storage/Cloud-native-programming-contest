@@ -173,8 +173,8 @@ public class MQBench {
 			msg.results = mq.getRange(msg.topic, msg.queueId, trueOffset, 1);
 			trueResult = trueMQ.getRange(msg.topic, msg.queueId, trueOffset, 1);
 			if (msg.results.get(0).compareTo(trueResult.get(0)) != 0){
-				log.debug(msg.results.get(0));
-				log.debug(trueResult.get(0));
+				log.error(msg.results.get(0));
+				log.error(trueResult.get(0));
 				log.error("data error");
 				System.exit(-1);
 			}
@@ -355,9 +355,9 @@ public class MQBench {
 		// log.setLevel(Level.DEBUG);
 		String dbPath = "/mnt/nvme/mq";
 		String pmDirPath = "/mnt/pmem/mq";
-		// correctBenchByTrace(dbPath, pmDirPath);
+		correctBenchByTrace(dbPath, pmDirPath);
 
-		perfBenchByTrace(dbPath, pmDirPath);
+		// perfBenchByTrace(dbPath, pmDirPath);
 
 		// log.setLevel(Level.INFO);
 		// try {
