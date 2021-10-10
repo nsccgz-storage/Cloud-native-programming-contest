@@ -190,8 +190,8 @@ public class LSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                System.exit(-1);
-                // recover();
+                // System.exit(-1);
+                recover();
             }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
@@ -908,9 +908,6 @@ public class LSMessageQueue extends MessageQueue {
                 dataFileChannel.write(writerBuffer, writePosition);
                 dataFileChannel.force(true);
 
-                while (!prefetchFuture.isDone()){
-                    Thread.sleep(0, 10000);
-                }
                 // if ((int)prefetchFuture.get() !=  0 ){
                 //     log.error("error !");
                 //     System.exit(-1);
@@ -932,6 +929,10 @@ public class LSMessageQueue extends MessageQueue {
                     LockSupport.unpark(writerConcurrentQueue.peek().currentThread);
                 }
                 position = w.position;
+                while (!prefetchFuture.isDone()){
+                    Thread.sleep(0, 10000);
+                }
+
 
             } catch (Throwable ie) {
                 ie.printStackTrace();
