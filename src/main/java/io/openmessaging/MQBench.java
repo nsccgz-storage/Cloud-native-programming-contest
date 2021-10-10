@@ -200,10 +200,13 @@ public class MQBench {
 				msg.results = mq.getRange(msg.topic, msg.queueId, msg.offset, msg.fetchNum);
 				trueResult = trueMQ.getRange(msg.topic, msg.queueId, msg.offset, msg.fetchNum);
 				for (int j = 0; j < msg.fetchNum; j++){
-					if (msg.results.get(j).compareTo(trueResult.get(j)) != 0){
-						log.error("data error");
-						System.exit(-1);
+					if (trueResult.containsKey(j)){
+						if (msg.results.get(j).compareTo(trueResult.get(j)) != 0){
+							log.error("data error");
+							System.exit(-1);
+						}
 					}
+
 				}
 			}
 		}
