@@ -481,6 +481,12 @@ public class LSMessageQueue extends MessageQueue {
         return ret;
     }
 
+    public void close(){
+        for (int i = 0; i < numOfDataFiles; i++){
+            dataFiles[i].prefetchThread.shutdown();
+        }
+    }
+
     private ThreadLocal<Integer> localThreadId;
     private AtomicInteger numOfThreads;
 
@@ -879,30 +885,44 @@ public class LSMessageQueue extends MessageQueue {
                 }
                 writerBuffer.flip();
 
+                boolean needPrefetch = false;
+
                 final int finalBufNum = bufNum;
-                Future prefetchFuture = prefetchThread.submit(new Callable<Integer>(){
-                    @Override
-                    public Integer call() throws Exception {
-                        for (int i = 0; i < finalBufNum; i++){
-                            Writer thisW = batchWriters[i];
-                            if (!thisW.q.prefetchBuffer.isFull()){
-                                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                                thisW.q.prefetchBuffer.prefetch();
-                                long thisOffset = thisW.q.maxOffset;
-                                if (!thisW.q.prefetchBuffer.isFull() && thisOffset == thisW.q.prefetchOffset){
-                                    log.debug("double write !");
-                                    // 如果目前要写入的数据刚好就是下一个要预取的内容
-                                    // 双写
-                                    thisW.data.reset();
-                                    log.debug(thisW.data);
-                                    thisW.q.prefetchBuffer.directAddData(thisW.data);
+                for (int i = 0; i < finalBufNum; i++){
+                    Writer thisW = batchWriters[i];
+                    if (!thisW.q.prefetchBuffer.isFull()){
+                        needPrefetch = true;
+                        break;
+                    }
+                }
+
+                Future prefetchFuture = null;
+                if (needPrefetch){
+                    prefetchFuture = prefetchThread.submit(new Callable<Integer>(){
+                        @Override
+                        public Integer call() throws Exception {
+                            for (int i = 0; i < finalBufNum; i++){
+                                Writer thisW = batchWriters[i];
+                                if (!thisW.q.prefetchBuffer.isFull()){
+                                    // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                                    thisW.q.prefetchBuffer.prefetch();
+                                    long thisOffset = thisW.q.maxOffset;
+                                    if (!thisW.q.prefetchBuffer.isFull() && thisOffset == thisW.q.prefetchOffset){
+                                        log.debug("double write !");
+                                        // 如果目前要写入的数据刚好就是下一个要预取的内容
+                                        // 双写
+                                        thisW.data.reset();
+                                        log.debug(thisW.data);
+                                        thisW.q.prefetchBuffer.directAddData(thisW.data);
+                                    }
                                 }
                             }
+                            log.debug("prefetch ok");
+                            return 0;
                         }
-                        log.debug("prefetch ok");
-                        return 0;
-                    }
-                });
+                    });
+                }
+
 
                 // 希望这个写入的时间能够掩盖异步预取SSD和写PM 的过程
                 dataFileChannel.write(writerBuffer, writePosition);
@@ -929,8 +949,10 @@ public class LSMessageQueue extends MessageQueue {
                     LockSupport.unpark(writerConcurrentQueue.peek().currentThread);
                 }
                 position = w.position;
-                while (!prefetchFuture.isDone()){
-                    Thread.sleep(0, 10000);
+                if (prefetchFuture != null){
+                    while (!prefetchFuture.isDone()){
+                        Thread.sleep(0, 10000);
+                    }
                 }
 
 

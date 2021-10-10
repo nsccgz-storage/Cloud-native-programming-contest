@@ -584,6 +584,8 @@ public class WYFTest {
 				}
 
 			}
+			log.info("pass the test");
+			((LSMessageQueue)mq).close();
 		}
 
 		return ;
