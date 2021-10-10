@@ -100,6 +100,7 @@ public class LSMessageQueue extends MessageQueue {
         public long consumeOffset;
         public long prefetchOffset;
         public QueuePrefetchBuffer prefetchBuffer;
+        public Future prefetchFuture;
 
         MQQueue(DataFile dataFile){
             consumeOffset = 0L;
@@ -347,6 +348,19 @@ public class LSMessageQueue extends MessageQueue {
             }
         }
 
+        // // 确保和这个queue相关的异步任务已完成
+        if (q.prefetchFuture != null){
+            while (!q.prefetchFuture.isDone()){
+                try {
+                    Thread.sleep(0, 10000);
+                } catch (Throwable ie){
+                    ie.printStackTrace();
+                }
+            }
+            q.prefetchFuture = null;
+        }
+
+
         // if (localThreadId.get() == 1){
         //     log.info("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
         // }
@@ -412,6 +426,18 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         int fetchStartIndex = 0;
+        // // 确保和这个queue相关的异步任务已完成
+        if (q.prefetchFuture != null){
+            while (!q.prefetchFuture.isDone()){
+                try {
+                    Thread.sleep(0, 10000);
+                } catch (Throwable ie){
+                    ie.printStackTrace();
+                }
+            }
+            q.prefetchFuture = null;
+        }
+
 
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
         // 如果有东西在prefetchBuffer的话
@@ -477,6 +503,22 @@ public class LSMessageQueue extends MessageQueue {
         // 既然从预取中消费了一些数据，那当然可以补回来
         // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
         // TODO
+        Future prefetchFuture = null;
+        prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+            @Override
+            public Integer call() throws Exception {
+                long startTime = System.nanoTime();
+                if (!q.prefetchBuffer.isFull()){
+                    // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                    q.prefetchBuffer.prefetch();
+                }
+                long endTime = System.nanoTime();
+                log.debug("prefetch ok");
+                log.debug("time : " + (endTime - startTime) + " ns");
+                return 0;
+            }
+        });
+        q.prefetchFuture = prefetchFuture;
 
         return ret;
     }
@@ -581,7 +623,10 @@ public class LSMessageQueue extends MessageQueue {
         public void prefetch(){
             // 把分配内存放在异步任务中完成
             if (block == null){
+                long startTime = System.nanoTime();
                 block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+                long endTime = System.nanoTime();
+                log.debug("memory block allocate : " + (endTime - startTime) + " ns");
             }
             log.debug("try to prefetch !!");
             log.debug("tail : " + tail + " head : "+head + " length : " + length);
@@ -901,6 +946,7 @@ public class LSMessageQueue extends MessageQueue {
                     prefetchFuture = prefetchThread.submit(new Callable<Integer>(){
                         @Override
                         public Integer call() throws Exception {
+                            long startTime = System.nanoTime();
                             for (int i = 0; i < finalBufNum; i++){
                                 Writer thisW = batchWriters[i];
                                 if (!thisW.q.prefetchBuffer.isFull()){
@@ -917,10 +963,16 @@ public class LSMessageQueue extends MessageQueue {
                                     }
                                 }
                             }
+                            long endTime = System.nanoTime();
                             log.debug("prefetch ok");
+                            log.debug("time : " + (endTime - startTime) + " ns");
                             return 0;
                         }
                     });
+                    for (int i = 0; i < finalBufNum; i++){
+                        Writer thisW = batchWriters[i];
+                        thisW.q.prefetchFuture = prefetchFuture;
+                    }
                 }
 
 

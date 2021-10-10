@@ -339,6 +339,8 @@ public class MQBench {
 				log.info("pass !ok !!");
 			}
 
+			((LSMessageQueue)mq).close();
+
 
 
 		} catch (Exception e) {
@@ -353,8 +355,10 @@ public class MQBench {
 		// log.setLevel(Level.DEBUG);
 		String dbPath = "/mnt/nvme/mq";
 		String pmDirPath = "/mnt/pmem/mq";
-		// perfBenchByTrace(dbPath, pmDirPath);
-		correctBenchByTrace(dbPath, pmDirPath);
+		// correctBenchByTrace(dbPath, pmDirPath);
+
+		perfBenchByTrace(dbPath, pmDirPath);
+
 		// log.setLevel(Level.INFO);
 		// try {
 		// 	String filename = "./workloads/workload.csv";
