@@ -24,7 +24,7 @@ import java.io.RandomAccessFile;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
-public class SSDqueue{
+public class SSDqueue extends MessageQueue {
     private static final Logger logger = Logger.getLogger(SSDqueue.class);
     
     // FileChannel spaceMetaFc;
@@ -52,21 +52,22 @@ public class SSDqueue{
     MetaTopicQueue mqMeta;
     private String markSpilt = "$@#";
     ConcurrentHashMap<String, ConcurrentHashMap<Long,Long[]>> allDataOffsetMap; // 加速 getRange
-    ConcurrentHashMap<String, Boolean>isColdQueue;
-    ConcurrentHashMap<String, ConcurrentHashMap<Long,Long>> pmemPositionMap;
-    
+
     boolean RECOVER = false;
     ConcurrentHashMap<String, HotData> hotDataMap;
     PmemManager pmem;
 
     TestStat testStat;
 
-    public SSDqueue(String dirPath){
+    AtomicLong hitHotCount = new AtomicLong(0L);
+    AtomicLong totalReadCount = new AtomicLong(0L);
 
+    public SSDqueue(String dirPath){
+        
         this.numOfDataFileChannels = 4;
         try {
             //init(dirPath);
-            pmem = new PmemManager("/pmem");
+//            pmem = new PmemManager("/pmem");
             dataSpaces = new DataSpace[numOfDataFileChannels];
             testStat = new TestStat(dataSpaces);
             boolean flag = new File(dirPath + "/meta").exists();
@@ -74,7 +75,7 @@ public class SSDqueue{
                 // recover
                 // 读盘，建表 
                 logger.info("reover");
-                RECOVER = true;
+//                RECOVER = true; // TODO: 得分需要取消此行注释
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 this.mqMeta = new MetaTopicQueue(this.metaFileChannel);
 
@@ -88,9 +89,7 @@ public class SSDqueue{
                 logger.info("create a new queue");
                 
                 this.allDataOffsetMap = new ConcurrentHashMap<>();
-                this.isColdQueue = new ConcurrentHashMap<>();
-                this.pmemPositionMap = new ConcurrentHashMap<>();
-                
+
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
                 this.mqMeta = new MetaTopicQueue(this.metaFileChannel, Long.BYTES);
 
@@ -112,7 +111,8 @@ public class SSDqueue{
         
     }    
 
-    public Long append(String topicName, int queueId, ByteBuffer data){
+    @Override
+    public long append(String topicName, int queueId, ByteBuffer data){
         int dataSize = data.remaining();
         testStat.appendStart(data.remaining());
         byte[] hotData = new byte[data.remaining()];
@@ -137,11 +137,6 @@ public class SSDqueue{
                 ConcurrentHashMap<Long, Long[]> tmp2 = new ConcurrentHashMap<>();
                 tmp2.put(result,new Long[]{writeData.tail, (long) dataSize});
                 allDataOffsetMap.put(key, tmp2);
-                isColdQueue.put(key, true);
-                ConcurrentHashMap<Long, Long> queuePosOfPmem = new ConcurrentHashMap<>();
-//                long handle = pmem.write() // TODO: 此处改为异步写操作
-                queuePosOfPmem.put(result, -1L);
-                pmemPositionMap.put(key, queuePosOfPmem);
 
                 qTopicQueueDataMap.put(key, writeData.getMeta());            
                 mqMeta.force();
@@ -154,16 +149,13 @@ public class SSDqueue{
                 ConcurrentHashMap<Long, Long[]> tmp2 = allDataOffsetMap.get(key);
                 tmp2.put(result, new Long[]{writeData.tail, (long) dataSize});
                 allDataOffsetMap.put(key, tmp2);
-                // handle // TODO： 此处改为异步写操作
-//                pmemPositionMap.get(key).put(result, handle);
-                pmemPositionMap.get(key).put(result, -1L);
 
                 qTopicQueueDataMap.put(key, writeData.getMeta());
             }
             
         } catch (Exception e) {
             e.printStackTrace();
-            return null;
+            return 0L;
         }
 
         hotDataMap.put(key, new HotData(result, hotData));
@@ -172,7 +164,8 @@ public class SSDqueue{
         return result;
     }
     
-    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
+    @Override
+    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, long offset, int fetchNum){
         Map<Integer, ByteBuffer> result = new HashMap<>();
         String key = topicName + markSpilt + queueId;
         
@@ -180,50 +173,14 @@ public class SSDqueue{
             testStat.getRangeStart();
             DataMeta dataMeta = qTopicQueueDataMap.get(key);
             if(dataMeta == null) return result;
-           
+
+            totalReadCount.incrementAndGet();
             if(!RECOVER && hotDataMap.get(key).offset == offset){
                 byte[] array = hotDataMap.get(key).data;
-                isColdQueue.put(key,false);
                 ByteBuffer tmp = ByteBuffer.wrap(array);
                 result.put(0, tmp);
-            }
-            else if(!RECOVER && isColdQueue.get(key)){ // read data from pmem
-                long totalLength = 0;
-                ConcurrentHashMap<Long, Long[]> queueDataMap = allDataOffsetMap.get(key);
-                ConcurrentHashMap<Long,Long>queuePosOfPmem = pmemPositionMap.get(key);
-                int i  = 0;
-                while(queuePosOfPmem.get(offset+i)!=null && i < fetchNum){
-                    long handle = queuePosOfPmem.get(offset+i);
-                    if(handle != -1){
-                        totalLength += queueDataMap.get(offset+i)[1];
-                    }else{
-                        break;
-                    }
-                    i++;
-                }
-                if(i == 0){ // no cold data
-                    int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-                    Data resData = new Data(dataSpaces[fcId], dataMeta);
-                    result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRange(key, offset, fetchNum);
-                }
-                else{ // some data are cold
-                    byte[]bytes = pmem.read(topicId, queueId, queuePosOfPmem.get(offset), totalLength); //
-                    int startOffset = 0;
-                    for(int k = 0;k < i;k++){
-                        int len = queueDataMap.get(offset+k)[1].intValue();
-                        ByteBuffer buffer = ByteBuffer.allocate(len);
-                        buffer.put(bytes, startOffset, len);
-                        startOffset += len;
-                        buffer.flip();
-                        result.put(k, buffer);
-                    }
-                    int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-                    Data resData = new Data(dataSpaces[fcId], dataMeta);
-                    resData.getRange(key, offset, i, fetchNum-i, result);
-                }
-                // TODO: pmem pre read
-            }
-            else{
+                hitHotCount.incrementAndGet();
+            } else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data resData = new Data(dataSpaces[fcId], dataMeta);
                 result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRange(key, offset, fetchNum);
@@ -333,7 +290,7 @@ public class SSDqueue{
         public DataMeta getMeta(){
             return new DataMeta(metaOffset, head, tail, totalNum);
         }
-        public Data(DataSpace ds) throws IOException{
+        public Data(DataSpace ds){
             this.ds  = ds;
             this.metaOffset = -1L;//ds.createLink();
 
@@ -341,7 +298,7 @@ public class SSDqueue{
             this.tail = -1L;
             this.head = -1L;
         }
-        public Data(DataSpace ds, Long metaOffset) throws IOException{
+        public Data(DataSpace ds, Long metaOffset){
             this.ds = ds;
             this.metaOffset = metaOffset;
 //            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
@@ -390,25 +347,6 @@ public class SSDqueue{
 //            totalNum++;
 //            ds.updateMeta(metaOffset, totalNum, head, tail);
             return res;
-        }
-
-        public void getRange(String key, Long index, int startNum, int fetchNum, Map<Integer, ByteBuffer>res) throws IOException{
-//            Map<Integer, ByteBuffer> res = new HashMap<>();
-
-            Map<Long, Long[]> map = allDataOffsetMap.get(key);
-
-            Long[] dataInfo = map.get(index);
-
-            for(int i=0; i<fetchNum && dataInfo != null; ++i){
-
-                ByteBuffer tmp1 = ByteBuffer.allocate(dataInfo[1].intValue());
-                int len2 = ds.read(tmp1, dataInfo[0]  + Long.BYTES + Long.BYTES);
-                tmp1.flip();
-                res.put(i+startNum, tmp1);
-                index++;
-                dataInfo = map.get(index);
-            }
-//            return res;
         }
 
         public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
@@ -708,11 +646,11 @@ public class SSDqueue{
                 }
             }
 
-            String totalWriteBucketReport = "";
-            totalWriteBucketReport += myBucketBound[0] + " < ";
+            StringBuilder totalWriteBucketReport = new StringBuilder();
+            totalWriteBucketReport.append(myBucketBound[0]).append(" < ");
             for (int i = 0; i < numOfBucket; i++){
-                totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
-                totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
+                totalWriteBucketReport.append("[").append(totalWriteBucketCount[i]).append("]");
+                totalWriteBucketReport.append(" < ").append(myBucketBound[i + 1]).append(" < ");
             }
             logger.info("[Total Append Data Dist]" + totalWriteBucketReport);
 
@@ -721,11 +659,11 @@ public class SSDqueue{
                 for (int i = 0; i < numOfBucket; i++) {
                     curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
                 }
-                String curWriteBucketReport = "";
-                curWriteBucketReport += myBucketBound[0] + " < ";
+                StringBuilder curWriteBucketReport = new StringBuilder();
+                curWriteBucketReport.append(myBucketBound[0]).append(" < ");
                 for (int i = 0; i < numOfBucket; i++) {
-                    curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
-                    curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
+                    curWriteBucketReport.append("[").append(curWriteBucketCount[i]).append("]");
+                    curWriteBucketReport.append(" < ").append(myBucketBound[i + 1]).append(" < ");
                 }
 
                 logger.info("[Current Append Data Dist]" + curWriteBucketReport);
@@ -792,10 +730,13 @@ public class SSDqueue{
                     curWriteBandwidth, thisElapsedTimeS, curAppendThroughput, curAppendLatency, curGetRangeThroughput,
                     curGetRangeLatency);
 
+            String hitRateStr = String.format("Hit rate = %d / %d = %.3f",
+                    hitHotCount.get(),totalReadCount.get(),(double)(hitHotCount.get())/totalReadCount.get());
             logger.info("appendStat   :"+appendStat);
             logger.info("getRangeStat :"+getRangeStat);
             logger.info("csvStat      :"+csvStat);
             logger.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
+            logger.info(hitRateStr);
 
             // report write stat
              for (int i = 0; i < dataSpaces.length; i++){
@@ -827,7 +768,7 @@ public class SSDqueue{
                      writeReport.append(" " + "exceedBufNumCount : ").append(curWriteStat.exceedBufNumCount);
                      writeReport.append(" " + "exceedBufLengthCount : ").append(curWriteStat.exceedBufLengthCount);
                      logger.info(writeReport);
-                     logger.info("Write Size Dist : "+curWriteStat.toString());
+                     logger.info("Write Size Dist : "+ curWriteStat);
                  }
                 oldWriteStats[i] = dataSpaces[i].writeStat.clone();
              }
