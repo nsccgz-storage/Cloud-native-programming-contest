@@ -45,6 +45,7 @@ import io.openmessaging.SSDqueue.HotData;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
+import java.util.concurrent.Callable;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -539,10 +540,14 @@ public class LSMessageQueue extends MessageQueue {
             // FIXME: 性能很差，考虑换掉
             q = myQ;
             df = myDf;
-            block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
         }
 
         public int consume(Map<Integer, ByteBuffer> ret, int fetchNum){
+            // 把分配内存放在异步任务中完成
+            if (block == null){
+                block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+            }
+
             log.debug("tail : " + tail + " head : "+head + " length : " + length);
             log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
             log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
@@ -568,6 +573,10 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         public void prefetch(){
+            // 把分配内存放在异步任务中完成
+            if (block == null){
+                block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+            }
             log.debug("try to prefetch !!");
             log.debug("tail : " + tail + " head : "+head + " length : " + length);
             log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
@@ -711,6 +720,7 @@ public class LSMessageQueue extends MessageQueue {
         public int globalMetadataLength; // 8B
 
 
+        private ExecutorService prefetchThread;
         public WriteStat writeStat;
 
         private class Writer {
@@ -764,6 +774,8 @@ public class LSMessageQueue extends MessageQueue {
 
 
                 threadLocalReadMetaBuf = new ThreadLocal<>();
+
+                prefetchThread = Executors.newSingleThreadExecutor();
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
@@ -835,39 +847,75 @@ public class LSMessageQueue extends MessageQueue {
                 }
                 bufLength = bufLength + (4096 - bufLength % 4096);
                 curPosition += bufLength;
-                {
-                    writerBuffer.clear();
-                    writerBuffer.putInt(bufLength);
-                    writerBuffer.putInt(bufNum);
-                    for (int i = 0; i < bufNum; i++){
-                        Writer thisW = batchWriters[i];
-                        writerBuffer.putShort(thisW.topicIndex);
-                        writerBuffer.putInt(thisW.queueId);
-                        writerBuffer.putShort(thisW.length);
-                        writerBuffer.put(batchWriters[i].data);
-                    }
-                    writerBuffer.flip();
-                    dataFileChannel.write(writerBuffer, writePosition);
-                    dataFileChannel.force(true);
-                }
 
-                // // 预取内容，以后可以跑出一个异步任务来处理，写数据完成后再等待异步任务完成
+                // // // 预取内容，以后可以跑出一个异步任务来处理，写数据完成后再等待异步任务完成
+                // for (int i = 0; i < bufNum; i++){
+                //     Writer thisW = batchWriters[i];
+                //     if (!thisW.q.prefetchBuffer.isFull()){
+                //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                //         thisW.q.prefetchBuffer.prefetch();
+                //         long thisOffset = thisW.q.maxOffset;
+                //         if (!thisW.q.prefetchBuffer.isFull() && thisOffset == thisW.q.prefetchOffset){
+                //             log.debug("double write !");
+                //             // 如果目前要写入的数据刚好就是下一个要预取的内容
+                //             // 双写
+                //             thisW.data.reset();
+                //             log.debug(thisW.data);
+                //             thisW.q.prefetchBuffer.directAddData(thisW.data);
+                //         }
+                //     }
+                // }
+
+
+                writerBuffer.clear();
+                writerBuffer.putInt(bufLength);
+                writerBuffer.putInt(bufNum);
                 for (int i = 0; i < bufNum; i++){
                     Writer thisW = batchWriters[i];
-                    if (!thisW.q.prefetchBuffer.isFull()){
-                        // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                        thisW.q.prefetchBuffer.prefetch();
-                        long thisOffset = thisW.q.maxOffset;
-                        if (!thisW.q.prefetchBuffer.isFull() && thisOffset == thisW.q.prefetchOffset){
-                            log.debug("double write !");
-                            // 如果目前要写入的数据刚好就是下一个要预取的内容
-                            // 双写
-                            thisW.data.reset();
-                            log.debug(thisW.data);
-                            thisW.q.prefetchBuffer.directAddData(thisW.data);
-                        }
-                    }
+                    writerBuffer.putShort(thisW.topicIndex);
+                    writerBuffer.putInt(thisW.queueId);
+                    writerBuffer.putShort(thisW.length);
+                    writerBuffer.put(batchWriters[i].data);
                 }
+                writerBuffer.flip();
+
+                final int finalBufNum = bufNum;
+                Future prefetchFuture = prefetchThread.submit(new Callable<Integer>(){
+                    @Override
+                    public Integer call() throws Exception {
+                        for (int i = 0; i < finalBufNum; i++){
+                            Writer thisW = batchWriters[i];
+                            if (!thisW.q.prefetchBuffer.isFull()){
+                                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                                thisW.q.prefetchBuffer.prefetch();
+                                long thisOffset = thisW.q.maxOffset;
+                                if (!thisW.q.prefetchBuffer.isFull() && thisOffset == thisW.q.prefetchOffset){
+                                    log.debug("double write !");
+                                    // 如果目前要写入的数据刚好就是下一个要预取的内容
+                                    // 双写
+                                    thisW.data.reset();
+                                    log.debug(thisW.data);
+                                    thisW.q.prefetchBuffer.directAddData(thisW.data);
+                                }
+                            }
+                        }
+                        log.debug("prefetch ok");
+                        return 0;
+                    }
+                });
+
+                // 希望这个写入的时间能够掩盖异步预取SSD和写PM 的过程
+                dataFileChannel.write(writerBuffer, writePosition);
+                dataFileChannel.force(true);
+
+                while (!prefetchFuture.isDone()){
+                    Thread.sleep(0, 10000);
+                }
+                // if ((int)prefetchFuture.get() !=  0 ){
+                //     log.error("error !");
+                //     System.exit(-1);
+                // }
+
 
                 while(true){
                     Writer ready = writerConcurrentQueue.poll();
