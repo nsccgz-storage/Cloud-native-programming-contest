@@ -28,6 +28,8 @@ public class MQBench {
 		int dataLength;
 		long offset;
 		ByteBuffer buf;
+		ByteBuffer buf2;
+		ByteBuffer checkBuf;
 		int fetchNum;
 		Map<Integer, ByteBuffer> results;
 
@@ -39,6 +41,8 @@ public class MQBench {
 			dataLength = l;
 			buf = ByteBuffer.wrap(sampleData);
 			buf.position(17408 - l);
+			buf2 = buf.duplicate();
+			checkBuf = buf.duplicate();
 		}
 
 		Message(String msgTopic, int msgQueueId, long msgOffset, int fNum) {
@@ -86,7 +90,7 @@ public class MQBench {
 		for (int i = 0; i < numOfThreads; i++) {
 			final int threadId = i;
 			executor.execute(() -> {
-				threadRunPerfBenchByTrace(threadId, mq, barrier);
+				threadRunCorrectBenchByTrace(threadId, mq, barrier);
 
 			});
 		}
@@ -161,7 +165,7 @@ public class MQBench {
 		for (int i = 0; i < step1Msgs.size(); i++) {
 			Message msg = step1Msgs.get(i);
 			msg.offset = mq.append(msg.topic, msg.queueId, msg.buf);
-			trueOffset = trueMQ.append(msg.topic, msg.queueId, msg.buf);
+			trueOffset = trueMQ.append(msg.topic, msg.queueId, msg.buf2);
 			if (trueOffset != msg.offset){
 				log.error("offset error");
 				System.exit(-1);
@@ -169,6 +173,8 @@ public class MQBench {
 			msg.results = mq.getRange(msg.topic, msg.queueId, trueOffset, 1);
 			trueResult = trueMQ.getRange(msg.topic, msg.queueId, trueOffset, 1);
 			if (msg.results.get(0).compareTo(trueResult.get(0)) != 0){
+				log.debug(msg.results.get(0));
+				log.debug(trueResult.get(0));
 				log.error("data error");
 				System.exit(-1);
 			}
@@ -185,7 +191,7 @@ public class MQBench {
 			Message msg = step2Msgs.get(i);
 			if (msg.type == 1) {
 				msg.offset = mq.append(msg.topic, msg.queueId, msg.buf);
-				trueOffset = trueMQ.append(msg.topic, msg.queueId, msg.buf);
+				trueOffset = trueMQ.append(msg.topic, msg.queueId, msg.buf2);
 				if (trueOffset != msg.offset){
 					log.error("offset error");
 					System.exit(-1);
@@ -340,7 +346,8 @@ public class MQBench {
 
 	public static void main(String[] args) {
 		// init();
-		log.setLevel(Level.DEBUG);
+		log.setLevel(Level.INFO);
+		// log.setLevel(Level.DEBUG);
 		String dbPath = "/mnt/nvme/mq";
 		String pmDirPath = "/mnt/pmem/mq";
 		// perfBenchByTrace(dbPath, pmDirPath);
