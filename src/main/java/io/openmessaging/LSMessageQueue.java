@@ -472,6 +472,11 @@ public class LSMessageQueue extends MessageQueue {
                 ret.put(i, buf);
             }
         }
+
+        // 既然从预取中消费了一些数据，那当然可以补回来
+        // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
+        // TODO
+
         return ret;
     }
 
@@ -570,7 +575,16 @@ public class LSMessageQueue extends MessageQueue {
             // 先看看能prefetch多少个？
             // 数一下从consumeOffset开始后面有多少有效消息
             // 再看看队列还能放多少个
+            if (isEmpty() && q.consumeOffset > headOffset){
+                // 说明之前有buffer不够用的情况，consumeOffset走得更快了，此时要更新一下headOffset和prefetchOffset
+                headOffset = q.consumeOffset;
+                tailOffset = q.consumeOffset;
+                q.prefetchOffset = q.consumeOffset;
+
+            }
+            log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
             long prefetchNum = (q.maxOffset-1)-q.prefetchOffset;
+            log.debug("prefetch start from offset : " + q.prefetchOffset);
             log.debug("prefetchNum : " + prefetchNum);
             // 得到能够被预取的消息数量
             if (prefetchNum <= 0){

@@ -478,7 +478,6 @@ public class WYFTest {
 
 
 	public static void testPrefetch(String dbPath, String pmDirPath){
-		MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 		String topicName = "topic" + 1;
 		Vector<Message> msgs = new Vector<>();
 		for (long offset = 0; offset < 99; offset++) {
@@ -488,56 +487,104 @@ public class WYFTest {
 			}
 		}
 		Map<Integer, ByteBuffer> ret;
-		// mq.append("topic1", 0, msgs.get(0).buf);
-		// ret = mq.getRange("topic1", 0, 0, 1);
-		// if (ret.get(0).compareTo(msgs.get(0).checkBuf) != 0){
-		// 	log.error("data error !");
-		// 	log.error(ret.get(0));
-		// 	logByteBuffer(ret.get(0).array());
-		// 	log.error(msgs.get(0).checkBuf);
-		// 	logByteBuffer(msgs.get(0).checkBuf.array());
 
-		// 	System.exit(0);
+		// {
+		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		// 	mq.append("topic1", 0, msgs.get(0).buf);
+		// 	ret = mq.getRange("topic1", 0, 0, 1);
+		// 	if (ret.get(0).compareTo(msgs.get(0).checkBuf) != 0){
+		// 		log.error("data error !");
+		// 		log.error(ret.get(0));
+		// 		logByteBuffer(ret.get(0).array());
+		// 		log.error(msgs.get(0).checkBuf);
+		// 		logByteBuffer(msgs.get(0).checkBuf.array());
+
+		// 		System.exit(0);
+		// 	}
 		// }
-		long currentGetRangeOffset = 0L;
-		for (int i = 0; i < 10; i++){
-			mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
-		}
+		// {
+		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		// 	long currentGetRangeOffset = 0L;
+		// 	for (int i = 0; i < 10; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
 
 
-		ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
-		for (int i = 0; i < 4; i++){
-			if (msgs.get(i).checkBuf.compareTo(msgs.get(i).buf) != 0) {
-				log.error("bug1");
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+		// 	for (int i = 0; i < 4; i++){
+		// 		if (msgs.get(i).checkBuf.compareTo(msgs.get(i).buf) != 0) {
+		// 			log.error("bug1");
+		// 		}
+		// 		if (ret.get(i).compareTo(msgs.get(i).checkBuf) != 0) {
+		// 			log.error(msgs.get(i).buf);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(i).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+
+		// 	for (int i = 10; i < 11; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+		// 	currentGetRangeOffset += 4;
+
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 3);
+		// 	for (int i = 0; i < 3; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(msgs.get(i).buf);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(i).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// } 
+		{
+			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+			long currentGetRangeOffset = 0L;
+			for (int i = 0; i < 15; i++){
+				mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
 			}
-			if (ret.get(i).compareTo(msgs.get(i).checkBuf) != 0) {
-				log.error(msgs.get(i).buf);
-				log.error(ret.get(i));
-				log.error(msgs.get(i).checkBuf);
-				log.error("data error !");
-				System.exit(0);
+
+			// 预取了6个，9个没预取
+
+
+			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 8);
+			for (int i = 0; i < 8; i++){
+				int msgId = (int)currentGetRangeOffset + i;
+				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+					log.error(ret.get(i));
+					log.error(msgs.get(msgId).buf);
+					log.error(msgs.get(msgId).checkBuf);
+					log.error("data error !");
+					System.exit(0);
+				}
+
 			}
 
-		}
-
-		for (int i = 10; i < 11; i++){
-			mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
-		}
-		currentGetRangeOffset += 4;
-
-		ret = mq.getRange("topic1", 0, currentGetRangeOffset, 3);
-		for (int i = 0; i < 3; i++){
-			int msgId = (int)currentGetRangeOffset + i;
-			if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
-				log.error(msgs.get(i).buf);
-				log.error(ret.get(i));
-				log.error(msgs.get(i).checkBuf);
-				log.error("data error !");
-				System.exit(0);
+			for (int i = 15; i < 30; i++){
+				mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
 			}
+			// 写一次，触发预取，把后面的6个预取过来了
+			currentGetRangeOffset += 8;
 
+			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 8);
+			for (int i = 0; i < 8; i++){
+				int msgId = (int)currentGetRangeOffset + i;
+				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+					log.error(i);
+					log.error(ret.get(i));
+					log.error(msgs.get(msgId).checkBuf);
+					log.error("data error !");
+					System.exit(0);
+				}
+
+			}
 		}
-
 
 		return ;
 	}
