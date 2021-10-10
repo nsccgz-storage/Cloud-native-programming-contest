@@ -73,8 +73,8 @@ public class LSMessageQueue extends MessageQueue {
     // private static final MemoryPool pmPool = MemoryPool.createPool("/mnt/pmem/data", 60L*1024L*1024L);
 
     public class MQConfig {
-        // Level logLevel = Level.INFO;
-        Level logLevel = Level.DEBUG;
+        Level logLevel = Level.INFO;
+        // Level logLevel = Level.DEBUG;
         boolean useStats = true;
         // boolean useStats = false;
         int writeMethod = 12;
