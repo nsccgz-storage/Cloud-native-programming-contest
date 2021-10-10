@@ -157,65 +157,65 @@ public class WYFTest {
 					msg.buf.position(0);
 				}
 			}
-			{
+			// {
 
-				Map<Integer, ByteBuffer> result;
-				barrier.await();
-				Vector<Message> getRangeMsgs = generateQueueTestGetRangeMulti(threadId);
-				barrier.await();
+			// 	Map<Integer, ByteBuffer> result;
+			// 	barrier.await();
+			// 	Vector<Message> getRangeMsgs = generateQueueTestGetRangeMulti(threadId);
+			// 	barrier.await();
 				
 				
-				if (threadId == 0){
-					log.info("begin getRangeFetchMulti!");
-				}
-				for (int i = 0; i < getRangeMsgs.size(); i++){
-					log.debug("i : "+i);
-					Message msg = getRangeMsgs.get(i);
-					log.debug(msg.buf);
-					msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-					if (msg.getOffset != msg.offset) {
-						log.error("offset error !");
-						System.exit(0);
-					}
-					result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
-					for (int j = 0; j <= i; j++){
-						// log.info(result.get(j));
-						// log.info(getRangeMsgs.get(j).checkBuf);
+			// 	if (threadId == 0){
+			// 		log.info("begin getRangeFetchMulti!");
+			// 	}
+			// 	for (int i = 0; i < getRangeMsgs.size(); i++){
+			// 		log.debug("i : "+i);
+			// 		Message msg = getRangeMsgs.get(i);
+			// 		log.debug(msg.buf);
+			// 		msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
+			// 		if (msg.getOffset != msg.offset) {
+			// 			log.error("offset error !");
+			// 			System.exit(0);
+			// 		}
+			// 		result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
+			// 		for (int j = 0; j <= i; j++){
+			// 			// log.info(result.get(j));
+			// 			// log.info(getRangeMsgs.get(j).checkBuf);
 
-						if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
-							log.error("data error !");
-							byte[] tmp = getRangeMsgs.get(j).checkBuf.array();
-							log.info("***************real*************************");
-							for(int ii=0;  ii < tmp.length; ++ii){
-								System.out.print(tmp[ii] + " ");
-							}
-							log.info("***************end*************************");
-							System.exit(0);
-						}
+			// 			if (result.get(j).compareTo(getRangeMsgs.get(j).checkBuf) != 0){
+			// 				log.error("data error !");
+			// 				byte[] tmp = getRangeMsgs.get(j).checkBuf.array();
+			// 				log.info("***************real*************************");
+			// 				for(int ii=0;  ii < tmp.length; ++ii){
+			// 					System.out.print(tmp[ii] + " ");
+			// 				}
+			// 				log.info("***************end*************************");
+			// 				System.exit(0);
+			// 			}
 					
-					}
-					for (int k = 0; k <= 40 && k <= i; k++){
-						log.debug("k : " + k);
-						log.debug("i-k : " + (i-k));
-						result = mq.getRange(msg.topic, msg.queueId, i-k, k+1);
-						for (int j = 0; j <= 40 && j<= k ; j++){
-							log.debug("j : "+j);
-							log.debug(result.get(j));
-							log.debug("i-k+j : "+ (i-k+j));
-							log.debug(getRangeMsgs.get(i-k+j).checkBuf);
-							if (result.get(j).compareTo(getRangeMsgs.get(i-k+j).checkBuf) != 0){
-								log.error("data error !");
-								System.exit(0);
-							}
+			// 		}
+			// 		for (int k = 0; k <= 40 && k <= i; k++){
+			// 			log.debug("k : " + k);
+			// 			log.debug("i-k : " + (i-k));
+			// 			result = mq.getRange(msg.topic, msg.queueId, i-k, k+1);
+			// 			for (int j = 0; j <= 40 && j<= k ; j++){
+			// 				log.debug("j : "+j);
+			// 				log.debug(result.get(j));
+			// 				log.debug("i-k+j : "+ (i-k+j));
+			// 				log.debug(getRangeMsgs.get(i-k+j).checkBuf);
+			// 				if (result.get(j).compareTo(getRangeMsgs.get(i-k+j).checkBuf) != 0){
+			// 					log.error("data error !");
+			// 					System.exit(0);
+			// 				}
 
-						}
+			// 			}
 
-					}
+			// 		}
 	
-				}
-				barrier.await();
+			// 	}
+			// 	barrier.await();
 
-			}
+			// }
 
 		} catch (InterruptedException e) {
 			e.printStackTrace();
@@ -477,6 +477,63 @@ public class WYFTest {
 	}
 
 
+	public static void testPrefetch(String dbPath, String pmDirPath){
+		MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		String topicName = "topic" + 1;
+		Vector<Message> msgs = new Vector<>();
+		for (long offset = 0; offset < 99; offset++) {
+			for (int queueId = 0; queueId < 1; queueId++) {
+				Message msg = new Message(topicName, queueId, offset);
+				msgs.add(msg);
+			}
+		}
+		Map<Integer, ByteBuffer> ret;
+		// mq.append("topic1", 0, msgs.get(0).buf);
+		// ret = mq.getRange("topic1", 0, 0, 1);
+		// if (ret.get(0).compareTo(msgs.get(0).checkBuf) != 0){
+		// 	log.error("data error !");
+		// 	log.error(ret.get(0));
+		// 	logByteBuffer(ret.get(0).array());
+		// 	log.error(msgs.get(0).checkBuf);
+		// 	logByteBuffer(msgs.get(0).checkBuf.array());
+
+		// 	System.exit(0);
+		// }
+		for (int i = 0; i < 10; i++){
+			mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		}
+
+		ret = mq.getRange("topic1", 0, 0, 3);
+		for (int i = 0; i < 3; i++){
+			if (msgs.get(i).checkBuf.compareTo(msgs.get(i).buf) != 0) {
+				log.error("bug1");
+			}
+			if (ret.get(i).compareTo(msgs.get(i).checkBuf) != 0) {
+				log.error(msgs.get(i).buf);
+				log.error(ret.get(i));
+				log.error(msgs.get(i).checkBuf);
+				log.error("data error !");
+				System.exit(0);
+			}
+
+		}
+
+		// for (int i = 10; i < 11; i++){
+		// 	mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// }
+
+		return ;
+	}
+
+	public static void logByteBuffer(byte[] buf){
+		StringBuilder output = new StringBuilder();
+		for (int i = 0; i < 100; i++){
+			output.append(buf[i]+ " ");
+		}
+		log.error(output);
+	}
+
+
 
 	public static void main(String[] args) {
 		init();
@@ -492,8 +549,9 @@ public class WYFTest {
 		String pmDirPath = args[1] ;
 
 		try {
-			writePerformanceTest(dbPath, pmDirPath);
-			// testThreadPool(dbPath, pmDirPath);
+			// testPrefetch(dbPath, pmDirPath);
+			// writePerformanceTest(dbPath, pmDirPath);
+			testThreadPool(dbPath, pmDirPath);
 			// testRecover(dbPath);
 		} catch (Exception e) {
 			//TODO: handle exception

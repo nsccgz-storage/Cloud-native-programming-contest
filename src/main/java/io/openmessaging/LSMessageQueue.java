@@ -71,7 +71,6 @@ import java.util.Comparator;
 public class LSMessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(LSMessageQueue.class);
     // private static final MemoryPool pmPool = MemoryPool.createPool("/mnt/pmem/data", 60L*1024L*1024L);
-    private static final Heap pmHeap = Heap.createHeap("/mnt/pmem/mq/data", 60L*1024L*1024L*1024L);
 
     public class MQConfig {
         Level logLevel = Level.INFO;
@@ -140,12 +139,13 @@ public class LSMessageQueue extends MessageQueue {
     DataFile[] dataFiles;
     int numOfDataFiles;
     ConcurrentHashMap<String, MQTopic> topic2object;
+    Heap pmHeap;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         // SSDBench.runStandardBench(dbDirPath);
         // PMBench.runStandardBench(pmDirPath);
         mqConfig = config;
-        init(dbDirPath);
+        init(dbDirPath, pmDirPath);
 
     }
 
@@ -154,18 +154,21 @@ public class LSMessageQueue extends MessageQueue {
         // SSDBench.runStandardBench(dbDirPath);
         // PMBench.runStandardBench(pmDirPath);
         mqConfig = new MQConfig();
-        init(dbDirPath);
+        init(dbDirPath, pmDirPath);
 
     }
 
-    public void init(String dbDirPath) {
+    public void init(String dbDirPath, String pmDirPath) {
         try {
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
 
             topic2object = new ConcurrentHashMap<String, MQTopic>();
             String metadataFileName = dbDirPath + "/meta";
+            String pmDataFile = pmDirPath + "/data";
+            log.info("Initializing on PM : " + pmDataFile);
 
+            pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
             Boolean crash = false;
             // whether the MQ is recover from existed file/db ?
             File metadataFile = new File(metadataFileName);
