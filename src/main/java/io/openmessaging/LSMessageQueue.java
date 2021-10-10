@@ -756,9 +756,10 @@ public class LSMessageQueue extends MessageQueue {
             // 把一个消息从队列头部去掉
             int msgLength = msgLengths[head];
             log.debug("msgLength : " + msgLength + " head : " + head);
-            // ByteBuffer buf = q.bbPool.allocate(msgLength);
-            ByteBuffer buf = ByteBuffer.allocate(msgLength);
-            block.copyToArray(head*slotSize, buf.array(), 0, msgLength);
+            ByteBuffer buf = q.bbPool.allocate(msgLength);
+            block.copyToArray(head*slotSize, buf.array(), buf.arrayOffset(), msgLength);
+            // ByteBuffer buf = ByteBuffer.allocate(msgLength);
+            // block.copyToArray(head*slotSize, buf.array(), 0, msgLength);
             log.debug("get buffer from prefetchqueue : " + buf);
 
             if (length == 1){
