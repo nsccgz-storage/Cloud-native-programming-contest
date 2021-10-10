@@ -27,21 +27,35 @@ import org.apache.log4j.Logger;
  * 这是一个简单的基于内存的实现，以方便选手理解题意；
  * 实际提交时，请维持包名和类名不变，把方法实现修改为自己的内容；
  */
-public class DefaultMessageQueueImpl extends MessageQueue {
+public class Test1MessageQueueImpl extends MessageQueue {
     // Initialization
     
-    public SSDqueue ssdQueue;
     public MessageQueue mq;
-    public DefaultMessageQueueImpl(){
+    public SSDqueue ssdQueue;
+
+    public Test1MessageQueueImpl(){
 
 //        String dirPath = "/home/wangxr/桌面/pmem_test";
-       String dirPath = "/essd";
-        // SSDBench.runStandardBench(dirPath);
+//        String dirPath = "/essd";
+        String dirPath = "/mnt/nvme/mq";
         // String dirPath = "/mnt/ssd/wxr";
-        // ssdQueue = new SSDqueue(dirPath);
-        mq = new LSMessageQueue(dirPath);
-
+        init(dirPath);
     }
+
+    public Test1MessageQueueImpl(String dirPath){
+        SSDBench.runStandardBench(dirPath);
+        init(dirPath);
+    }
+
+    public void init(String dirPath){
+        // ssdQueue = new SSDqueue(dirPath);
+        mq = new Test1MessageQueue(dirPath);
+        System.gc();
+    }
+
+
+
+
     @Override
     public long append(String topic, int queueId, ByteBuffer data){
         // return ssdQueue.append(topic, queueId, data);
@@ -52,6 +66,5 @@ public class DefaultMessageQueueImpl extends MessageQueue {
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum){
         // return ssdQueue.getRange(topic, queueId, offset, fetchNum);
         return mq.getRange(topic, queueId, offset, fetchNum);
-        // return null;
     }
 }

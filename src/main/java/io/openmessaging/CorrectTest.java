@@ -16,7 +16,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class CorrectTest {
-    static String messagePath = "./message.txt";
+    static String messagePath = "/message.txt";
     static final int MAX_DATA_SIZE = 17*1024;
     static final int MAX_QUEUE_NUM = 1000; // just for test 缩小QueueId的范围
     static ArrayList<ArrayList<String>> topicList;
@@ -29,26 +29,24 @@ public class CorrectTest {
 
     public static void main(String[] args) {
         // just for test
-        String localPath = "/mnt/ssd/wyk/";
+        String localPath = "/home/wangxr/桌面/pmem_test";
         try {
-            if(Files.exists(Paths.get(messagePath)))
-                Files.delete(Paths.get(messagePath));
-            if(Files.exists(Paths.get(localPath+"MetaData")))
-                Files.delete(Paths.get(localPath+"MetaData"));
-            if(Files.exists(Paths.get(localPath+"data")))
-                Files.delete(Paths.get(localPath+"data"));
-        }catch (IOException e){e.printStackTrace();}
+            File dir = new File(localPath);
+            for(File f:dir.listFiles()){
+                f.delete();
+            }
+        }catch (Exception e){e.printStackTrace();}
 
         try {
             System.out.println("===== Stage 1: write data =====");
-            Files.createFile(Paths.get(messagePath));
-            writer = new BufferedWriter(new FileWriter(messagePath));
+            Files.createFile(Paths.get(localPath+messagePath));
+            writer = new BufferedWriter(new FileWriter(localPath+messagePath));
             writeTest(10, 10L*1024L*1024L, new DefaultMessageQueueImpl()); // 40 thread, 10 MiB test data
             writer.close();
 
             /////////////////////////////////////////////////////////////
             System.out.println("===== Stage 2: check recovery data =====");
-            BufferedReader reader= new BufferedReader(new FileReader(messagePath));
+            BufferedReader reader= new BufferedReader(new FileReader(localPath+messagePath));
             ArrayList<Message> msgs = loadMessage(reader);
 
             int count = 0, errorCount = 0;
