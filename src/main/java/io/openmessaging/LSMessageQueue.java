@@ -9,11 +9,7 @@ import java.nio.ByteBuffer;
 import java.io.RandomAccessFile;
 import java.io.File;
 import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -31,8 +27,6 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 
@@ -74,6 +68,7 @@ public class LSMessageQueue extends MessageQueue {
         int maxBufNum = 8;
         int maxBufLength = 68*1024;
         boolean fairLock = true;
+        int maxReaderBufNum = 12;
         public String toString() {
             return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
             // return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | align to 4K !! ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
@@ -88,14 +83,21 @@ public class LSMessageQueue extends MessageQueue {
         // public byte[] maxOffsetData;
         public ByteBuffer maxOffsetData;
         public int type;
+        public long consumeOffset;
+        public long prefetchOffset;
+
+        public PmemManager.MyBlock block;
 
         MQQueue(DataFile dataFile){
+            consumeOffset = 0L;
             type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
             df = dataFile;
+            block = pmem.createBlock(localThreadId.get());
         }
         MQQueue(){
+            consumeOffset = 0L;
             type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
@@ -122,12 +124,12 @@ public class LSMessageQueue extends MessageQueue {
     DataFile[] dataFiles;
     int numOfDataFiles;
     ConcurrentHashMap<String, MQTopic> topic2object;
+    PmemManager pmem;
 
     LSMessageQueue(String dbDirPath, MQConfig config){
         // SSDBench.runStandardBench(dbDirPath);
         mqConfig = config;
         init(dbDirPath);
-
     }
 
 
@@ -178,6 +180,8 @@ public class LSMessageQueue extends MessageQueue {
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
             }
+
+            pmem = new PmemManager("/pmem");
 
         } catch (IOException ie) {
             ie.printStackTrace();
@@ -298,14 +302,15 @@ public class LSMessageQueue extends MessageQueue {
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             int threadId = updateThreadId();
-            int dataFileId = threadId / 10;  // FIXME
+            int dataFileId = threadId % numOfDataFiles;
             short topicId = getAndUpdateTopicId(topic);
             // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
             // mqTopic = new MQTopic(topic, dataFileId);
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
             topic2object.put(topic, mqTopic);
         }
-        data = data.slice();
+//        data = data.slice();
+        data.mark();
 
         q = mqTopic.id2queue.get(queueId);
         if (q == null){
@@ -318,8 +323,11 @@ public class LSMessageQueue extends MessageQueue {
                 testStat.incQueueCount();
             }
         }
-
-
+        
+         // TODO: async write to pmem
+         // q.block.put(data);
+        // // 确保和这个queue相关的异步任务已完成
+        data.reset();
 
         DataFile df = mqTopic.df;
 
@@ -349,20 +357,23 @@ public class LSMessageQueue extends MessageQueue {
         // 有40%的getRange能够命中这个cache
         // 估计要采用这种方案
 
-        int dataSize = data.capacity();
+        data.reset();
+        int dataSize = data.remaining();
+//        int dataSize = data.capacity();
         ByteBuffer hotDataBuf;
         if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
             hotDataBuf = ByteBuffer.allocate(dataSize);
         } else {
             hotDataBuf = q.maxOffsetData;
         }
-        data.rewind();
+        // data.rewind();
         hotDataBuf.clear();
         hotDataBuf.put(data);
         hotDataBuf.flip();
         q.maxOffsetData = hotDataBuf;
 
         q.maxOffset++;
+
         return ret;
     }
 

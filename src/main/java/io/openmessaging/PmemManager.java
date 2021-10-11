@@ -34,6 +34,13 @@ public class PmemManager {
         }
     }
 
+
+    public MyBlock createBlock(int id){
+        MyBlock block = new MyBlock((int)PAGE_SIZE, chunkList[id]);
+        return block; // ensure always allocate successfully?
+    }
+    
+
     private class Chunk{
         ArrayList<Integer> memoryMap; // Vector是线程安全的，而ArrayList不是线程安全的 // 或许可用short来储存
         long handle;
