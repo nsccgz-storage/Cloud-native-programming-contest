@@ -6,6 +6,15 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.ThreadPoolExecutor;
+
+import javax.swing.plaf.synth.SynthStyle;
 
 public class Main {
     public static void main(String args[]) throws IOException{
@@ -25,8 +34,9 @@ public class Main {
         // Map<Integer, ByteBuffer> res = mq.getRange("12345", 123, 0L, 100);
 
         
-        String dirPath = "/home/ubuntu/test";
-        SSDqueue ssdQueue = new SSDqueue(dirPath);
+        String dirPath = "/mnt/ssd/wyk";
+        String pmemPath = "/mnt/pmem/wyk";
+        SSDqueue ssdQueue = new SSDqueue(dirPath, pmemPath);
         String t = "1234567890123456789012345678901234567890";
         System.out.println( t.hashCode());
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
@@ -46,8 +56,40 @@ public class Main {
                 System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
             }
         }
-        
+    //     ExecutorService executorService = Executors.newCachedThreadPool();
+
+    //     Task task = new Task();
+
+    //     FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
+
+    //     executorService.submit(futureTask);
+
+    //     executorService.shutdown();
+    //     try {
+    //         // while(!futureTask.isDone()){
+    //             // System.out.println("false");
+    //         // }
+    //         System.out.println("wait...");
+    //         System.out.printf("main thread get result: %d\n", futureTask.get() );
+    //     } catch (Exception e) {
+    //         //TODO: handle exception
+    //         e.printStackTrace();
+    //     }
     }
 
 }
 
+class Task implements Callable<Integer>{
+    @Override
+    public Integer call() throws Exception{
+        System.out.println("子线程正在计算");
+        Thread.sleep(3000);
+        Thread.currentThread().interrupt();
+ 
+        int sum = 0;
+        for(int i=0;i<100;i++){
+            sum += i;
+        }
+        return sum;
+    }
+}
