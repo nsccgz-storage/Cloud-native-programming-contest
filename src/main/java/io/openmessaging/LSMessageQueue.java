@@ -143,6 +143,7 @@ public class LSMessageQueue extends MessageQueue {
     int numOfDataFiles;
     ConcurrentHashMap<String, MQTopic> topic2object;
     Heap pmHeap;
+    MyPMBlockPool pmBlockPool;
     ThreadLocal<MyByteBufferPool> threadLocalByteBufferPool;
     boolean isCrash;
 
@@ -183,7 +184,8 @@ public class LSMessageQueue extends MessageQueue {
             topic2object = new ConcurrentHashMap<String, MQTopic>();
             log.info("Initializing on PM : " + pmDataFile);
 
-            pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
+            pmBlockPool = new MyPMBlockPool(pmDataFile);
+            // pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
             // if (!isCrash){
             //     pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
             // } else {
@@ -630,7 +632,8 @@ public class LSMessageQueue extends MessageQueue {
         public int tail;
         public int length;
 
-        public MemoryBlock block;
+        public MyPMBlock block;
+        // public MemoryBlock block;
         public int maxLength;
         public MQQueue q;
         public DataFile df;
@@ -646,13 +649,15 @@ public class LSMessageQueue extends MessageQueue {
             // FIXME: 性能很差，考虑换掉
             q = myQ;
             df = myDf;
+            block = pmBlockPool.allocate();
+            // 大小写死在pool的实现里了，改大小的话要改两个地方
         }
 
         public int consume(Map<Integer, ByteBuffer> ret, int fetchNum){
             // 把分配内存放在异步任务中完成
-            if (block == null){
-                block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
-            }
+            // if (block == null){
+                // block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+            // }
 
             log.debug("tail : " + tail + " head : "+head + " length : " + length);
             log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
@@ -680,12 +685,12 @@ public class LSMessageQueue extends MessageQueue {
 
         public void prefetch(){
             // 把分配内存放在异步任务中完成
-            if (block == null){
-                long startTime = System.nanoTime();
-                block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
-                long endTime = System.nanoTime();
-                log.debug("memory block allocate : " + (endTime - startTime) + " ns");
-            }
+            // if (block == null){
+            //     long startTime = System.nanoTime();
+            //     // block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+            //     long endTime = System.nanoTime();
+            //     log.debug("memory block allocate : " + (endTime - startTime) + " ns");
+            // }
             log.debug("try to prefetch !!");
             log.debug("tail : " + tail + " head : "+head + " length : " + length);
             log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
@@ -738,12 +743,12 @@ public class LSMessageQueue extends MessageQueue {
 
         public void directAddData(ByteBuffer data){
             // 把分配内存放在异步任务中完成
-            if (block == null){
-                long startTime = System.nanoTime();
-                block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
-                long endTime = System.nanoTime();
-                log.debug("memory block allocate : " + (endTime - startTime) + " ns");
-            }
+            // if (block == null){
+            //     long startTime = System.nanoTime();
+            //     block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+            //     long endTime = System.nanoTime();
+            //     log.debug("memory block allocate : " + (endTime - startTime) + " ns");
+            // }
 
             // 如果刚好需要预取这个数据，而且预取数量还不够，那就把这个数据加进去
             this.offer(data);
@@ -864,18 +869,62 @@ public class LSMessageQueue extends MessageQueue {
         public MemoryPool pool;
         public long addr;
         public int capacity;
+        MyPMBlock(MemoryPool p, long a){
+            pool = p;
+            addr = a;
+        }
 
-        public void copyFromArray(){
+        public void copyFromArray(byte[] srcArray, int srcIndex, long dstOffset, int length){
+            pool.copyFromByteArrayNT(srcArray, srcIndex, addr+dstOffset, length);
 
         }
-        public void copyToArray(){
-
+        public void copyToArray(long srcOffset, byte[] dstArray, int dstOffset, int length){
+            pool.copyToByteArray(addr+srcOffset, dstArray, dstOffset, length);
         }
     }
 
-    // public class MyPMBlockPool {
-    //     public 
-    // }
+    public class MyPMBlockPool {
+        public MemoryPool pool;
+        public int blockSize;
+        public int bigBlockSize;
+        public AtomicLong atomicGlobalFreeOffset;
+        public long totalCapacity;
+        public ThreadLocal<Long> threadLocalBigBlockStartAddr;
+        public ThreadLocal<Integer> threadLocalBigBlockFreeOffset;
+        MyPMBlockPool(String path){
+            totalCapacity = 60L*1024*1024*1024;
+            pool = MemoryPool.createPool(path, totalCapacity);
+
+            blockSize = 8*17*1024; // 8 个slot
+            bigBlockSize = 200*blockSize;
+            atomicGlobalFreeOffset = new AtomicLong();
+            atomicGlobalFreeOffset.set(0L);
+            threadLocalBigBlockFreeOffset = new ThreadLocal<>();
+            threadLocalBigBlockStartAddr = new ThreadLocal<>();
+            threadLocalBigBlockFreeOffset.set(0);
+        }
+        public MyPMBlock allocate(){
+            if (threadLocalBigBlockStartAddr.get() == null){
+                allocateBigBlock();
+            }
+            if (threadLocalBigBlockFreeOffset.get() == bigBlockSize){
+                // 大块满了，分配新的大块
+                allocateBigBlock();
+            }
+            int freeOffset = threadLocalBigBlockFreeOffset.get();
+            long addr = threadLocalBigBlockStartAddr.get() + freeOffset;
+            threadLocalBigBlockFreeOffset.set(freeOffset+blockSize);
+
+            return new MyPMBlock(pool, addr);
+        }
+        public void allocateBigBlock(){
+            long bigBlockStartAddr = atomicGlobalFreeOffset.getAndAdd(bigBlockSize);
+            log.debug("big block addr : " +bigBlockStartAddr);
+            threadLocalBigBlockStartAddr.set(bigBlockStartAddr);
+            threadLocalBigBlockFreeOffset.set(0);
+            assert (atomicGlobalFreeOffset.get() < totalCapacity);
+        }
+    }
 
     public class DataFile {
         public FileChannel dataFileChannel;
