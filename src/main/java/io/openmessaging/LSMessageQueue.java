@@ -1172,14 +1172,11 @@ public class LSMessageQueue extends MessageQueue {
                     dataFileChannel.force(true);
                 }
 
-                while(true){
+                for (int i = 0; i < bufNum; i++){
                     Writer ready = writerConcurrentQueue.poll();
                     if (!ready.equals(w)){
                         ready.done = 1;
                         LockSupport.unpark(ready.currentThread);
-                    }
-                    if (ready.equals(lastWriter)){
-                        break;
                     }
                 }
 
