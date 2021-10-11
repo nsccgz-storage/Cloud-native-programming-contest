@@ -10,14 +10,30 @@ import java.io.IOException;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Currency;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.LockSupport;
+
+import com.intel.pmem.llpl.Accessor;
+import com.intel.pmem.llpl.AnyHeap;
+import com.intel.pmem.llpl.Heap;
+import com.intel.pmem.llpl.MemoryBlock;
+import com.intel.pmem.llpl.MemoryPool;
+
 //import org.slf4j.LoggerFactory;
 //import org.slf4j.Logger;
 import java.io.RandomAccessFile;
@@ -50,14 +66,33 @@ public class SSDqueue extends MessageQueue {
 
     ConcurrentHashMap<String,DataMeta> qTopicQueueDataMap;
     MetaTopicQueue mqMeta;
-    private String markSpilt = "$@#";
-    ConcurrentHashMap<String, ConcurrentHashMap<Long,Long[]>> allDataOffsetMap; // 加速 getRange
+    String markSpilt = "$@#";
+    ConcurrentHashMap<String, ConcurrentHashMap<Long,IndexInfo>> allDataOffsetMap; // 加速 getRange
     
     boolean RECOVER = false;
     ConcurrentHashMap<String, HotData> hotDataMap;
 
+    Thread freePmemThread;
+    Thread writePmemThread;
+
+    PmemManager pmemManger;
+
     TestStat testStat;
 
+
+    
+
+    public class IndexInfo{
+        // long index; 
+        long offset; // the offset in SSD
+        int dataSize; 
+        long handle; // the offset in PMEM
+        public IndexInfo(long offset, int dataSize, long hanlde){
+            this.offset = offset;
+            this.dataSize = dataSize;
+            this.handle = hanlde;
+        }   
+    }
     public SSDqueue(String dirPath){
         
         this.numOfDataFileChannels = 4;
@@ -106,6 +141,71 @@ public class SSDqueue extends MessageQueue {
         }
         
     }    
+    public SSDqueue(String dirPath, String PmemPath){
+        // 使用 PMEM
+        this.numOfDataFileChannels = 4;
+        try {
+            //init(dirPath);
+            
+            dataSpaces = new DataSpace[numOfDataFileChannels];
+            testStat = new TestStat(dataSpaces);
+            boolean flag = new File(dirPath + "/meta").exists();
+            if(flag){
+                // recover
+                // 读盘，建表 
+                logger.info("reover");
+                RECOVER = true;
+                this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
+                this.mqMeta = new MetaTopicQueue(this.metaFileChannel);
+
+                for(int i=0; i < numOfDataFileChannels; i++){
+                    String dbPath = dirPath + "/db" + i;
+                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel());              
+                }
+                this.qTopicQueueDataMap = mqMeta.getMap();
+            }else{
+                String pmemPath = PmemPath + "/data";
+                boolean initialized = Heap.exists(pmemPath + "/data");
+                Heap pmemHeap = initialized ? Heap.openHeap(pmemPath + "/data") : Heap.createHeap(pmemPath + "/data",  60 * 1024L * 1024L * 1024L);
+
+                PmemManager pmemManager = new PmemManager(pmemHeap);
+
+                // create 2 thread: writePmemThread, freePmemThread
+                wPmemTaskQueue = new ConcurrentLinkedQueue<>();
+                freeTaskQueue = new ConcurrentLinkedQueue<>();
+
+                ExecutorService executor = Executors.newFixedThreadPool(2);
+                executor.execute(new RWPmem(true));
+                executor.execute(new RWPmem(false));
+
+                
+
+
+                // create new mq    
+                logger.info("create a new queue");
+                
+                this.allDataOffsetMap = new ConcurrentHashMap<>();
+                
+                this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
+                this.mqMeta = new MetaTopicQueue(this.metaFileChannel, Long.BYTES);
+
+                for(int i=0; i < numOfDataFileChannels; i++){
+                    String dbPath = dirPath + "/db" + i;
+                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel(), Long.BYTES);
+                }
+                this.qTopicQueueDataMap = new ConcurrentHashMap<>();
+                this.hotDataMap = new ConcurrentHashMap<>();
+
+                //logger.info("initialize new SSDqueue, num: "+currentNum.get());
+            }
+        // 划分起始的 Long.BYTES * 来存元数据
+        } catch (Exception e) {
+            //TODO: handle exception
+            logger.info("error 201777");
+            e.printStackTrace();
+        }
+        
+    }    
 
     @Override
     public long append(String topicName, int queueId, ByteBuffer data){
@@ -124,14 +224,21 @@ public class SSDqueue extends MessageQueue {
             if(tmpD == null){
                 
                 /////////  自下而上, 持久化
+                data = data.slice();
+
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data writeData = new Data(dataSpaces[fcId]);
                 result = writeData.put(data);
 
                 mqMeta.put(key, writeData.getMetaOffset());
+
+                ///////// 双写 PMEM
+                // data.rewind();
+                // long handle = pmemManger.write(data);
+                long hanlde = -1L;
                 //////// 更新 DRAM map
-                ConcurrentHashMap<Long, Long[]> tmp2 = new ConcurrentHashMap<>();
-                tmp2.put(result,new Long[]{writeData.tail, (long) dataSize});
+                ConcurrentHashMap<Long, IndexInfo> tmp2 = new ConcurrentHashMap<>();
+                tmp2.put(result,new IndexInfo(writeData.tail, dataSize, hanlde));  // -1 for not in pmem
                 allDataOffsetMap.put(key, tmp2);
 
                 qTopicQueueDataMap.put(key, writeData.getMeta());            
@@ -140,10 +247,15 @@ public class SSDqueue extends MessageQueue {
             }else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data writeData = new Data(dataSpaces[fcId], tmpD);
+                data = data.slice();
                 result = writeData.put(data);
-                
-                ConcurrentHashMap<Long, Long[]> tmp2 = allDataOffsetMap.get(key);
-                tmp2.put(result, new Long[]{writeData.tail, (long) dataSize});
+                ///////// 双写 PMEM
+                // data.rewind();
+                // long handle = pmemManger.write(data);
+                long hanlde = -1L;
+
+                ConcurrentHashMap<Long, IndexInfo> tmp2 = allDataOffsetMap.get(key);
+                tmp2.put(result, new IndexInfo(writeData.tail, dataSize, hanlde));
                 allDataOffsetMap.put(key, tmp2);
                 
                 qTopicQueueDataMap.put(key, writeData.getMeta());
@@ -295,23 +407,9 @@ public class SSDqueue extends MessageQueue {
         public Data(DataSpace ds, Long metaOffset) throws IOException{
             this.ds = ds;
             this.metaOffset = metaOffset;
-//            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
-//            ds.read(tmp, metaOffset);
-//            tmp.flip();
-//
-//            this.head = tmp.getLong();
             this.head = metaOffset;
             this.tail = -1L;
             this.totalNum = 0L;
-
-            // 恢复 totalNum, tail, head
-            // ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES + Long.BYTES);
-            // ds.read(tmp, metaOffset);
-            // tmp.flip();
-
-            // this.totalNum = tmp.getLong();
-            // this.head = tmp.getLong();
-            // this.tail = tmp.getLong();
         }
         public Data(DataSpace ds, DataMeta dm){
             this.ds = ds;
@@ -328,39 +426,59 @@ public class SSDqueue extends MessageQueue {
             this.tail = dataMeta.tail;
             this.totalNum++;
             this.metaOffset = this.head;
-//            if(tail == -1L){
-//                head = offset;
-//                tail = offset;
-//                ds.updateMeta(metaOffset, totalNum, head, tail);
-//            }else{
-//                ds.updateLink(tail, offset);
-//                tail = offset;
-//            }
-//            }
-
-//            totalNum++;
-//            ds.updateMeta(metaOffset, totalNum, head, tail);
             return res;
         }
 
 
-        public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
+        public Map<Integer, ByteBuffer> getRange(String key, Long index, int fetchNum) throws IOException{
+
             Map<Integer, ByteBuffer> res = new HashMap<>();
+            Map<Long, IndexInfo> map = allDataOffsetMap.get(key);
+            IndexInfo dataInfo = map.get(index);
 
-            Map<Long, Long[]> map = allDataOffsetMap.get(key);
-
-            Long[] dataInfo = map.get(offset);
-           
             for(int i=0; i<fetchNum && dataInfo != null; ++i){
-
-                ByteBuffer tmp1 = ByteBuffer.allocate(dataInfo[1].intValue());
-                int len2 = ds.read(tmp1, dataInfo[0]  + Long.BYTES + Long.BYTES);
+                ByteBuffer tmp1 = ByteBuffer.allocate(dataInfo.dataSize);
+                int len2 = ds.read(tmp1, dataInfo.offset  + Long.BYTES + Long.BYTES); 
                 tmp1.flip();
                 res.put(i, tmp1);
-                offset++;
-                dataInfo = map.get(offset);
+                index++;
+                dataInfo = map.get(index);
             }
             return res;
+        }
+
+        public Map<Integer, ByteBuffer> getRangePmem(String key, Long index, int fetchNum) throws IOException{
+            
+            // 预取任务
+            wPmemTaskQueue.offer(new WritePmemTask(ds.fc, key, index + fetchNum, 12));
+            LockSupport.unpark(writePmemThread);
+            /////
+            Map<Integer, ByteBuffer> res = new HashMap<>();
+            Map<Long, IndexInfo> map = allDataOffsetMap.get(key);
+            IndexInfo dataInfo = map.get(index);
+
+            long startIdx = index;
+            for(int i=0; i<fetchNum && dataInfo != null; ++i){
+
+                ByteBuffer tmp1 = ByteBuffer.allocate(dataInfo.dataSize);
+                if(dataInfo.handle != -1L){ // 读 PMEM
+                    // int len2 =  pmemManger.read(tmp1, dataInfo.handle);
+                    // 加入任务告诉要清空
+                }else{
+                    int len2 = ds.read(tmp1, dataInfo.offset  + Long.BYTES + Long.BYTES);
+                }
+                tmp1.flip();
+                res.put(i, tmp1);
+                index++;
+                dataInfo = map.get(index);
+            }
+
+            // 
+            boolean flag = freeTaskQueue.isEmpty();
+            freeTaskQueue.offer(new FreePmemTask(key, qTopicQueueDataMap.get(key).uselessIndex, startIdx));
+            if(flag) LockSupport.unpark(freePmemThread);
+            return res;
+
         }
 
         public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
@@ -412,6 +530,153 @@ public class SSDqueue extends MessageQueue {
         public HotData(long offset, byte[] data){
             this.offset = offset;
             this.data = data; // TODO
+        }
+    }
+    Queue<WritePmemTask> wPmemTaskQueue; // 需要考虑并发
+    class WritePmemTask{  
+        public int loadNum;
+        public long startIdx;
+        public String key;
+        public FileChannel fc;
+        public WritePmemTask(FileChannel fc, String key, long startIdx, int loadNum){
+            this.fc = fc;
+            this.key = key;
+            this.startIdx = startIdx;
+            this.loadNum = loadNum;
+        }
+    }
+
+
+    Queue<FreePmemTask> freeTaskQueue;
+    class FreePmemTask{
+        //public int queueId;
+        public long endIdx;
+        public long startIdx;
+        public String key;
+        
+        public FreePmemTask(String key, long startIdx, long endIdx){
+            this.endIdx = endIdx;
+            this.startIdx = startIdx;
+            this.key = key;
+        }
+    }
+
+    class RWPmem implements Runnable{
+        Boolean isFree;
+
+        public RWPmem(Boolean isFree){
+            this.isFree  = isFree;
+        }
+        @Override
+        public void run(){
+            if(isFree){
+                freePmemThread = Thread.currentThread();
+                freePmem();
+            }
+            else{
+                writePmemThread = Thread.currentThread();
+                writePmem();   
+            }
+        }
+        void writePmem(){
+            try {
+                // 往 PMEM 写入一些数据。
+                //Iterator<WritePmemTask> it = taskQueue.iterator();
+                while(true){
+                    int size = wPmemTaskQueue.size();
+                    logger.info("---- write pmem --- Quese size: " + size);
+                    for(int i=0; i<size; ++i){
+                        WritePmemTask curTask = wPmemTaskQueue.poll();
+                        // 从 SSD 上读入数据并写入到 PMEM 上。               
+                        String key = curTask.key;
+                        for(long k=curTask.startIdx; k<curTask.loadNum; ++k){
+                            // 接受来自主线程的额外消息
+                            // useless task:
+                            long uselessIdx = qTopicQueueDataMap.get(key).uselessIndex; // TODO: 不需要多次访问
+                            if(k < uselessIdx) continue; // 丢弃任务不执行
+
+                            ConcurrentHashMap<Long, IndexInfo> idx2offset = allDataOffsetMap.get(key);
+                            long offset = idx2offset.get(k).offset;
+                            int dataSize = idx2offset.get(k).dataSize;
+                            
+                            ByteBuffer byteBuffer = ByteBuffer.allocate(dataSize);
+                            curTask.fc.read(byteBuffer, offset);
+                            byteBuffer.flip();
+                            
+                            // 可以多次判断 uselessIdx 和 k 的值
+                            // TODO: 写到 PMEM
+                            // long hanlde = pmemManger.write(byteBuffer);
+                            // 更新 DRAM 中的 hashMap
+                            // allDataOffsetMap.get(key).get(k).handle = hanlde;
+                            
+                            logger.info("test multithread!---- write pmem");
+                        }
+                        logger.info("test multithread!---- write pmem");
+                    } 
+                    if(wPmemTaskQueue.isEmpty()){
+                        // Thread.sleep(1000); // 把自己休眠，如何唤醒呢？信号量来操作
+                        logger.info("write sleep!");
+                        LockSupport.park();
+                    }
+                }
+            }catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        void freePmem(){
+            try {
+                while(true){
+                    int size = freeTaskQueue.size();
+                    for(int i=0; i<size; ++i){
+                        FreePmemTask freeTask = freeTaskQueue.poll();
+                        // 遍历内存中的表，得到 handle
+                        String key = freeTask.key;
+                        for(long k=freeTask.startIdx; k<freeTask.endIdx; k++){
+                            logger.info("free space address: " +  k);
+                            // long handle = allDataOffsetMap.get(key).get(k).handle;
+                            // int dataSize = allDataOffsetMap.get(key).get(k).dataSize;
+                            // pmemManger.free(handle, dataSize);
+                        }
+                        // TODO: 反过去更新 startIdx
+                        qTopicQueueDataMap.get(key).uselessIndex = freeTask.endIdx;
+                    }
+                    if(freeTaskQueue.isEmpty()){
+                        logger.info("free sleep");
+                        LockSupport.park();
+                    }
+                }
+            } catch (Exception e) {
+                //TODO: handle exception
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public class PmemManager{
+        Heap heap;
+        public PmemManager(Heap heap){
+            this.heap = heap;
+        }
+        long write(ByteBuffer byteBuffer){
+            MemoryBlock block = heap.allocateMemoryBlock(byteBuffer.remaining());
+            block.copyFromArray(byteBuffer.array(), 0, 0, byteBuffer.remaining());
+            return block.handle();
+        }
+        long write(byte[] array){
+            MemoryBlock block = heap.allocateMemoryBlock(array.length);
+            block.copyFromArray(array, 0, 0, array.length);
+            return block.handle();
+        }
+        void free(long hanlde){
+            Accessor self = heap.createAccessor();
+            self.freeMemory();
+        }
+        int read(ByteBuffer byteBuffer, long handle, int dataSize){
+            MemoryBlock block = heap.memoryBlockFromHandle(handle);
+            byte[] dstArray = new byte[dataSize];
+            block.copyToArray(0, dstArray, 0, dataSize);
+            byteBuffer = ByteBuffer.wrap(dstArray);
+            return dataSize;
         }
     }
 
