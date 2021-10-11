@@ -115,8 +115,6 @@ public class LSMessageQueue extends MessageQueue {
             id2queue = new HashMap<Integer, MQQueue>();
             df = dataFile;
         }
-
-
     }
 
     MQConfig mqConfig;
