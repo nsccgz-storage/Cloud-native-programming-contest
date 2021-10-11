@@ -415,7 +415,7 @@ public class LSMessageQueue extends MessageQueue {
         q.maxOffset++;
 
         // 未知队列和热队列需要双写，冷队列不用，冷队列还是预取多一些内容吧
-        // if (q.type == 0 || q.type == 1){
+        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
         //     final MQQueue finalQ = q;
         //     q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
         //        @Override
@@ -442,8 +442,6 @@ public class LSMessageQueue extends MessageQueue {
         //        }
         //     });
         // }
-        //Future prefetchFuture = null;
-        //q.prefetchFuture = prefetchFuture;
 
         return ret;
     }
@@ -562,25 +560,25 @@ public class LSMessageQueue extends MessageQueue {
         DataFile df = mqTopic.df;
         q.consumeOffset += fetchNum-fetchStartIndex;
 
-        // 既然从预取中消费了一些数据，那当然可以补回来
-        // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
-        if (q.type == 2){
-            // 冷读才需要预取
-            q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-               @Override
-               public Integer call() throws Exception {
-                   long startTime = System.nanoTime();
-                   if (!q.prefetchBuffer.isFull()){
-                       // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                       q.prefetchBuffer.prefetch();
-                   }
-                   long endTime = System.nanoTime();
-                   log.debug("prefetch ok");
-                   log.debug("time : " + (endTime - startTime) + " ns");
-                   return 0;
-               }
-            });
-        }
+        // // 既然从预取中消费了一些数据，那当然可以补回来
+        // // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
+        // if (q.type == 2){
+        //     // 冷读才需要预取
+        //     q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //        @Override
+        //        public Integer call() throws Exception {
+        //            long startTime = System.nanoTime();
+        //            if (!q.prefetchBuffer.isFull()){
+        //                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //                q.prefetchBuffer.prefetch();
+        //            }
+        //            long endTime = System.nanoTime();
+        //            log.debug("prefetch ok");
+        //            log.debug("time : " + (endTime - startTime) + " ns");
+        //            return 0;
+        //        }
+        //     });
+        // }
 
 
 
@@ -985,7 +983,7 @@ public class LSMessageQueue extends MessageQueue {
         public ThreadLocal<Long> threadLocalBigBlockStartAddr;
         public ThreadLocal<Integer> threadLocalBigBlockFreeOffset;
         MyPMBlockPool(String path){
-            totalCapacity = 60L*1024*1024*1024;
+            totalCapacity = 180L*1024*1024*1024;
             pool = MemoryPool.createPool(path, totalCapacity);
 
             blockSize = 8*17*1024; // 8 个slot
@@ -1086,7 +1084,7 @@ public class LSMessageQueue extends MessageQueue {
                 threadLocalReadMetaBuf = new ThreadLocal<>();
 
                 // prefetchThread = Executors.newSingleThreadExecutor();
-                prefetchThread = Executors.newFixedThreadPool(2);
+                prefetchThread = Executors.newFixedThreadPool(4);
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
