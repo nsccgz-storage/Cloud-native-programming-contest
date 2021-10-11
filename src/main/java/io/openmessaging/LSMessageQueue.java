@@ -387,29 +387,29 @@ public class LSMessageQueue extends MessageQueue {
 
         DataFile df = mqTopic.df;
 
-        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(mqTopic.topicId, queueId, data, q);
+        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(mqTopic.topicId, queueId, data, q);
 
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
 
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
+        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
         long ret = q.maxOffset;
 
         // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
-        // data.reset();
-        // if (!q.prefetchBuffer.isFull()){
-        //     // q.prefetchBuffer.prefetch();
-        //     // if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
-        //     //     log.debug("double write");
-        //     //     q.prefetchBuffer.directAddData(data);
-        //     // }
-        //     // 写满就不管了
-        //     if (q.prefetchOffset == q.maxOffset){
-        //         log.debug("double write");
-        //         q.prefetchBuffer.directAddData(data);
-        //     }
-        // }
+        data.reset();
+        if (!q.prefetchBuffer.isFull()){
+            q.prefetchBuffer.prefetch();
+            if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
+                log.debug("double write");
+                q.prefetchBuffer.directAddData(data);
+            }
+            // 写满就不管了
+            // if (q.prefetchOffset == q.maxOffset){
+            //     log.debug("double write");
+            //     q.prefetchBuffer.directAddData(data);
+            // }
+        }
 
 
         q.maxOffset++;
@@ -497,14 +497,17 @@ public class LSMessageQueue extends MessageQueue {
         // 需要的数据:      [offset, offset+fetchNum-1]
         // 已经预取好的数据: [consumeOffset, prefetchOffset-1]
         // 暂时只考虑 offset == consumeOffset 的情况
-        assert (offset == q.consumeOffset);
+        // assert (offset == q.consumeOffset);
+        q.consumeOffset = offset;
+
         if (offset == q.consumeOffset){
             // 目前消费的offset刚好和我预取好的消息相匹配
             // 所以前面的消息都不用取了
-            int prefetchNum = q.prefetchBuffer.consume(ret, fetchNum);
+            int prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
             fetchStartIndex += prefetchNum;
             q.consumeOffset += prefetchNum;
         }
+        // 当一个热读过来，offset会和consumeOffset不匹配，这个时候我要如何处理？
 
 
         // 分类
@@ -558,7 +561,9 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         DataFile df = mqTopic.df;
-        q.consumeOffset += fetchNum-fetchStartIndex;
+        // 前面已经把超出maxOffset 的fetchNum 缩小到和maxOffset一样了，这里其实可以直接更新
+        // q.consumeOffset += fetchNum-fetchStartIndex;
+        q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
         // // 既然从预取中消费了一些数据，那当然可以补回来
         // // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
@@ -684,7 +689,7 @@ public class LSMessageQueue extends MessageQueue {
             // 大小写死在pool的实现里了，改大小的话要改两个地方
         }
 
-        public int consume(Map<Integer, ByteBuffer> ret, int fetchNum){
+        public int consume(Map<Integer, ByteBuffer> ret, long offset,  int fetchNum){
             // 把分配内存放在异步任务中完成
             if (block == null){
                 block = pmBlockPool.allocate();
@@ -694,6 +699,31 @@ public class LSMessageQueue extends MessageQueue {
             log.debug("tail : " + tail + " head : "+head + " length : " + length);
             log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
             log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
+
+            // 始终假定 offset == q.consumeOffset
+            // 如果 headOffset != offset
+            // 那么 ，两种情况
+            // 一种是 buf中还有需要消费的内容，那么就移动一下队列就好
+            if (offset != headOffset){
+                if (offset < headOffset){
+                    /// 倒退了
+                    // 不管，不预取了
+                    return 0;
+                }
+                if ( headOffset < offset && offset < tailOffset){
+                    // 说明当前要拿的数据还在buf中
+                    // 先移动一下head，让队列符合 headOffset = offset 的假定
+                    long num = offset - headOffset;
+                    for (long i = 0;  i < num; i++){
+                        this.poll();
+                    }
+                } else {
+                    // 说明当前要拿的数据不在buf中
+                    // 另一种是buf中所有内容都没用，直接重置这条buffer1吧
+                    // 后面再次调用prefetch的时候会重置的
+                    return 0;
+                }
+            }
 
             // read from consume Offset
             // 假定 刚好匹配，一定是从headOffset开始读取
@@ -736,6 +766,7 @@ public class LSMessageQueue extends MessageQueue {
                 headOffset = q.consumeOffset;
                 tailOffset = q.consumeOffset;
                 q.prefetchOffset = q.consumeOffset;
+                // 相当于重置 prefetch buffer
 
             }
             log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
@@ -745,6 +776,7 @@ public class LSMessageQueue extends MessageQueue {
             // 得到能够被预取的消息数量
             if (prefetchNum <= 0){
                 // 没有需要预取的消息，或者所有消息都被预取了
+                log.debug("nothing to prefetch or all msgs has been prefetched");
                 return;
             }
             // 检查consumeOffset和队列的headOffset是否对应，如果不对应则释放相关数据
@@ -1207,9 +1239,11 @@ public class LSMessageQueue extends MessageQueue {
                             long startTime = System.nanoTime();
                             for (int i = 0; i < finalBufNum; i++){
                                 Writer thisW = batchWriters[i];
-                                if (!thisW.q.prefetchBuffer.isFull()){
+                                // 未知队列和热队列
+                                if ( (thisW.q.type == 0 || thisW.q.type == 1) && !thisW.q.prefetchBuffer.isFull()){
                                     // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
                                     thisW.q.prefetchBuffer.prefetch();
+                                    // FIXME: bug ！ 实际上没有被双写，这个maxOffset后面会变的
                                     long thisOffset = thisW.q.maxOffset;
                                     if (!thisW.q.prefetchBuffer.isFull() && thisOffset == thisW.q.prefetchOffset){
                                         log.debug("double write !");
