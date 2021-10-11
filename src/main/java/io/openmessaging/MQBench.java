@@ -170,14 +170,14 @@ public class MQBench {
 				log.error("offset error");
 				System.exit(-1);
 			}
-//			msg.results = mq.getRange(msg.topic, msg.queueId, trueOffset, 1);
-//			trueResult = trueMQ.getRange(msg.topic, msg.queueId, trueOffset, 1);
-//			if (msg.results.get(0).compareTo(trueResult.get(0)) != 0){
-//				log.error(msg.results.get(0));
-//				log.error(trueResult.get(0));
-//				log.error("data error");
-//				System.exit(-1);
-//			}
+			// msg.results = mq.getRange(msg.topic, msg.queueId, trueOffset, 1);
+			// trueResult = trueMQ.getRange(msg.topic, msg.queueId, trueOffset, 1);
+			// if (msg.results.get(0).compareTo(trueResult.get(0)) != 0){
+			// 	log.error(msg.results.get(0));
+			// 	log.error(trueResult.get(0));
+			// 	log.error("data error");
+			// 	System.exit(-1);
+			// }
 		}
 
 		barrier.await();
@@ -304,6 +304,7 @@ public class MQBench {
 				}
 			}
 			barrier.await();
+			long step1StartTime = System.nanoTime();
 			if (threadId == 0){
 				log.info("init message ok");
 				log.info("start step 1");
@@ -318,6 +319,8 @@ public class MQBench {
 
 			barrier.await();
 
+			long step1EndTime = System.nanoTime();
+			long step2StartTime = System.nanoTime();
 			if (threadId == 0){
 				log.info("step 1 ok");
 				log.info("start step 2");
@@ -332,11 +335,13 @@ public class MQBench {
 				}
 			}
 
+			barrier.await();
+			long step2EndTime = System.nanoTime();
 			if (threadId == 0){
 				log.info("step 2 ok");
+				log.info("time of step 1: " + (step1EndTime-step1StartTime)/(1000*1000*1000));
+				log.info("time of step 2: " + (step2EndTime-step2StartTime)/(1000*1000*1000));
 			}
-
-
 
 			if (threadId == 0){
 				log.info("pass !ok !!");
