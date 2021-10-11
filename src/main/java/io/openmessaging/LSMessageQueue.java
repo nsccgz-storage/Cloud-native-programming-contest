@@ -512,29 +512,27 @@ public class LSMessageQueue extends MessageQueue {
         // }
 
 
-        if (offset >= q.maxOffset-2){
-            if (q.type == 0){
-                q.type = 1; // hot
-                if (mqConfig.useStats){
-                    testStat.incHotQueueCount();
-                }
-            }
-            if (q.maxOffsetData != null){
-                if (mqConfig.useStats){
-                    testStat.hitHotData(topic, queueId);
-                }
-                ret.put(0, q.maxOffsetData);
-                return ret;
-            }
-        }
         if (offset == 0){
             if (q.type == 0){
                 q.type = 2; // cold
                 if (mqConfig.useStats){
                     testStat.incColdQueueCount();
                 }
+
+                // TODO: 可以触发prefetch buffer 释放
             }
         }
+
+        if (offset >= q.maxOffset-5){
+            if (q.type == 0){
+                q.type = 1; // hot
+                if (mqConfig.useStats){
+                    testStat.incHotQueueCount();
+                }
+                // TODO: 可以触发prefetch buffer 扩容
+            }
+        }
+
         if(mqConfig.useStats){
             testStat.incFetchMsgCount(fetchNum);
             if (q.type == 1){
