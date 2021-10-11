@@ -205,8 +205,8 @@ public class LSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                // System.exit(-1);
-                recover();
+                System.exit(-1);
+                // recover();
             }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
@@ -397,16 +397,16 @@ public class LSMessageQueue extends MessageQueue {
         // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
         if (!q.prefetchBuffer.isFull()){
-            // q.prefetchBuffer.prefetch();
-            // if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
-            //     log.debug("double write");
-            //     q.prefetchBuffer.directAddData(data);
-            // }
-            // 写满就不管了
-            if (q.prefetchOffset == q.maxOffset){
+            q.prefetchBuffer.prefetch();
+            if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
                 log.debug("double write");
                 q.prefetchBuffer.directAddData(data);
             }
+            // 写满就不管了
+            // if (q.prefetchOffset == q.maxOffset){
+            //     log.debug("double write");
+            //     q.prefetchBuffer.directAddData(data);
+            // }
         }
 
 
@@ -489,10 +489,6 @@ public class LSMessageQueue extends MessageQueue {
            q.prefetchFuture = null;
         }
 
-        if(mqConfig.useStats){
-            testStat.incFetchMsgCount(fetchNum);
-        }
-
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
         // 如果有东西在prefetchBuffer的话
         // 需要的数据:      [offset, offset+fetchNum-1]
@@ -537,11 +533,32 @@ public class LSMessageQueue extends MessageQueue {
                 }
             }
         }
+        if(mqConfig.useStats){
+            testStat.incFetchMsgCount(fetchNum);
+            if (q.type == 1){
+                // hot
+                testStat.incHotFetchMsgCount(fetchNum);
+            } else if (q.type == 2){
+                // cold
+                testStat.incColdFetchMsgCount(fetchNum);
+
+            }
+        }
+
+
 
         DataFile df = mqTopic.df;
 
         if (mqConfig.useStats){
             testStat.incReadSSDCount(fetchNum-fetchStartIndex);
+            if (q.type == 1){
+                // hot
+                testStat.incHotReadSSDCount(fetchNum-fetchStartIndex);
+            } else if (q.type == 2){
+                // cold
+                testStat.incColdReadSSDCount(fetchNum-fetchStartIndex);
+            }
+
         }
 
         q.consumeOffset += fetchNum-fetchStartIndex;
@@ -549,20 +566,20 @@ public class LSMessageQueue extends MessageQueue {
         // 既然从预取中消费了一些数据，那当然可以补回来
         // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
         // TODO
-        q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-           @Override
-           public Integer call() throws Exception {
-               long startTime = System.nanoTime();
-               if (!q.prefetchBuffer.isFull()){
-                   // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                   q.prefetchBuffer.prefetch();
-               }
-               long endTime = System.nanoTime();
-               log.debug("prefetch ok");
-               log.debug("time : " + (endTime - startTime) + " ns");
-               return 0;
-           }
-        });
+        // q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //    @Override
+        //    public Integer call() throws Exception {
+        //        long startTime = System.nanoTime();
+        //        if (!q.prefetchBuffer.isFull()){
+        //            // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //            q.prefetchBuffer.prefetch();
+        //        }
+        //        long endTime = System.nanoTime();
+        //        log.debug("prefetch ok");
+        //        log.debug("time : " + (endTime - startTime) + " ns");
+        //        return 0;
+        //    }
+        // });
 
 
 
@@ -905,6 +922,56 @@ public class LSMessageQueue extends MessageQueue {
         }
         public void copyToArray(long srcOffset, byte[] dstArray, int dstOffset, int length){
             pool.copyToByteArray(addr+srcOffset, dstArray, dstOffset, length);
+        }
+    }
+
+    public class MyPMBlockPool2 {
+        public MemoryPool pool;
+        public int blockSize;
+        public int bigBlockSize;
+        public AtomicLong atomicGlobalFreeOffset;
+        public long totalCapacity;
+        public ThreadLocal<Long> threadLocalBigBlockStartAddr;
+        public ThreadLocal<Integer> threadLocalBigBlockFreeOffset;
+        public ConcurrentLinkedQueue<Long> bigBlockQueue;
+        MyPMBlockPool2(String path){
+            totalCapacity = 60L*1024*1024*1024;
+            pool = MemoryPool.createPool(path, totalCapacity);
+
+            blockSize = 8*17*1024; // 8 个slot
+            bigBlockSize = 200*blockSize;
+
+            long bigBlockCount = totalCapacity / bigBlockSize;
+
+            for (long i = 0; i < bigBlockCount; i++){
+                bigBlockQueue.offer(i*bigBlockSize);
+            }
+            atomicGlobalFreeOffset = new AtomicLong();
+            atomicGlobalFreeOffset.set(0L);
+            threadLocalBigBlockFreeOffset = new ThreadLocal<>();
+            threadLocalBigBlockStartAddr = new ThreadLocal<>();
+            threadLocalBigBlockFreeOffset.set(0);
+        }
+        public MyPMBlock allocate(){
+            if (threadLocalBigBlockStartAddr.get() == null){
+                allocateBigBlock();
+            }
+            if (threadLocalBigBlockFreeOffset.get() == bigBlockSize){
+                // 大块满了，分配新的大块
+                allocateBigBlock();
+            }
+            int freeOffset = threadLocalBigBlockFreeOffset.get();
+            long addr = threadLocalBigBlockStartAddr.get() + freeOffset;
+            threadLocalBigBlockFreeOffset.set(freeOffset+blockSize);
+
+            return new MyPMBlock(pool, addr);
+        }
+        public void allocateBigBlock(){
+            long bigBlockStartAddr = atomicGlobalFreeOffset.getAndAdd(bigBlockSize);
+            log.debug("big block addr : " +bigBlockStartAddr);
+            threadLocalBigBlockStartAddr.set(bigBlockStartAddr);
+            threadLocalBigBlockFreeOffset.set(0);
+            assert (atomicGlobalFreeOffset.get() < totalCapacity);
         }
     }
 
@@ -1674,6 +1741,11 @@ public class LSMessageQueue extends MessageQueue {
             Long writeBytes;
             int fetchCount;
             int readSSDCount;
+            int coldFetchCount;
+            int coldReadSSDCount;
+            int hotFetchCount;
+            int hotReadSSDCount;
+
             public int[] bucketBound;
             public int[] bucketCount;
 
@@ -1690,6 +1762,16 @@ public class LSMessageQueue extends MessageQueue {
                 queueCount = 0;
                 coldQueueCount = 0;
                 hotQueueCount = 0;
+                fetchCount = 0;
+                readSSDCount = 0;
+
+                coldFetchCount = 0;
+                coldReadSSDCount = 0;
+                hotFetchCount = 0;
+                hotReadSSDCount = 0;
+
+
+
                 fetchCount = 0;
                 readSSDCount = 0;
                 reported = new AtomicBoolean();
@@ -1786,6 +1868,26 @@ public class LSMessageQueue extends MessageQueue {
         void incReadSSDCount(int fetchNum){
             int id = threadId.get();
             stats[id].readSSDCount+= fetchNum;
+        }
+
+        void incColdFetchMsgCount(int fetchNum){
+            int id = threadId.get();
+            stats[id].coldFetchCount += fetchNum;
+        }
+
+        void incColdReadSSDCount(int fetchNum){
+            int id = threadId.get();
+            stats[id].coldReadSSDCount+= fetchNum;
+        }
+
+        void incHotFetchMsgCount(int fetchNum){
+            int id = threadId.get();
+            stats[id].hotFetchCount += fetchNum;
+        }
+
+        void incHotReadSSDCount(int fetchNum){
+            int id = threadId.get();
+            stats[id].hotReadSSDCount+= fetchNum;
         }
 
 
@@ -2015,16 +2117,31 @@ public class LSMessageQueue extends MessageQueue {
             StringBuilder hotDataReport = new StringBuilder();
             StringBuilder fetchCountReport = new StringBuilder();
             StringBuilder readSSDCountReport = new StringBuilder();
+            StringBuilder coldFetchCountReport = new StringBuilder();
+            StringBuilder coldReadSSDCountReport = new StringBuilder();
+            StringBuilder hotFetchCountReport = new StringBuilder();
+            StringBuilder hotReadSSDCountReport = new StringBuilder();
+
             for (int i = 0; i < getNumOfThreads; i++){
                 hotDataHitCountReport.append(String.format("%d,",(stats[i].hitHotDataCount)));
                 hotDataReport.append(String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount));
                 fetchCountReport.append(String.format("%d,",(stats[i].fetchCount)));
                 readSSDCountReport.append(String.format("%d,",(stats[i].readSSDCount)));
+                hotFetchCountReport.append(String.format("%d,",(stats[i].hotFetchCount)));
+                hotReadSSDCountReport.append(String.format("%d,",(stats[i].hotReadSSDCount)));
+                coldFetchCountReport.append(String.format("%d,",(stats[i].coldFetchCount)));
+                coldReadSSDCountReport.append(String.format("%d,",(stats[i].coldReadSSDCount)));
             }
             log.info("[hit hot data counter] : " + hotDataHitCountReport);
             log.info("[hit hot data] : " + hotDataReport);
             log.info("[fetch Msg Count ] : "+fetchCountReport);
             log.info("[read SSD Count] : "+readSSDCountReport);
+            log.info("[HOT fetch Msg Count ] : "+hotFetchCountReport);
+            log.info("[HOT read SSD Count] : "+hotReadSSDCountReport);
+            log.info("[COLD fetch Msg Count ] : "+coldFetchCountReport);
+            log.info("[COLD read SSD Count] : "+coldReadSSDCountReport);
+
+
 
 
             log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
