@@ -170,14 +170,14 @@ public class MQBench {
 				log.error("offset error");
 				System.exit(-1);
 			}
-			msg.results = mq.getRange(msg.topic, msg.queueId, trueOffset, 1);
-			trueResult = trueMQ.getRange(msg.topic, msg.queueId, trueOffset, 1);
-			if (msg.results.get(0).compareTo(trueResult.get(0)) != 0){
-				log.error(msg.results.get(0));
-				log.error(trueResult.get(0));
-				log.error("data error");
-				System.exit(-1);
-			}
+//			msg.results = mq.getRange(msg.topic, msg.queueId, trueOffset, 1);
+//			trueResult = trueMQ.getRange(msg.topic, msg.queueId, trueOffset, 1);
+//			if (msg.results.get(0).compareTo(trueResult.get(0)) != 0){
+//				log.error(msg.results.get(0));
+//				log.error(trueResult.get(0));
+//				log.error("data error");
+//				System.exit(-1);
+//			}
 		}
 
 		barrier.await();
@@ -203,6 +203,9 @@ public class MQBench {
 					if (trueResult.containsKey(j)){
 						if (msg.results.get(j).compareTo(trueResult.get(j)) != 0){
 							log.error("data error");
+							log.error("j : "+ j);
+							log.error(msg.results.get(j));
+							log.error(trueResult.get(j));
 							System.exit(-1);
 						}
 					}
