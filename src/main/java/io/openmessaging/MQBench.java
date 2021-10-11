@@ -339,8 +339,8 @@ public class MQBench {
 			long step2EndTime = System.nanoTime();
 			if (threadId == 0){
 				log.info("step 2 ok");
-				log.info("time of step 1: " + (step1EndTime-step1StartTime)/(1000*1000*1000));
-				log.info("time of step 2: " + (step2EndTime-step2StartTime)/(1000*1000*1000));
+				log.info("time of step 1: " + (double)(step1EndTime-step1StartTime)/(1000*1000*1000));
+				log.info("time of step 2: " + (double)(step2EndTime-step2StartTime)/(1000*1000*1000));
 			}
 
 			if (threadId == 0){
@@ -364,9 +364,9 @@ public class MQBench {
 		String dbPath = "/mnt/nvme/mq";
 		String pmDirPath = "/mnt/pmem/mq";
 
-		// correctBenchByTrace(dbPath, pmDirPath);
+		correctBenchByTrace(dbPath, pmDirPath);
 
-		perfBenchByTrace(dbPath, pmDirPath);
+		// perfBenchByTrace(dbPath, pmDirPath);
 
 		// log.setLevel(Level.INFO);
 		// try {
