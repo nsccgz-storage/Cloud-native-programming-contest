@@ -328,7 +328,7 @@ public class LSMessageQueue extends MessageQueue {
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             int threadId = updateThreadId();
-            int dataFileId = threadId / 10; 
+            int dataFileId = threadId % numOfDataFiles; 
             short topicId = getAndUpdateTopicId(topic);
             // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
             // mqTopic = new MQTopic(topic, dataFileId);
@@ -353,16 +353,16 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         // // 确保和这个queue相关的异步任务已完成
-        // if (q.prefetchFuture != null){
-        //     while (!q.prefetchFuture.isDone()){
-        //         try {
-        //             Thread.sleep(0, 10000);
-        //         } catch (Throwable ie){
-        //             ie.printStackTrace();
-        //         }
-        //     }
-        //     q.prefetchFuture = null;
-        // }
+        if (q.prefetchFuture != null){
+            while (!q.prefetchFuture.isDone()){
+                try {
+                    Thread.sleep(0, 10000);
+                } catch (Throwable ie){
+                    ie.printStackTrace();
+                }
+            }
+            q.prefetchFuture = null;
+        }
 
 
         // if (localThreadId.get() == 1){
@@ -378,11 +378,16 @@ public class LSMessageQueue extends MessageQueue {
         // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
         if (!q.prefetchBuffer.isFull()){
-            q.prefetchBuffer.prefetch();
-            if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
+            // q.prefetchBuffer.prefetch();
+            // if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
+            //     log.debug("double write");
+            //     q.prefetchBuffer.directAddData(data);
+            // }
+            if (q.prefetchOffset == q.maxOffset){
                 log.debug("double write");
                 q.prefetchBuffer.directAddData(data);
             }
+
         }
 
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
@@ -459,16 +464,16 @@ public class LSMessageQueue extends MessageQueue {
 
         int fetchStartIndex = 0;
         // // 确保和这个queue相关的异步任务已完成
-        //if (q.prefetchFuture != null){
-        //    while (!q.prefetchFuture.isDone()){
-        //        try {
-        //            Thread.sleep(0, 10000);
-        //        } catch (Throwable ie){
-        //            ie.printStackTrace();
-        //        }
-        //    }
-        //    q.prefetchFuture = null;
-        //}
+        if (q.prefetchFuture != null){
+           while (!q.prefetchFuture.isDone()){
+               try {
+                   Thread.sleep(0, 10000);
+               } catch (Throwable ie){
+                   ie.printStackTrace();
+               }
+           }
+           q.prefetchFuture = null;
+        }
 
 
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
@@ -535,22 +540,21 @@ public class LSMessageQueue extends MessageQueue {
         // 既然从预取中消费了一些数据，那当然可以补回来
         // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
         // TODO
-        //Future prefetchFuture = null;
-        //prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //    @Override
-        //    public Integer call() throws Exception {
-        //        long startTime = System.nanoTime();
-        //        if (!q.prefetchBuffer.isFull()){
-        //            // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //            q.prefetchBuffer.prefetch();
-        //        }
-        //        long endTime = System.nanoTime();
-        //        log.debug("prefetch ok");
-        //        log.debug("time : " + (endTime - startTime) + " ns");
-        //        return 0;
-        //    }
-        //});
-        //q.prefetchFuture = prefetchFuture;
+        // Future prefetchFuture = null;
+        q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+           @Override
+           public Integer call() throws Exception {
+               long startTime = System.nanoTime();
+               if (!q.prefetchBuffer.isFull()){
+                   // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                   q.prefetchBuffer.prefetch();
+               }
+               long endTime = System.nanoTime();
+               log.debug("prefetch ok");
+               log.debug("time : " + (endTime - startTime) + " ns");
+               return 0;
+           }
+        });
 
         return ret;
     }
@@ -714,6 +718,14 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         public void directAddData(ByteBuffer data){
+            // 把分配内存放在异步任务中完成
+            if (block == null){
+                long startTime = System.nanoTime();
+                block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+                long endTime = System.nanoTime();
+                log.debug("memory block allocate : " + (endTime - startTime) + " ns");
+            }
+
             // 如果刚好需要预取这个数据，而且预取数量还不够，那就把这个数据加进去
             this.offer(data);
             q.prefetchOffset++;
@@ -754,8 +766,8 @@ public class LSMessageQueue extends MessageQueue {
             // 把一个消息从队列头部去掉
             int msgLength = msgLengths[head];
             log.debug("msgLength : " + msgLength + " head : " + head);
-            // ByteBuffer buf = q.bbPool.allocate(msgLength);
-            ByteBuffer buf = ByteBuffer.allocate(msgLength);
+            ByteBuffer buf = q.bbPool.allocate(msgLength);
+            // ByteBuffer buf = ByteBuffer.allocate(msgLength);
             log.debug(buf);
             block.copyToArray(head*slotSize, buf.array(), buf.arrayOffset()+buf.position(), msgLength);
             log.debug(buf.arrayOffset());
@@ -1441,8 +1453,8 @@ public class LSMessageQueue extends MessageQueue {
                 ret = dataFileChannel.read(readMeta, position);
                 readMeta.position(6);
                 int dataLength = readMeta.getShort();
-                ByteBuffer tmp = ByteBuffer.allocate(dataLength);
-                //ByteBuffer tmp = bufPool.allocate(dataLength);
+                // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
+                ByteBuffer tmp = bufPool.allocate(dataLength);
                 tmp.mark();
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
                 tmp.reset();
