@@ -177,6 +177,8 @@ public class SSDqueue extends MessageQueue {
                 executor.execute(new RWPmem(true));
                 executor.execute(new RWPmem(false));
 
+                executor.shutdown();
+
                 // create new mq    
                 logger.info("create a new queue");
                 
@@ -458,7 +460,10 @@ public class SSDqueue extends MessageQueue {
 
                 ByteBuffer tmp1 = ByteBuffer.allocate(dataInfo.dataSize);
                 if(dataInfo.handle != -1L){ // 读 PMEM
-                    // int len2 =  pmemManger.read(tmp1, dataInfo.handle);
+                    // logger.info(dataInfo.handle);
+                    int len2 =  pmemManager.read(tmp1, dataInfo.handle, dataInfo.dataSize);
+
+                    //logger.info("getRange: " + new String(tmp1.array()));
                     // 加入任务告诉要清空
                 }else{
                     int len2 = ds.read(tmp1, dataInfo.offset  + Long.BYTES + Long.BYTES);
@@ -580,7 +585,7 @@ public class SSDqueue extends MessageQueue {
                 //Iterator<WritePmemTask> it = taskQueue.iterator();
                 while(!Thread.currentThread().isInterrupted()){
                     int size = wPmemTaskQueue.size();
-                    logger.info("---- write pmem --- Quese size: " + size);
+                    //logger.info("---- write pmem --- Quese size: " + size);
                     for(int i=0; i<size; ++i){
                         WritePmemTask curTask = wPmemTaskQueue.poll();
                         // 从 SSD 上读入数据并写入到 PMEM 上。               
@@ -606,12 +611,12 @@ public class SSDqueue extends MessageQueue {
                             // 更新 DRAM 中的 hashMap
                             allDataOffsetMap.get(key).get(k).handle = handle;
                             
-                            logger.info("test multithread!---- write pmem");
+                            //logger.info("test multithread!---- write pmem");
                         }
-                        logger.info("test multithread!---- write pmem");
+                        //logger.info("test multithread!---- write pmem");
                     } 
                     if(wPmemTaskQueue.isEmpty()){
-                        logger.info("---------------writeThread sleep!-------------------");
+                        //logger.info("---------------writeThread sleep!-------------------");
                         LockSupport.park();
                     }
                 }
@@ -628,10 +633,10 @@ public class SSDqueue extends MessageQueue {
                         FreePmemTask freeTask = freeTaskQueue.poll();
                         // 遍历内存中的表，得到 handle
 
-                        logger.info("free index: " + freeTask.startIdx + " " + freeTask.endIdx);
+                        //logger.info("free index: " + freeTask.startIdx + " " + freeTask.endIdx);
                         String key = freeTask.key;
                         for(long k=freeTask.startIdx; k<freeTask.endIdx; k++){
-                            logger.info("free space address: " +  k);
+                            //logger.info("free space address: " +  k);
                             IndexInfo tmp =  allDataOffsetMap.get(key).get(k);
                             if(tmp == null) break;
                             long handle = tmp.handle;
@@ -643,7 +648,7 @@ public class SSDqueue extends MessageQueue {
                         qTopicQueueDataMap.get(key).uselessIndex = freeTask.endIdx;
                     }
                     if(freeTaskQueue.isEmpty()){
-                        logger.info("---------freeThread sleep-------------");
+                        //logger.info("---------freeThread sleep-------------");
                         LockSupport.park();
                     }
                 }
@@ -667,6 +672,9 @@ public class SSDqueue extends MessageQueue {
             return block.handle();
         }
         long write(byte[] array){
+
+            //logger.info("pmemManager write: " + new String(array));
+
             MemoryBlock block = heap.allocateMemoryBlock(array.length);
             if(block == null) return -1L;
             block.copyFromArray(array, 0, 0, array.length);
@@ -680,7 +688,10 @@ public class SSDqueue extends MessageQueue {
             MemoryBlock block = heap.memoryBlockFromHandle(handle);
             byte[] dstArray = new byte[dataSize];
             block.copyToArray(0, dstArray, 0, dataSize);
-            byteBuffer = ByteBuffer.wrap(dstArray);
+            byteBuffer.put(dstArray);
+
+            //logger.info("pmemManager read: " + new String(byteBuffer.array()));
+
             return dataSize;
         }
     }
