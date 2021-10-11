@@ -207,8 +207,8 @@ public class LSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                System.exit(-1);
-                // recover();
+                // System.exit(-1);
+                recover();
             }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
@@ -390,58 +390,58 @@ public class LSMessageQueue extends MessageQueue {
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(mqTopic.topicId, queueId, data, q);
 
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
+        long ret = q.maxOffset;
+        q.maxOffset++;
 
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
-        long ret = q.maxOffset;
 
-        // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
-        data.reset();
-        if (!q.prefetchBuffer.isFull()){
-            q.prefetchBuffer.prefetch();
-            if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
-                log.debug("double write");
-                q.prefetchBuffer.directAddData(data);
-            }
-            // 写满就不管了
-            // if (q.prefetchOffset == q.maxOffset){
-            //     log.debug("double write");
-            //     q.prefetchBuffer.directAddData(data);
-            // }
-        }
+        // // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
+        // data.reset();
+        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        //     q.prefetchBuffer.prefetch();
+        //     if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset-1){
+        //         log.debug("double write");
+        //         q.prefetchBuffer.directAddData(data);
+        //     }
+        //     // 写满就不管了
+        //     // if (q.prefetchOffset == q.maxOffset){
+        //     //     log.debug("double write");
+        //     //     q.prefetchBuffer.directAddData(data);
+        //     // }
+        // }
 
 
-        q.maxOffset++;
 
         // 未知队列和热队列需要双写，冷队列不用，冷队列还是预取多一些内容吧
-        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
-        //     final MQQueue finalQ = q;
-        //     q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //        @Override
-        //        public Integer call() throws Exception {
-        //            MQQueue q = finalQ;
-        //            long startTime = System.nanoTime();
-        //            if (!q.prefetchBuffer.isFull()){
-        //                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //                q.prefetchBuffer.prefetch();
-        //                long thisOffset = q.maxOffset-1;
-        //                if (!q.prefetchBuffer.isFull() && thisOffset == q.prefetchOffset){
-        //                    log.debug("double write !");
-        //                    // 如果目前要写入的数据刚好就是下一个要预取的内容
-        //                    // 双写
-        //                    data.reset();
-        //                    q.prefetchBuffer.directAddData(data);
-        //                    // TODO: 担心data在异步中途被改
-        //                }
-        //            }
-        //            long endTime = System.nanoTime();
-        //            log.debug("prefetch ok");
-        //            log.debug("time : " + (endTime - startTime) + " ns");
-        //            return 0;
-        //        }
-        //     });
-        // }
+        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+            final MQQueue finalQ = q;
+            q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+               @Override
+               public Integer call() throws Exception {
+                   MQQueue q = finalQ;
+                   long startTime = System.nanoTime();
+                   if (!q.prefetchBuffer.isFull()){
+                       // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                       q.prefetchBuffer.prefetch();
+                       long thisOffset = q.maxOffset-1;
+                       if (!q.prefetchBuffer.isFull() && thisOffset == q.prefetchOffset){
+                           log.debug("double write !");
+                           // 如果目前要写入的数据刚好就是下一个要预取的内容
+                           // 双写
+                           data.reset();
+                           q.prefetchBuffer.directAddData(data);
+                           // TODO: 担心data在异步中途被改
+                       }
+                   }
+                   long endTime = System.nanoTime();
+                   log.debug("prefetch ok");
+                   log.debug("time : " + (endTime - startTime) + " ns");
+                   return 0;
+               }
+            });
+        }
 
         return ret;
     }
@@ -565,22 +565,28 @@ public class LSMessageQueue extends MessageQueue {
 
         // // 既然从预取中消费了一些数据，那当然可以补回来
         // // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
-        // if (q.type == 2){
-        //     // 冷读才需要预取
-        //     q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //        @Override
-        //        public Integer call() throws Exception {
-        //            long startTime = System.nanoTime();
-        //            if (!q.prefetchBuffer.isFull()){
-        //                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //                q.prefetchBuffer.prefetch();
-        //            }
-        //            long endTime = System.nanoTime();
-        //            log.debug("prefetch ok");
-        //            log.debug("time : " + (endTime - startTime) + " ns");
-        //            return 0;
-        //        }
-        //     });
+        if (q.type == 2){
+            // 冷读才需要预取
+            q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+               @Override
+               public Integer call() throws Exception {
+                   long startTime = System.nanoTime();
+                   if (!q.prefetchBuffer.isFull()){
+                       // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                       q.prefetchBuffer.prefetch();
+                   }
+                   long endTime = System.nanoTime();
+                   log.debug("prefetch ok");
+                   log.debug("time : " + (endTime - startTime) + " ns");
+                   return 0;
+               }
+            });
+        }
+
+        // TODO: 加一个条件，这样合理吗？
+        // if (q.maxOffset - q.consumeOffset < 8L){
+        //     // 队列是可以变热的，热队列可以在append的时候双写
+        //     q.type = 1;
         // }
 
 
@@ -1117,7 +1123,8 @@ public class LSMessageQueue extends MessageQueue {
                 threadLocalReadMetaBuf = new ThreadLocal<>();
 
                 // prefetchThread = Executors.newSingleThreadExecutor();
-                prefetchThread = Executors.newFixedThreadPool(4);
+                prefetchThread = Executors.newFixedThreadPool(6);
+                // prefetchThread = Executors.newCachedThreadPool();
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
@@ -1196,7 +1203,7 @@ public class LSMessageQueue extends MessageQueue {
                 //     if (!thisW.q.prefetchBuffer.isFull()){
                 //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
                 //         thisW.q.prefetchBuffer.prefetch();
-                //         long thisOffset = thisW.q.maxOffset;
+                //         long thisOffset = thisW.q.maxOffset-1;
                 //         if (!thisW.q.prefetchBuffer.isFull() && thisOffset == thisW.q.prefetchOffset){
                 //             log.debug("double write !");
                 //             // 如果目前要写入的数据刚好就是下一个要预取的内容
