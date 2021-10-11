@@ -387,6 +387,13 @@ public class LSMessageQueue extends MessageQueue {
 
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(mqTopic.topicId, queueId, data, q);
 
+        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
+
+        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
+        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
+        q.offset2position.add(position);
+        long ret = q.maxOffset;
+
         // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
         if (!q.prefetchBuffer.isFull()){
@@ -395,19 +402,14 @@ public class LSMessageQueue extends MessageQueue {
             //     log.debug("double write");
             //     q.prefetchBuffer.directAddData(data);
             // }
+            // 写满就不管了
             if (q.prefetchOffset == q.maxOffset){
                 log.debug("double write");
                 q.prefetchBuffer.directAddData(data);
             }
-
         }
 
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
 
-        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
-        q.offset2position.add(position);
-        long ret = q.maxOffset;
         q.maxOffset++;
 
         //Future prefetchFuture = null;
@@ -487,6 +489,9 @@ public class LSMessageQueue extends MessageQueue {
            q.prefetchFuture = null;
         }
 
+        if(mqConfig.useStats){
+            testStat.incFetchMsgCount(fetchNum);
+        }
 
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
         // 如果有东西在prefetchBuffer的话
@@ -535,24 +540,15 @@ public class LSMessageQueue extends MessageQueue {
 
         DataFile df = mqTopic.df;
 
-        long pos = 0;
-        for (int i = fetchStartIndex; i < fetchNum; i++){
-            long curOffset = offset + i;
-            int intCurOffset = (int)curOffset;
-            pos = q.offset2position.get(intCurOffset);
-            ByteBuffer buf = df.read(pos);
-            if (buf != null){
-                //buf.position(0);
-                //buf.limit(buf.capacity());
-                q.consumeOffset ++;
-                ret.put(i, buf);
-            }
+        if (mqConfig.useStats){
+            testStat.incReadSSDCount(fetchNum-fetchStartIndex);
         }
+
+        q.consumeOffset += fetchNum-fetchStartIndex;
 
         // 既然从预取中消费了一些数据，那当然可以补回来
         // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
         // TODO
-        // Future prefetchFuture = null;
         q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
            @Override
            public Integer call() throws Exception {
@@ -567,6 +563,25 @@ public class LSMessageQueue extends MessageQueue {
                return 0;
            }
         });
+
+
+
+        long pos = 0;
+        for (int i = fetchStartIndex; i < fetchNum; i++){
+            long curOffset = offset + i;
+            int intCurOffset = (int)curOffset;
+            pos = q.offset2position.get(intCurOffset);
+            ByteBuffer buf = df.read(pos);
+            if (buf != null){
+                //buf.position(0);
+                //buf.limit(buf.capacity());
+                ret.put(i, buf);
+            }
+        }
+        // if (!q.prefetchBuffer.isFull()){
+        //     // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //     q.prefetchBuffer.prefetch();
+        // }
 
         return ret;
     }
@@ -649,15 +664,16 @@ public class LSMessageQueue extends MessageQueue {
             // FIXME: 性能很差，考虑换掉
             q = myQ;
             df = myDf;
-            block = pmBlockPool.allocate();
+            // block = pmBlockPool.allocate();
             // 大小写死在pool的实现里了，改大小的话要改两个地方
         }
 
         public int consume(Map<Integer, ByteBuffer> ret, int fetchNum){
             // 把分配内存放在异步任务中完成
-            // if (block == null){
+            if (block == null){
+                block = pmBlockPool.allocate();
                 // block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
-            // }
+            }
 
             log.debug("tail : " + tail + " head : "+head + " length : " + length);
             log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
@@ -685,12 +701,13 @@ public class LSMessageQueue extends MessageQueue {
 
         public void prefetch(){
             // 把分配内存放在异步任务中完成
-            // if (block == null){
-            //     long startTime = System.nanoTime();
-            //     // block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
-            //     long endTime = System.nanoTime();
-            //     log.debug("memory block allocate : " + (endTime - startTime) + " ns");
-            // }
+            if (block == null){
+                long startTime = System.nanoTime();
+                block = pmBlockPool.allocate();
+                // block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+                long endTime = System.nanoTime();
+                log.debug("memory block allocate : " + (endTime - startTime) + " ns");
+            }
             log.debug("try to prefetch !!");
             log.debug("tail : " + tail + " head : "+head + " length : " + length);
             log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
@@ -743,6 +760,14 @@ public class LSMessageQueue extends MessageQueue {
 
         public void directAddData(ByteBuffer data){
             // 把分配内存放在异步任务中完成
+            if (block == null){
+                long startTime = System.nanoTime();
+                block = pmBlockPool.allocate();
+                // block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+                long endTime = System.nanoTime();
+                log.debug("memory block allocate : " + (endTime - startTime) + " ns");
+            }
+
             // if (block == null){
             //     long startTime = System.nanoTime();
             //     block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
@@ -992,7 +1017,8 @@ public class LSMessageQueue extends MessageQueue {
 
                 threadLocalReadMetaBuf = new ThreadLocal<>();
 
-                prefetchThread = Executors.newSingleThreadExecutor();
+                // prefetchThread = Executors.newSingleThreadExecutor();
+                prefetchThread = Executors.newFixedThreadPool(2);
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
@@ -1646,6 +1672,8 @@ public class LSMessageQueue extends MessageQueue {
             int coldQueueCount;
             int hotQueueCount;
             Long writeBytes;
+            int fetchCount;
+            int readSSDCount;
             public int[] bucketBound;
             public int[] bucketCount;
 
@@ -1662,6 +1690,8 @@ public class LSMessageQueue extends MessageQueue {
                 queueCount = 0;
                 coldQueueCount = 0;
                 hotQueueCount = 0;
+                fetchCount = 0;
+                readSSDCount = 0;
                 reported = new AtomicBoolean();
                 reported.set(false);
 
@@ -1746,6 +1776,16 @@ public class LSMessageQueue extends MessageQueue {
         void incColdQueueCount(){
             int id = threadId.get();
             stats[id].coldQueueCount++;
+        }
+
+        void incFetchMsgCount(int fetchNum){
+            int id = threadId.get();
+            stats[id].fetchCount += fetchNum;
+        }
+
+        void incReadSSDCount(int fetchNum){
+            int id = threadId.get();
+            stats[id].readSSDCount+= fetchNum;
         }
 
 
@@ -1973,12 +2013,18 @@ public class LSMessageQueue extends MessageQueue {
             // report hit hot data ratio
             StringBuilder hotDataHitCountReport = new StringBuilder();
             StringBuilder hotDataReport = new StringBuilder();
+            StringBuilder fetchCountReport = new StringBuilder();
+            StringBuilder readSSDCountReport = new StringBuilder();
             for (int i = 0; i < getNumOfThreads; i++){
                 hotDataHitCountReport.append(String.format("%d,",(stats[i].hitHotDataCount)));
                 hotDataReport.append(String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount));
+                fetchCountReport.append(String.format("%d,",(stats[i].fetchCount)));
+                readSSDCountReport.append(String.format("%d,",(stats[i].readSSDCount)));
             }
             log.info("[hit hot data counter] : " + hotDataHitCountReport);
             log.info("[hit hot data] : " + hotDataReport);
+            log.info("[fetch Msg Count ] : "+fetchCountReport);
+            log.info("[read SSD Count] : "+readSSDCountReport);
 
 
             log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
