@@ -500,13 +500,11 @@ public class LSMessageQueue extends MessageQueue {
         // assert (offset == q.consumeOffset);
         q.consumeOffset = offset;
 
-        if (offset == q.consumeOffset){
-            // 目前消费的offset刚好和我预取好的消息相匹配
-            // 所以前面的消息都不用取了
-            int prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
-            fetchStartIndex += prefetchNum;
-            q.consumeOffset += prefetchNum;
-        }
+        // 目前消费的offset刚好和我预取好的消息相匹配
+        // 所以前面的消息都不用取了
+        int prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
+        fetchStartIndex += prefetchNum;
+        q.consumeOffset += prefetchNum;
         // 当一个热读过来，offset会和consumeOffset不匹配，这个时候我要如何处理？
 
 
@@ -719,8 +717,11 @@ public class LSMessageQueue extends MessageQueue {
                     }
                 } else {
                     // 说明当前要拿的数据不在buf中
-                    // 另一种是buf中所有内容都没用，直接重置这条buffer1吧
+                    // 另一种是buf中所有内容都没用，直接重置这条buffer吧
                     // 后面再次调用prefetch的时候会重置的
+                    // 重置buffer，清空
+                    this.reset(offset + fetchNum-1);
+
                     return 0;
                 }
             }
