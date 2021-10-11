@@ -560,9 +560,18 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public void close(){
-        for (int i = 0; i < numOfDataFiles; i++){
-            dataFiles[i].prefetchThread.shutdown();
+        try {
+            for (int i = 0; i < numOfDataFiles; i++){
+                dataFiles[i].prefetchThread.shutdown();
+    			while (!dataFiles[i].prefetchThread.awaitTermination(60, TimeUnit.SECONDS)) {
+    				System.out.println("Pool did not terminate, waiting ...");
+    			}
+
+            }
+        } catch (InterruptedException ie){
+            ie.printStackTrace();
         }
+
     }
 
     private ThreadLocal<Integer> localThreadId;
