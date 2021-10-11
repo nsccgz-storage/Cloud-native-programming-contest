@@ -505,31 +505,21 @@ public class LSMessageQueue extends MessageQueue {
             q.consumeOffset += prefetchNum;
         }
 
-        // // 假定从 consumeOffset 开始消费
-        // if (offset != q.consumeOffset){
-        //     // 这应该是热读，或者发生了不连续读
-        //     q.consumeOffset = offset;
-        // }
 
-
-        if (offset == 0){
-            if (q.type == 0){
+        // 分类
+        if (q.type == 0){
+            if (offset == 0){
                 q.type = 2; // cold
                 if (mqConfig.useStats){
                     testStat.incColdQueueCount();
                 }
-
                 // TODO: 可以触发prefetch buffer 释放
-            }
-        }
-
-        if (offset >= q.maxOffset-5){
-            if (q.type == 0){
+            } else if (offset >= q.maxOffset-5) {
                 q.type = 1; // hot
                 if (mqConfig.useStats){
                     testStat.incHotQueueCount();
                 }
-                // TODO: 可以触发prefetch buffer 扩容
+                // TODO: 可以触发 prefetch buffer 扩容
             }
         }
 
@@ -547,7 +537,6 @@ public class LSMessageQueue extends MessageQueue {
 
 
 
-        DataFile df = mqTopic.df;
 
         if (mqConfig.useStats){
             testStat.incReadSSDCount(fetchNum-fetchStartIndex);
@@ -561,6 +550,7 @@ public class LSMessageQueue extends MessageQueue {
 
         }
 
+        DataFile df = mqTopic.df;
         q.consumeOffset += fetchNum-fetchStartIndex;
 
         // 既然从预取中消费了一些数据，那当然可以补回来
