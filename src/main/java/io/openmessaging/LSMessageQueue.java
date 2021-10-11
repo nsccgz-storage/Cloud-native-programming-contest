@@ -380,8 +380,8 @@ public class LSMessageQueue extends MessageQueue {
         if (!q.prefetchBuffer.isFull()){
             q.prefetchBuffer.prefetch();
             if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
+                log.debug("double write");
                 q.prefetchBuffer.directAddData(data);
-                q.prefetchOffset++;
             }
         }
 
