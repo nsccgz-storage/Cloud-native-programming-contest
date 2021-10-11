@@ -397,49 +397,52 @@ public class LSMessageQueue extends MessageQueue {
         long ret = q.maxOffset;
 
         // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
-        // data.reset();
-        // if (!q.prefetchBuffer.isFull()){
-        //     q.prefetchBuffer.prefetch();
-        //     if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
-        //         log.debug("double write");
-        //         q.prefetchBuffer.directAddData(data);
-        //     }
-        //     // 写满就不管了
-        //     // if (q.prefetchOffset == q.maxOffset){
-        //     //     log.debug("double write");
-        //     //     q.prefetchBuffer.directAddData(data);
-        //     // }
-        // }
+        data.reset();
+        if (!q.prefetchBuffer.isFull()){
+            // q.prefetchBuffer.prefetch();
+            // if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
+            //     log.debug("double write");
+            //     q.prefetchBuffer.directAddData(data);
+            // }
+            // 写满就不管了
+            if (q.prefetchOffset == q.maxOffset){
+                log.debug("double write");
+                q.prefetchBuffer.directAddData(data);
+            }
+        }
 
 
         q.maxOffset++;
 
-        //Future prefetchFuture = null;
-        //final MQQueue finalQ = q;
-        //prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //    @Override
-        //    public Integer call() throws Exception {
-        //        MQQueue q = finalQ;
-        //        long startTime = System.nanoTime();
-        //        if (!q.prefetchBuffer.isFull()){
-        //            // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //            q.prefetchBuffer.prefetch();
-        //            long thisOffset = q.maxOffset-1;
-        //            if (!q.prefetchBuffer.isFull() && thisOffset == q.prefetchOffset){
-        //                log.debug("double write !");
-        //                // 如果目前要写入的数据刚好就是下一个要预取的内容
-        //                // 双写
-        //                data.reset();
-        //                q.prefetchBuffer.directAddData(data);
-        //                // TODO: 担心data在异步中途被改
+        // 未知队列和热队列需要双写，冷队列不用，冷队列还是预取多一些内容吧
+        // if (q.type == 0 || q.type == 1){
+        //     final MQQueue finalQ = q;
+        //     q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //        @Override
+        //        public Integer call() throws Exception {
+        //            MQQueue q = finalQ;
+        //            long startTime = System.nanoTime();
+        //            if (!q.prefetchBuffer.isFull()){
+        //                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //                q.prefetchBuffer.prefetch();
+        //                long thisOffset = q.maxOffset-1;
+        //                if (!q.prefetchBuffer.isFull() && thisOffset == q.prefetchOffset){
+        //                    log.debug("double write !");
+        //                    // 如果目前要写入的数据刚好就是下一个要预取的内容
+        //                    // 双写
+        //                    data.reset();
+        //                    q.prefetchBuffer.directAddData(data);
+        //                    // TODO: 担心data在异步中途被改
+        //                }
         //            }
+        //            long endTime = System.nanoTime();
+        //            log.debug("prefetch ok");
+        //            log.debug("time : " + (endTime - startTime) + " ns");
+        //            return 0;
         //        }
-        //        long endTime = System.nanoTime();
-        //        log.debug("prefetch ok");
-        //        log.debug("time : " + (endTime - startTime) + " ns");
-        //        return 0;
-        //    }
-        //});
+        //     });
+        // }
+        //Future prefetchFuture = null;
         //q.prefetchFuture = prefetchFuture;
 
         return ret;
@@ -514,13 +517,19 @@ public class LSMessageQueue extends MessageQueue {
                     testStat.incColdQueueCount();
                 }
                 // TODO: 可以触发prefetch buffer 释放
-            } else if (offset >= q.maxOffset-5) {
-                q.type = 1; // hot
+            } else {
+                q.type = 1;
                 if (mqConfig.useStats){
                     testStat.incHotQueueCount();
                 }
                 // TODO: 可以触发 prefetch buffer 扩容
             }
+            // } else if (offset >= q.maxOffset-5) {
+            //     q.type = 1; // hot
+            //     if (mqConfig.useStats){
+            //         testStat.incHotQueueCount();
+            //     }
+            // }
         }
 
         if(mqConfig.useStats){
@@ -555,21 +564,23 @@ public class LSMessageQueue extends MessageQueue {
 
         // 既然从预取中消费了一些数据，那当然可以补回来
         // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
-        // TODO
-        // q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //    @Override
-        //    public Integer call() throws Exception {
-        //        long startTime = System.nanoTime();
-        //        if (!q.prefetchBuffer.isFull()){
-        //            // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //            q.prefetchBuffer.prefetch();
-        //        }
-        //        long endTime = System.nanoTime();
-        //        log.debug("prefetch ok");
-        //        log.debug("time : " + (endTime - startTime) + " ns");
-        //        return 0;
-        //    }
-        // });
+        if (q.type == 2){
+            // 冷读才需要预取
+            q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+               @Override
+               public Integer call() throws Exception {
+                   long startTime = System.nanoTime();
+                   if (!q.prefetchBuffer.isFull()){
+                       // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                       q.prefetchBuffer.prefetch();
+                   }
+                   long endTime = System.nanoTime();
+                   log.debug("prefetch ok");
+                   log.debug("time : " + (endTime - startTime) + " ns");
+                   return 0;
+               }
+            });
+        }
 
 
 
