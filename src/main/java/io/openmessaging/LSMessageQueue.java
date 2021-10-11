@@ -387,29 +387,29 @@ public class LSMessageQueue extends MessageQueue {
 
         DataFile df = mqTopic.df;
 
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(mqTopic.topicId, queueId, data, q);
+        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(mqTopic.topicId, queueId, data, q);
 
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
 
-        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
+        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
         long ret = q.maxOffset;
 
         // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
-        data.reset();
-        if (!q.prefetchBuffer.isFull()){
-            // q.prefetchBuffer.prefetch();
-            // if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
-            //     log.debug("double write");
-            //     q.prefetchBuffer.directAddData(data);
-            // }
-            // 写满就不管了
-            if (q.prefetchOffset == q.maxOffset){
-                log.debug("double write");
-                q.prefetchBuffer.directAddData(data);
-            }
-        }
+        // data.reset();
+        // if (!q.prefetchBuffer.isFull()){
+        //     // q.prefetchBuffer.prefetch();
+        //     // if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
+        //     //     log.debug("double write");
+        //     //     q.prefetchBuffer.directAddData(data);
+        //     // }
+        //     // 写满就不管了
+        //     if (q.prefetchOffset == q.maxOffset){
+        //         log.debug("double write");
+        //         q.prefetchBuffer.directAddData(data);
+        //     }
+        // }
 
 
         q.maxOffset++;
@@ -1259,11 +1259,11 @@ public class LSMessageQueue extends MessageQueue {
                     LockSupport.unpark(writerConcurrentQueue.peek().currentThread);
                 }
                 position = w.position;
-                if (prefetchFuture != null){
-                    while (!prefetchFuture.isDone()){
-                        Thread.sleep(0, 10000);
-                    }
-                }
+                // if (prefetchFuture != null){
+                //     while (!prefetchFuture.isDone()){
+                //         Thread.sleep(0, 10000);
+                //     }
+                // }
 
 
             } catch (Throwable ie) {
