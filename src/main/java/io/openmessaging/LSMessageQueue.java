@@ -983,7 +983,7 @@ public class LSMessageQueue extends MessageQueue {
         public ThreadLocal<Long> threadLocalBigBlockStartAddr;
         public ThreadLocal<Integer> threadLocalBigBlockFreeOffset;
         MyPMBlockPool(String path){
-            totalCapacity = 180L*1024*1024*1024;
+            totalCapacity = 60L*1024*1024*1024;
             pool = MemoryPool.createPool(path, totalCapacity);
 
             blockSize = 8*17*1024; // 8 个slot
