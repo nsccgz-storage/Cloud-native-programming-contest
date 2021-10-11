@@ -23,6 +23,8 @@ import java.util.concurrent.Executors;
 
 import java.util.concurrent.BrokenBarrierException;
 
+import java.io.File;
+
 public class WYFTest {
 	private static final Logger log = Logger.getLogger(WYFTest.class);
 	public static Random rand = new Random();
@@ -368,6 +370,9 @@ public class WYFTest {
 			double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
 			log.info("time: " + elapsedTimeS);
 		}
+		deleteDir(pmDirPath);
+		File pmDataFile = new File("/mnt/pmem/mq/data");
+		pmDataFile.delete();
 		{
 			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 			// read
@@ -557,6 +562,7 @@ public class WYFTest {
 			for (int i = 0; i < 8; i++){
 				int msgId = (int)currentGetRangeOffset + i;
 				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+					log.error(i);
 					log.error(ret.get(i));
 					log.error(msgs.get(msgId).buf);
 					log.error(msgs.get(msgId).checkBuf);
@@ -615,10 +621,10 @@ public class WYFTest {
 		String pmDirPath = args[1] ;
 
 		try {
-			testPrefetch(dbPath, pmDirPath);
+			// testPrefetch(dbPath, pmDirPath);
 			// writePerformanceTest(dbPath, pmDirPath);
 			// testThreadPool(dbPath, pmDirPath);
-			// testRecover(dbPath);
+			testRecover(dbPath, pmDirPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();
@@ -667,5 +673,26 @@ public class WYFTest {
 		// mq.append("topic", 1324124, ByteBuffer.wrap(data));
 		// mq.append("topic", 1324124, ByteBuffer.wrap(data));
 		// Map<Integer, ByteBuffer> ret = mq.getRange("topic", 1324124, 0, 1);
+	}
+	public static boolean deleteDir(String path) {
+		File file = new File(path);
+		if (!file.exists()) {// 判断是否待删除目录是否存在
+			System.err.println("The dir are not exists!");
+			return false;
+		}
+
+		String[] content = file.list();// 取得当前目录下所有文件和文件夹
+		for (String name : content) {
+			File temp = new File(path, name);
+			if (temp.isDirectory()) {// 判断是否是目录
+				deleteDir(temp.getAbsolutePath());// 递归调用，删除目录里的内容
+				temp.delete();// 删除空目录
+			} else {
+				if (!temp.delete()) {// 直接删除文件
+					System.err.println("Failed to delete " + name);
+				}
+			}
+		}
+		return true;
 	}
 }

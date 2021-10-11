@@ -144,6 +144,7 @@ public class LSMessageQueue extends MessageQueue {
     ConcurrentHashMap<String, MQTopic> topic2object;
     Heap pmHeap;
     ThreadLocal<MyByteBufferPool> threadLocalByteBufferPool;
+    boolean isCrash;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         // SSDBench.runStandardBench(dbDirPath);
@@ -164,21 +165,30 @@ public class LSMessageQueue extends MessageQueue {
 
     public void init(String dbDirPath, String pmDirPath) {
         try {
+            isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
-
-            topic2object = new ConcurrentHashMap<String, MQTopic>();
+            Boolean crash = false;
             String metadataFileName = dbDirPath + "/meta";
             String pmDataFile = pmDirPath + "/data";
-            log.info("Initializing on PM : " + pmDataFile);
-
-            pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
-            Boolean crash = false;
+ 
             // whether the MQ is recover from existed file/db ?
             File metadataFile = new File(metadataFileName);
             if (metadataFile.exists() && !metadataFile.isDirectory()) {
                 crash = true;
+                isCrash = true;
             }
+
+
+            topic2object = new ConcurrentHashMap<String, MQTopic>();
+            log.info("Initializing on PM : " + pmDataFile);
+
+            pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
+            // if (!isCrash){
+            //     pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
+            // } else {
+            //     pmHeap = Heap.createHeap(pmDataFile+"1", 60L*1024L*1024L*1024L);
+            // }
             // init datafile
             numOfDataFiles = mqConfig.numOfDataFiles;
             log.debug("create data files");
@@ -775,8 +785,12 @@ public class LSMessageQueue extends MessageQueue {
             // 把一个消息从队列头部去掉
             int msgLength = msgLengths[head];
             log.debug("msgLength : " + msgLength + " head : " + head);
-            ByteBuffer buf = q.bbPool.allocate(msgLength);
-            // ByteBuffer buf = ByteBuffer.allocate(msgLength);
+            ByteBuffer buf;
+            if (q.bbPool != null){
+                buf = q.bbPool.allocate(msgLength);
+            } else {
+                buf = ByteBuffer.allocate(msgLength);
+            }
             log.debug(buf);
             block.copyToArray(head*slotSize, buf.array(), buf.arrayOffset()+buf.position(), msgLength);
             log.debug(buf.arrayOffset());
@@ -845,6 +859,23 @@ public class LSMessageQueue extends MessageQueue {
             return ret;
         }
     }
+
+    public class MyPMBlock{
+        public MemoryPool pool;
+        public long addr;
+        public int capacity;
+
+        public void copyFromArray(){
+
+        }
+        public void copyToArray(){
+
+        }
+    }
+
+    // public class MyPMBlockPool {
+    //     public 
+    // }
 
     public class DataFile {
         public FileChannel dataFileChannel;
@@ -1459,8 +1490,12 @@ public class LSMessageQueue extends MessageQueue {
                 ret = dataFileChannel.read(readMeta, position);
                 readMeta.position(6);
                 int dataLength = readMeta.getShort();
-                // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
-                ByteBuffer tmp = bufPool.allocate(dataLength);
+                ByteBuffer tmp;
+                if (bufPool != null){
+                    tmp = bufPool.allocate(dataLength);
+                } else {
+                    tmp = ByteBuffer.allocate(dataLength);
+                }
                 tmp.mark();
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
                 tmp.reset();
