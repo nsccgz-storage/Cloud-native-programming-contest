@@ -100,7 +100,7 @@ public class LSMessageQueue extends MessageQueue {
         public long consumeOffset;
         public long prefetchOffset;
         public QueuePrefetchBuffer prefetchBuffer;
-        public Future prefetchFuture;
+        public Future<Integer> prefetchFuture;
         public MyByteBufferPool bbPool;
 
         MQQueue(DataFile dataFile){
@@ -110,6 +110,7 @@ public class LSMessageQueue extends MessageQueue {
             offset2position = new ArrayList<>(512);
             df = dataFile;
             prefetchBuffer = new QueuePrefetchBuffer(this, df);
+            prefetchFuture = null;
         }
         MQQueue(){
             consumeOffset = 0L;
@@ -117,6 +118,7 @@ public class LSMessageQueue extends MessageQueue {
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
             prefetchBuffer = new QueuePrefetchBuffer(this, df);
+            prefetchFuture = null;
         }
 
     }
@@ -395,19 +397,19 @@ public class LSMessageQueue extends MessageQueue {
         long ret = q.maxOffset;
 
         // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
-        data.reset();
-        if (!q.prefetchBuffer.isFull()){
-            q.prefetchBuffer.prefetch();
-            if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
-                log.debug("double write");
-                q.prefetchBuffer.directAddData(data);
-            }
-            // 写满就不管了
-            // if (q.prefetchOffset == q.maxOffset){
-            //     log.debug("double write");
-            //     q.prefetchBuffer.directAddData(data);
-            // }
-        }
+        // data.reset();
+        // if (!q.prefetchBuffer.isFull()){
+        //     q.prefetchBuffer.prefetch();
+        //     if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset){
+        //         log.debug("double write");
+        //         q.prefetchBuffer.directAddData(data);
+        //     }
+        //     // 写满就不管了
+        //     // if (q.prefetchOffset == q.maxOffset){
+        //     //     log.debug("double write");
+        //     //     q.prefetchBuffer.directAddData(data);
+        //     // }
+        // }
 
 
         q.maxOffset++;
@@ -510,7 +512,7 @@ public class LSMessageQueue extends MessageQueue {
         // }
 
 
-        if (offset == q.maxOffset-1){
+        if (offset >= q.maxOffset-2){
             if (q.type == 0){
                 q.type = 1; // hot
                 if (mqConfig.useStats){
@@ -925,7 +927,7 @@ public class LSMessageQueue extends MessageQueue {
         }
     }
 
-    public class MyPMBlockPool2 {
+    public class MyPMBlockPool2 { // TODO: 支持free的定长块分配器
         public MemoryPool pool;
         public int blockSize;
         public int bigBlockSize;
