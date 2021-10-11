@@ -34,20 +34,20 @@ public class Main {
         // Map<Integer, ByteBuffer> res = mq.getRange("12345", 123, 0L, 100);
 
         
-        String dirPath = "/home/ubuntu/test";
-        String pmemPath = "/pmem";
+        String dirPath = "/mnt/ssd/wyk";
+        String pmemPath = "/mnt/pmem/wyk";
         SSDqueue ssdQueue = new SSDqueue(dirPath, pmemPath);
         String t = "1234567890123456789012345678901234567890";
         System.out.println( t.hashCode());
-        // System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        // System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        // System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        // System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        // System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        // System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        // System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
-        // System.out.println(ssdQueue.append("dsfsf", 123, ByteBuffer.wrap(t.getBytes())));
-        // System.out.println(ssdQueue.append("32424", 256, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("dsfsf", 123, ByteBuffer.wrap(t.getBytes())));
+        System.out.println(ssdQueue.append("32424", 256, ByteBuffer.wrap(t.getBytes())));
 
         for(long idx=0; idx < 10; idx++){
             Map<Integer, ByteBuffer> res = ssdQueue.getRange("12345", 123, idx, 100);
@@ -56,7 +56,6 @@ public class Main {
                 System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
             }
         }
-        
     //     ExecutorService executorService = Executors.newCachedThreadPool();
 
     //     Task task = new Task();
@@ -76,10 +75,6 @@ public class Main {
     //         //TODO: handle exception
     //         e.printStackTrace();
     //     }
-        
-        
-        
-
     }
 
 }

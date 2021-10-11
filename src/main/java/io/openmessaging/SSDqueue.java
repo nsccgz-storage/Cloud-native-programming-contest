@@ -75,12 +75,9 @@ public class SSDqueue extends MessageQueue {
     Thread freePmemThread;
     Thread writePmemThread;
 
-    PmemManager pmemManger;
+    PmemManager pmemManager;
 
     TestStat testStat;
-
-
-    
 
     public class IndexInfo{
         // long index; 
@@ -145,8 +142,7 @@ public class SSDqueue extends MessageQueue {
         // 使用 PMEM
         this.numOfDataFileChannels = 4;
         try {
-            //init(dirPath);
-            
+            //init(dirPath);   
             dataSpaces = new DataSpace[numOfDataFileChannels];
             testStat = new TestStat(dataSpaces);
             boolean flag = new File(dirPath + "/meta").exists();
@@ -165,11 +161,14 @@ public class SSDqueue extends MessageQueue {
                 this.qTopicQueueDataMap = mqMeta.getMap();
             }else{
                 String pmemPath = PmemPath + "/data";
-                boolean initialized = Heap.exists(pmemPath + "/data");
-                Heap pmemHeap = initialized ? Heap.openHeap(pmemPath + "/data") : Heap.createHeap(pmemPath + "/data",  60 * 1024L * 1024L * 1024L);
 
-                PmemManager pmemManager = new PmemManager(pmemHeap);
-
+                logger.info(pmemPath);
+                
+                boolean initialized = Heap.exists(pmemPath);
+                
+                // Heap pmemHeap = initialized ? Heap.openHeap(pmemPath + "/data") : Heap.createHeap(pmemPath + "/data",  60 * 1024L * 1024L * 1024L);
+                Heap pmemHeap =  initialized ? Heap.openHeap(pmemPath) : Heap.createHeap(pmemPath,  60 * 1024L * 1024L * 1024L);
+                this.pmemManager = new PmemManager(pmemHeap);
                 // create 2 thread: writePmemThread, freePmemThread
                 wPmemTaskQueue = new ConcurrentLinkedQueue<>();
                 freeTaskQueue = new ConcurrentLinkedQueue<>();
@@ -177,9 +176,6 @@ public class SSDqueue extends MessageQueue {
                 ExecutorService executor = Executors.newFixedThreadPool(2);
                 executor.execute(new RWPmem(true));
                 executor.execute(new RWPmem(false));
-
-                
-
 
                 // create new mq    
                 logger.info("create a new queue");
@@ -234,11 +230,12 @@ public class SSDqueue extends MessageQueue {
 
                 ///////// 双写 PMEM
                 // data.rewind();
-                // long handle = pmemManger.write(data);
-                long hanlde = -1L;
+                long handle = pmemManager.write(hotData);
+                // long hanlde = -1L;
                 //////// 更新 DRAM map
+
                 ConcurrentHashMap<Long, IndexInfo> tmp2 = new ConcurrentHashMap<>();
-                tmp2.put(result,new IndexInfo(writeData.tail, dataSize, hanlde));  // -1 for not in pmem
+                tmp2.put(result,new IndexInfo(writeData.tail, dataSize, handle));  // -1 for not in pmem
                 allDataOffsetMap.put(key, tmp2);
 
                 qTopicQueueDataMap.put(key, writeData.getMeta());            
@@ -251,11 +248,10 @@ public class SSDqueue extends MessageQueue {
                 result = writeData.put(data);
                 ///////// 双写 PMEM
                 // data.rewind();
-                // long handle = pmemManger.write(data);
-                long hanlde = -1L;
-
+                long handle = pmemManager.write(hotData);
+                
                 ConcurrentHashMap<Long, IndexInfo> tmp2 = allDataOffsetMap.get(key);
-                tmp2.put(result, new IndexInfo(writeData.tail, dataSize, hanlde));
+                tmp2.put(result, new IndexInfo(writeData.tail, dataSize, handle));
                 allDataOffsetMap.put(key, tmp2);
                 
                 qTopicQueueDataMap.put(key, writeData.getMeta());
@@ -289,7 +285,7 @@ public class SSDqueue extends MessageQueue {
             }else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data resData = new Data(dataSpaces[fcId], dataMeta);
-                result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRange(key, offset, fetchNum);
+                result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRangePmem(key, offset, fetchNum);
             
             }
             testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
@@ -578,11 +574,11 @@ public class SSDqueue extends MessageQueue {
                 writePmem();   
             }
         }
-        void writePmem(){
+        void writePmem(){ // 预取数据到 PMEM 上
             try {
                 // 往 PMEM 写入一些数据。
                 //Iterator<WritePmemTask> it = taskQueue.iterator();
-                while(true){
+                while(!Thread.currentThread().isInterrupted()){
                     int size = wPmemTaskQueue.size();
                     logger.info("---- write pmem --- Quese size: " + size);
                     for(int i=0; i<size; ++i){
@@ -590,12 +586,13 @@ public class SSDqueue extends MessageQueue {
                         // 从 SSD 上读入数据并写入到 PMEM 上。               
                         String key = curTask.key;
                         for(long k=curTask.startIdx; k<curTask.loadNum; ++k){
-                            // 接受来自主线程的额外消息
+                          
                             // useless task:
                             long uselessIdx = qTopicQueueDataMap.get(key).uselessIndex; // TODO: 不需要多次访问
-                            if(k < uselessIdx) continue; // 丢弃任务不执行
+                            if(k < uselessIdx || allDataOffsetMap.get(key).get(k).handle != -1L) continue; // 丢弃任务不执行
 
                             ConcurrentHashMap<Long, IndexInfo> idx2offset = allDataOffsetMap.get(key);
+                            if(idx2offset == null) break;
                             long offset = idx2offset.get(k).offset;
                             int dataSize = idx2offset.get(k).dataSize;
                             
@@ -605,49 +602,55 @@ public class SSDqueue extends MessageQueue {
                             
                             // 可以多次判断 uselessIdx 和 k 的值
                             // TODO: 写到 PMEM
-                            // long hanlde = pmemManger.write(byteBuffer);
+                            long handle = pmemManager.write(byteBuffer);
                             // 更新 DRAM 中的 hashMap
-                            // allDataOffsetMap.get(key).get(k).handle = hanlde;
+                            allDataOffsetMap.get(key).get(k).handle = handle;
                             
                             logger.info("test multithread!---- write pmem");
                         }
                         logger.info("test multithread!---- write pmem");
                     } 
                     if(wPmemTaskQueue.isEmpty()){
-                        // Thread.sleep(1000); // 把自己休眠，如何唤醒呢？信号量来操作
-                        logger.info("write sleep!");
+                        logger.info("---------------writeThread sleep!-------------------");
                         LockSupport.park();
                     }
                 }
             }catch (Exception e) {
                 e.printStackTrace();
+                return;
             }
         }
-        void freePmem(){
+        void freePmem(){ // 释放 PMEM 上已经读过的消息
             try {
-                while(true){
+                while(!Thread.currentThread().isInterrupted()){
                     int size = freeTaskQueue.size();
                     for(int i=0; i<size; ++i){
                         FreePmemTask freeTask = freeTaskQueue.poll();
                         // 遍历内存中的表，得到 handle
+
+                        logger.info("free index: " + freeTask.startIdx + " " + freeTask.endIdx);
                         String key = freeTask.key;
                         for(long k=freeTask.startIdx; k<freeTask.endIdx; k++){
                             logger.info("free space address: " +  k);
-                            // long handle = allDataOffsetMap.get(key).get(k).handle;
-                            // int dataSize = allDataOffsetMap.get(key).get(k).dataSize;
-                            // pmemManger.free(handle, dataSize);
+                            IndexInfo tmp =  allDataOffsetMap.get(key).get(k);
+                            if(tmp == null) break;
+                            long handle = tmp.handle;
+                            int dataSize = tmp.dataSize;
+                            pmemManager.free(handle, dataSize);
+                            // TODO: 保险起见，需要更新 handle = -1L
                         }
-                        // TODO: 反过去更新 startIdx
+                        // TODO: 反过去更新 uselessIndex
                         qTopicQueueDataMap.get(key).uselessIndex = freeTask.endIdx;
                     }
                     if(freeTaskQueue.isEmpty()){
-                        logger.info("free sleep");
+                        logger.info("---------freeThread sleep-------------");
                         LockSupport.park();
                     }
                 }
             } catch (Exception e) {
                 //TODO: handle exception
                 e.printStackTrace();
+                return;
             }
         }
     }
@@ -659,17 +662,19 @@ public class SSDqueue extends MessageQueue {
         }
         long write(ByteBuffer byteBuffer){
             MemoryBlock block = heap.allocateMemoryBlock(byteBuffer.remaining());
+            if(block == null) return -1L;
             block.copyFromArray(byteBuffer.array(), 0, 0, byteBuffer.remaining());
             return block.handle();
         }
         long write(byte[] array){
             MemoryBlock block = heap.allocateMemoryBlock(array.length);
+            if(block == null) return -1L;
             block.copyFromArray(array, 0, 0, array.length);
             return block.handle();
         }
-        void free(long hanlde){
-            Accessor self = heap.createAccessor();
-            self.freeMemory();
+        void free(long handle, int dataSize){
+            MemoryBlock block = heap.memoryBlockFromHandle(handle);
+            block.freeMemory();
         }
         int read(ByteBuffer byteBuffer, long handle, int dataSize){
             MemoryBlock block = heap.memoryBlockFromHandle(handle);
