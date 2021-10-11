@@ -49,7 +49,7 @@ public class SSDqueue2{
 
     ConcurrentHashMap<String,DataMeta> qTopicQueueDataMap;
     MetaTopicQueue mqMeta;
-    private String markSpilt = "$@#";
+    private String markSpilt = "$@#$##%";
     ConcurrentHashMap<String, Map<Long,Long>> allDataOffsetMap; // 加速 getRange
     
     boolean RECOVER = false;
@@ -79,11 +79,13 @@ public class SSDqueue2{
                 }
                 this.qTopicQueueDataMap = mqMeta.getMap();
             }else{
-                // create new mq     
+                // create new mq    
+                logger.info("create a new queue");
+                
                 this.allDataOffsetMap = new ConcurrentHashMap<>();
                 
                 this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
-                mqMeta = new MetaTopicQueue(this.metaFileChannel, Long.BYTES);
+                this.mqMeta = new MetaTopicQueue(this.metaFileChannel, Long.BYTES);
 
                 for(int i=0; i < numOfDataFileChannels; i++){
                     String dbPath = dirPath + "/db" + i;
@@ -118,20 +120,22 @@ public class SSDqueue2{
 
                 mqMeta.put(key, writeData.getMetaOffset());            
                 // 更新 DRAM map
-                qTopicQueueDataMap.put(key, writeData.getMeta());
-
+                
                 Map<Long, Long> tmp2 = new HashMap<>();
                 tmp2.put(result, writeData.tail);
                 allDataOffsetMap.put(key, tmp2);
+
+                qTopicQueueDataMap.put(key, writeData.getMeta());
             }else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data writeData = new Data(dataSpaces[fcId], tmpD);
                 result = writeData.put(data);
-                qTopicQueueDataMap.put(key, writeData.getMeta());
-
+                
                 Map<Long, Long> tmp2 = allDataOffsetMap.get(key);
                 tmp2.put(result, writeData.tail);
                 allDataOffsetMap.put(key, tmp2);
+                
+                qTopicQueueDataMap.put(key, writeData.getMeta());
             }
             
         } catch (Exception e) {
@@ -166,8 +170,9 @@ public class SSDqueue2{
     class MetaTopicQueue{
         private FileChannel metaFc;
         private AtomicLong META_FREE_OFFSET;
-        long keySize = 256;
-        long totalNum;
+        private AtomicLong totalNum;
+        long keySize = 128;
+        
         long arrayStartOffset = Long.BYTES;
         
         MetaTopicQueue(FileChannel fc){
@@ -177,7 +182,8 @@ public class SSDqueue2{
             try {
                 fc.read(tmp, 0L);
                 tmp.flip();
-                totalNum = tmp.getLong();
+                totalNum = new AtomicLong(tmp.getLong());
+                META_FREE_OFFSET = new AtomicLong(0L);
             } catch (Exception e) {
                 //TODO: handle exception
                 e.printStackTrace();
@@ -187,7 +193,7 @@ public class SSDqueue2{
         MetaTopicQueue(FileChannel fc, long startOffset){
             this.metaFc = fc;
             META_FREE_OFFSET = new AtomicLong(startOffset);
-            this.totalNum = 0L;
+            this.totalNum = new AtomicLong(0L);
             //arrayStartOffset = startOffset;
         }
         public long put(String key, long offset) throws IOException{
@@ -207,23 +213,23 @@ public class SSDqueue2{
             buffer.flip();
             metaFc.write(buffer, res);
 
-            totalNum++;
+            long ret = totalNum.getAndIncrement();
 
             // 持久化 totalNum
             buffer.clear();
-            buffer.putLong(totalNum);
+            buffer.putLong(totalNum.get());
             buffer.flip();
             metaFc.write(buffer, 0L);
 
             metaFc.force(true);
 
-            return totalNum;
+            return ret;
         }
         public ConcurrentHashMap<String, DataMeta> getMap(){
             ConcurrentHashMap<String, DataMeta> res = new ConcurrentHashMap<>();
             long startOffset = this.arrayStartOffset;
             ByteBuffer buffer = ByteBuffer.allocate((int)(keySize + Long.BYTES));
-            for(int i=0; i<totalNum; i++){
+            for(int i=0; i<totalNum.get(); i++){
                 buffer.clear();
                 try {
                     metaFc.read(buffer, startOffset);
@@ -237,6 +243,9 @@ public class SSDqueue2{
                 byte[] bytes = new byte[(int) keySize];
                 buffer.get(bytes);
                 String key = new String(bytes).trim();
+
+                logger.info(key);
+
                 res.put(key, new DataMeta(value, value, -1, -1));
             }
             return res;
@@ -298,7 +307,7 @@ public class SSDqueue2{
             DataMeta dataMeta = ds.writeAgg(data, this.getMeta());
             this.head = dataMeta.head;
             this.tail = dataMeta.tail;
-            this.totalNum = dataMeta.totalNum + 1;
+            this.totalNum++;
             this.metaOffset = dataMeta.metaOffset;
 //            if(tail == -1L){
 //                head = offset;

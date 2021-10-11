@@ -29,7 +29,7 @@ public class CorrectTest {
 
     public static void main(String[] args) {
         // just for test
-        String localPath = "/home/wangxr/桌面/pmem_test";
+        String localPath = "/mnt/ssd/wyk";
         try {
             File dir = new File(localPath);
             for(File f:dir.listFiles()){
@@ -54,7 +54,7 @@ public class CorrectTest {
             for(Message msg:msgs){
                 Map<Integer, ByteBuffer> mp = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
                 ByteBuffer buffer = mp.get(0);
-                if(buffer != null && !msg.compare(buffer)){
+                if(!msg.compare(buffer)){
                     System.out.println("error");
                     errorCount++;
                 }
@@ -104,6 +104,7 @@ public class CorrectTest {
         }
 
         public boolean compare(ByteBuffer buffer){
+            if(buffer == null)return false;
             byte[] ans = new byte[buffer.remaining()];
             buffer.get(ans);
             if(ans.length != data.length){

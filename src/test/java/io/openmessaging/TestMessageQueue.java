@@ -30,6 +30,9 @@ import io.openmessaging.Test1MessageQueueImpl;
 import java.nio.ByteBuffer;
 
 import java.util.concurrent.BrokenBarrierException;
+
+import static org.junit.Assert.assertEquals;
+
 import java.io.File;
 
 public class TestMessageQueue {
@@ -98,8 +101,10 @@ public class TestMessageQueue {
 			}
 			Map<Integer, ByteBuffer> result;
 			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+			assertEquals(result.get(0).compareTo(msg.checkBuf), 0);
 			if (result.get(0).compareTo(msg.checkBuf) != 0) {
 				log.error("data error !");
+				
 				System.exit(0);
 			}
 		}
