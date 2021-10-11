@@ -1,13 +1,13 @@
 package io.openmessaging;
 
+
 import org.apache.log4j.Logger;
 
+
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
-import java.lang.management.MemoryUsage;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
@@ -17,33 +17,404 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-
-public class SSDqueue{
+import java.util.concurrent.locks.Lock;
+//import org.slf4j.LoggerFactory;
+//import org.slf4j.Logger;
+import java.io.RandomAccessFile;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
+public class SSDqueue extends MessageQueue {
     private static final Logger logger = Logger.getLogger(SSDqueue.class);
-
-    FileChannel spaceMetaFc;
-
-    AtomicLong META_FREE_OFFSET = new AtomicLong();
-    AtomicInteger currentNum = new AtomicInteger();
-
-    int QUEUE_NUM = 10000;
-    int TOPIC_NUM = 100;
     
-    int TOPIC_NAME_SZIE = 128;
-    Long topicArrayOffset; // 常量
+    // FileChannel spaceMetaFc;
 
-    ConcurrentHashMap<String, Long> topicNameQueueMetaMap;
-    //ConcurrentHashMap<String, Map<Integer, Long>> queueTopicMap;
-    ConcurrentHashMap<String, Map<Integer, DataMeta>> qTopicDataMap;
+    //AtomicLong FREE_OFFSET = new AtomicLong();
+    //AtomicLong META_FREE_OFFSET = new AtomicLong();
+    //AtomicInteger currentNum = new AtomicInteger();
 
+    
+    // int QUEUE_NUM = 10000;
+    // int TOPIC_NUM = 100;
+    
+    // int TOPIC_NAME_SZIE = 128;
+    // Long topicArrayOffset; // 常量
+
+    // ConcurrentHashMap<String, Long> topicNameQueueMetaMap;
+    
+    //FileChannel fileChannel;
     FileChannel metaFileChannel;
     // opt
     int numOfDataFileChannels;
     DataSpace[] dataSpaces;
-    ConcurrentHashMap<String, Map<Long,Long>> allDataOffsetMap;
-    boolean RCOVER = false;
+
+    ConcurrentHashMap<String,DataMeta> qTopicQueueDataMap;
+    MetaTopicQueue mqMeta;
+    private String markSpilt = "$@#";
+    ConcurrentHashMap<String, ConcurrentHashMap<Long,Long[]>> allDataOffsetMap; // 加速 getRange
+    
+    boolean RECOVER = false;
+    ConcurrentHashMap<String, HotData> hotDataMap;
 
     TestStat testStat;
+
+    public SSDqueue(String dirPath){
+        
+        this.numOfDataFileChannels = 4;
+        try {
+            //init(dirPath);
+            
+            dataSpaces = new DataSpace[numOfDataFileChannels];
+            testStat = new TestStat(dataSpaces);
+            boolean flag = new File(dirPath + "/meta").exists();
+            if(flag){
+                // recover
+                // 读盘，建表 
+                logger.info("reover");
+                RECOVER = true;
+                this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
+                this.mqMeta = new MetaTopicQueue(this.metaFileChannel);
+
+                for(int i=0; i < numOfDataFileChannels; i++){
+                    String dbPath = dirPath + "/db" + i;
+                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel());              
+                }
+                this.qTopicQueueDataMap = mqMeta.getMap();
+            }else{
+                // create new mq    
+                logger.info("create a new queue");
+                
+                this.allDataOffsetMap = new ConcurrentHashMap<>();
+                
+                this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
+                this.mqMeta = new MetaTopicQueue(this.metaFileChannel, Long.BYTES);
+
+                for(int i=0; i < numOfDataFileChannels; i++){
+                    String dbPath = dirPath + "/db" + i;
+                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel(), Long.BYTES);
+                }
+                this.qTopicQueueDataMap = new ConcurrentHashMap<>();
+                this.hotDataMap = new ConcurrentHashMap<>();
+
+                //logger.info("initialize new SSDqueue, num: "+currentNum.get());
+            }
+        // 划分起始的 Long.BYTES * 来存元数据
+        } catch (Exception e) {
+            //TODO: handle exception
+            logger.info("error 201777");
+            e.printStackTrace();
+        }
+        
+    }    
+
+    @Override
+    public long append(String topicName, int queueId, ByteBuffer data){
+        int dataSize = data.remaining();
+        testStat.appendStart(data.remaining());
+        byte[] hotData = new byte[data.remaining()];
+        data.mark();
+        data.get(hotData);
+        data.reset();
+
+        String key = topicName + markSpilt + queueId;
+        Long result;
+        try{
+            DataMeta tmpD = qTopicQueueDataMap.get(key);
+            // if(topicData == null){
+            if(tmpD == null){
+                
+                /////////  自下而上, 持久化
+                int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
+                Data writeData = new Data(dataSpaces[fcId]);
+                result = writeData.put(data);
+
+                mqMeta.put(key, writeData.getMetaOffset());
+                //////// 更新 DRAM map
+                ConcurrentHashMap<Long, Long[]> tmp2 = new ConcurrentHashMap<>();
+                tmp2.put(result,new Long[]{writeData.tail, (long) dataSize});
+                allDataOffsetMap.put(key, tmp2);
+
+                qTopicQueueDataMap.put(key, writeData.getMeta());            
+                mqMeta.force();
+
+            }else{
+                int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
+                Data writeData = new Data(dataSpaces[fcId], tmpD);
+                result = writeData.put(data);
+                
+                ConcurrentHashMap<Long, Long[]> tmp2 = allDataOffsetMap.get(key);
+                tmp2.put(result, new Long[]{writeData.tail, (long) dataSize});
+                allDataOffsetMap.put(key, tmp2);
+                
+                qTopicQueueDataMap.put(key, writeData.getMeta());
+            }
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            return 0L;
+        }
+
+        hotDataMap.put(key, new HotData(result, hotData));
+
+        testStat.appendUpdateStat(topicName, queueId, data);
+        return result;
+    }
+    
+    @Override
+    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, long offset, int fetchNum){
+        Map<Integer, ByteBuffer> result = new HashMap<>();
+        String key = topicName + markSpilt + queueId;
+        
+        try{
+            testStat.getRangeStart();
+            DataMeta dataMeta = qTopicQueueDataMap.get(key);
+            if(dataMeta == null) return result;
+           
+            if(!RECOVER && hotDataMap.get(key).offset == offset){
+                byte[] array = hotDataMap.get(key).data;
+                ByteBuffer tmp = ByteBuffer.wrap(array);
+                result.put(0, tmp);
+            }else{
+                int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
+                Data resData = new Data(dataSpaces[fcId], dataMeta);
+                result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRange(key, offset, fetchNum);
+            
+            }
+            testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
+        }catch(IOException e){
+            logger.error(e);
+        }
+        return result;
+    } 
+
+    class MetaTopicQueue{
+        private FileChannel metaFc;
+        private AtomicLong META_FREE_OFFSET;
+        private AtomicLong totalNum;
+        long keySize = 64;
+        
+        long arrayStartOffset = Long.BYTES;
+        
+        MetaTopicQueue(FileChannel fc){
+            // recover
+            this.metaFc = fc;
+            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
+            try {
+                fc.read(tmp, 0L);
+                tmp.flip();
+                totalNum = new AtomicLong(tmp.getLong());
+                META_FREE_OFFSET = new AtomicLong(0L);
+            } catch (Exception e) {
+                //TODO: handle exception
+                e.printStackTrace();
+            }
+        }
+        public void force() throws IOException{
+            this.metaFc.force(true);
+        }
+        MetaTopicQueue(FileChannel fc, long startOffset){
+            this.metaFc = fc;
+            META_FREE_OFFSET = new AtomicLong(startOffset);
+            this.totalNum = new AtomicLong(0L);
+            //arrayStartOffset = startOffset;
+        }
+        synchronized public long put(String key, long offset) throws IOException{
+            long res = META_FREE_OFFSET.getAndAdd( keySize + Long.BYTES);
+
+            // TODO: 填充 key
+            StringBuilder padStr = new StringBuilder(key);
+            char[] help = new char[(int) (keySize - key.length())];
+            for(int i=0;i<help.length; ++i){
+                help[i] = ' ';
+            }
+            padStr.append(help);
+
+            ByteBuffer buffer = ByteBuffer.allocate((int)(keySize + Long.BYTES));
+            buffer.putLong(offset);
+            buffer.put(padStr.toString().getBytes(), 0, (int)keySize);
+            buffer.flip();
+            metaFc.write(buffer, res);
+
+            long ret = totalNum.getAndIncrement();
+
+            // 持久化 totalNum
+            buffer = ByteBuffer.allocate(Long.BYTES);
+            buffer.putLong(totalNum.get());
+            buffer.flip();
+            metaFc.write(buffer, 0L);
+
+            //metaFc.force(true);
+
+            return ret;
+        }
+        public ConcurrentHashMap<String, DataMeta> getMap(){
+            ConcurrentHashMap<String, DataMeta> res = new ConcurrentHashMap<>();
+            long startOffset = this.arrayStartOffset;
+            ByteBuffer buffer = ByteBuffer.allocate((int)(keySize + Long.BYTES));
+            for(int i=0; i<totalNum.get(); i++){
+                buffer.clear();
+                try {
+                    metaFc.read(buffer, startOffset);
+                } catch (Exception e) {
+                    //TODO: handle exception
+                    e.printStackTrace();
+                }
+                buffer.flip();
+                long value = buffer.getLong();
+                byte[] bytes = new byte[(int) keySize];
+                buffer.get(bytes);
+                String key = new String(bytes).trim();
+                res.put(key, new DataMeta(value, value, -1, -1));
+                startOffset += keySize + Long.BYTES;
+            }
+            return res;
+        }
+    }
+    /*
+    * 只存 head
+    *  <Length, nextOffset, Data>
+    */
+    public class Data{
+        Long totalNum; // 不存
+        Long tail; // 不存
+        Long head; // 存
+        Long metaOffset; //不存
+
+        DataSpace ds;
+        public DataMeta getMeta(){
+            return new DataMeta(metaOffset, head, tail, totalNum);
+        }
+        public Data(DataSpace ds) throws IOException{
+            this.ds  = ds;
+            this.metaOffset = -1L;//ds.createLink();
+
+            this.totalNum = 0L;
+            this.tail = -1L;
+            this.head = -1L;
+        }
+        public Data(DataSpace ds, Long metaOffset) throws IOException{
+            this.ds = ds;
+            this.metaOffset = metaOffset;
+//            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
+//            ds.read(tmp, metaOffset);
+//            tmp.flip();
+//
+//            this.head = tmp.getLong();
+            this.head = metaOffset;
+            this.tail = -1L;
+            this.totalNum = 0L;
+
+            // 恢复 totalNum, tail, head
+            // ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES + Long.BYTES);
+            // ds.read(tmp, metaOffset);
+            // tmp.flip();
+
+            // this.totalNum = tmp.getLong();
+            // this.head = tmp.getLong();
+            // this.tail = tmp.getLong();
+        }
+        public Data(DataSpace ds, DataMeta dm){
+            this.ds = ds;
+            this.head = dm.head;
+            this.tail = dm.tail;
+            this.totalNum = dm.totalNum;
+            this.metaOffset = dm.metaOffset;
+        }
+
+        public Long put(ByteBuffer data) throws IOException{
+            long res = totalNum;
+            DataMeta dataMeta = ds.writeAgg(data, this.getMeta());
+            this.head = dataMeta.head;
+            this.tail = dataMeta.tail;
+            this.totalNum++;
+            this.metaOffset = this.head;
+//            if(tail == -1L){
+//                head = offset;
+//                tail = offset;
+//                ds.updateMeta(metaOffset, totalNum, head, tail);
+//            }else{
+//                ds.updateLink(tail, offset);
+//                tail = offset;
+//            }
+//            }
+
+//            totalNum++;
+//            ds.updateMeta(metaOffset, totalNum, head, tail);
+            return res;
+        }
+
+
+        public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
+            Map<Integer, ByteBuffer> res = new HashMap<>();
+
+            Map<Long, Long[]> map = allDataOffsetMap.get(key);
+
+            Long[] dataInfo = map.get(offset);
+           
+            for(int i=0; i<fetchNum && dataInfo != null; ++i){
+
+                ByteBuffer tmp1 = ByteBuffer.allocate(dataInfo[1].intValue());
+                int len2 = ds.read(tmp1, dataInfo[0]  + Long.BYTES + Long.BYTES);
+                tmp1.flip();
+                res.put(i, tmp1);
+                offset++;
+                dataInfo = map.get(offset);
+            }
+            return res;
+        }
+
+        public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
+            Long startOffset = head;
+            Map<Integer, ByteBuffer> res = new HashMap<>();
+            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
+
+            for(int i=0; i<offset && startOffset != -1L; ++i){
+                // if(startOffset == tail){
+                //     startOffset = -1L;
+                //     break;
+                // }
+
+                Long nextOffset = startOffset + Long.BYTES;
+                tmp.clear();
+                int len = ds.read(tmp, nextOffset);
+                tmp.flip();
+                startOffset = tmp.getLong();
+            }
+            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
+            for(int i=0; i<fetchNum && startOffset != -1L; ++i){
+                buffer.clear();
+                int len1 = ds.read(buffer, startOffset);
+                buffer.flip();
+
+                long dataSize = buffer.getLong();
+                long nextOffset = buffer.getLong();
+
+                ByteBuffer tmp1 = ByteBuffer.allocate((int) dataSize);
+                int len2 = ds.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
+                tmp1.flip();
+                res.put(i, tmp1);
+                // if(startOffset == tail) break;
+                startOffset = nextOffset;
+
+            }
+            return res;
+        }
+        public Long getMetaOffset(){
+            return this.metaOffset;
+        }
+        public String toString(){
+            return "nums: " + totalNum + " head: " + head + " tail: " + tail + " meta: " + metaOffset;
+        }
+    }
+    public class HotData{
+        public long offset;
+        public byte[] data;
+        public HotData(long offset, byte[] data){
+            this.offset = offset;
+            this.data = data; // TODO
+        }
+    }
+
     public class TestStat{
         // report throughput per second
         ThreadLocal<Integer> threadId;
@@ -408,464 +779,4 @@ public class SSDqueue{
     }
 
 
-
-    public SSDqueue(String dirPath){
-
-        this.numOfDataFileChannels = 4;
-        try {
-            //init(dirPath);
-
-            dataSpaces = new DataSpace[numOfDataFileChannels];
-            testStat = new TestStat(dataSpaces);
-            boolean flag = new File(dirPath + "/meta").exists();
-            if(flag){
-                // recover
-                // 读盘，建表
-                logger.info("recover");
-                RCOVER = true;
-                META_FREE_OFFSET.set(0L);
-                ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 2);
-                this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();;
-                for(int i=0; i < numOfDataFileChannels; i++){
-                    String dbPath = dirPath + "/db" + i;
-                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel());
-                }
-
-                this.topicNameQueueMetaMap = new ConcurrentHashMap<>();
-                //this.queueTopicMap = new ConcurrentHashMap<>();
-                this.qTopicDataMap = new ConcurrentHashMap<>();
-
-                this.topicArrayOffset = 0L + Integer.BYTES;
-
-                tmp = ByteBuffer.allocate(Integer.BYTES);
-                metaFileChannel.read(tmp);
-                tmp.flip();
-                this.currentNum.set(tmp.getInt());
-                //logger.info(this.toString() + " " + this.currentNum.get()) ;
-                Long offset = 0L + Integer.BYTES;
-                tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE);
-                for(int i=0; i<currentNum.get(); i++, offset += Long.BYTES + TOPIC_NAME_SZIE){
-                    tmp.clear();
-                    int len = metaFileChannel.read(tmp, offset);
-                    //logger.info("len: " + len + " " + this.toString());
-                    tmp.flip();
-                    Long queueMetaOffset = tmp.getLong();
-
-                    byte [] bytes = new byte[TOPIC_NAME_SZIE];
-                    tmp.get(bytes);
-                    String topicName = new String(bytes).trim();
-
-                    topicNameQueueMetaMap.put(topicName, queueMetaOffset);
-
-                    // 遍历每个 topic 下的 queue
-                    qTopicDataMap.put(topicName, readQueue(queueMetaOffset));
-                }
-            }else{
-                // create new mq
-                this.allDataOffsetMap = new ConcurrentHashMap<>();
-                
-                this.metaFileChannel = new RandomAccessFile(new File(dirPath + "/meta"), "rw").getChannel();
-                for(int i=0; i < numOfDataFileChannels; i++){
-                    String dbPath = dirPath + "/db" + i;
-                    dataSpaces[i] = new DataSpace(new RandomAccessFile(new File(dbPath), "rw").getChannel(), Long.BYTES);
-                }
-
-                currentNum.set(0);
-                META_FREE_OFFSET.set(TOPIC_NUM * (TOPIC_NAME_SZIE + Long.BYTES) + Integer.BYTES);
-                this.topicArrayOffset = 0L + Integer.BYTES;
-
-                this.topicNameQueueMetaMap = new ConcurrentHashMap<>();
-                //this.queueTopicMap = new ConcurrentHashMap<>();
-                this.qTopicDataMap = new ConcurrentHashMap<>();
-
-                logger.info("initialize new SSDqueue, num: "+currentNum.get());
-            }
-        // 划分起始的 Long.BYTES * 来存元数据
-        } catch (Exception e) {
-            //TODO: handle exception
-            logger.error("error 201777");
-            e.printStackTrace();
-        }
-
-    }
-    // void init(String dirPath){
-    //     try {
-    //         this.spaceMetaFc = new RandomAccessFile(new File(dirPath + "space"), "rw").getChannel();
-    //     } catch (Exception e) {
-    //         //TODO: handle exception
-    //         e.printStackTrace();
-    //     }
-    // }
-    // void updataSpace(){
-    //     try {
-    //         ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES * 2);
-    //         //tmp.putLong(FREE_OFFSET.get());
-    //         tmp.putLong(META_FREE_OFFSET.get());
-    //         tmp.flip();
-    //         spaceMetaFc.write(tmp, 0L);
-    //         spaceMetaFc.force(true);
-    //     } catch (Exception e) {
-    //         //TODO: handle exception
-    //         e.printStackTrace();
-    //     }
-    // }
-    String spitMark = "*$@%";
-
-    public Long append(String topicName, int queueId, ByteBuffer data){
-        testStat.appendStart(data.remaining());
-        Long result;
-        try{
-            Map<Integer, DataMeta> topicData = qTopicDataMap.get(topicName);
-            if(topicData == null){
-                // 自下而上
-                int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-                Data writeData = new Data(dataSpaces[fcId]);
-
-                result = writeData.put(data);
-
-                QueueId q =  new QueueId(metaFileChannel, QUEUE_NUM);
-                Long qOffset = q.put(queueId, writeData.getMetaOffset());
-
-                this.put(topicName, q.metaDataOffset);
-                
-                // 更新 DRAM map
-                topicData = new HashMap<>();
-                topicData.put(queueId, writeData.getMeta());
-                topicNameQueueMetaMap.put(topicName, q.getMetaOffset());
-                qTopicDataMap.put(topicName, topicData);
-                metaFileChannel.force(true);
-
-                String key = topicName + spitMark + queueId;
-                Map<Long, Long> tmp2 = new HashMap<>();
-                tmp2.put(result, writeData.tail);
-
-                allDataOffsetMap.put(key, tmp2);
-
-            }else{
-                DataMeta meta = topicData.get(queueId);
-                if(meta == null){
-                    // 增加 queueIdArray
-                    int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-                    Data writeData = new Data(dataSpaces[fcId]);
-
-                    result = writeData.put(data);
-
-                    Long queueMetaOffset = topicNameQueueMetaMap.get(topicName);
-                    QueueId queueArray =  new QueueId(metaFileChannel, queueMetaOffset); // 写入 SSD
-                    Long queueOffset = queueArray.put(queueId, writeData.getMetaOffset());
-
-                    // 插入 DRAM 哈希表
-                    topicData.put(queueId, writeData.getMeta());
-                    qTopicDataMap.put(topicName, topicData);
-                    metaFileChannel.force(true);
-
-                    String key = topicName + spitMark + queueId;
-                Map<Long, Long> tmp2 = new HashMap<>();
-                tmp2.put(result, writeData.tail);
-
-                allDataOffsetMap.put(key, tmp2);
-
-                }else{
-                    int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-                    //Data writeData = new Data(dataSpaces[fcId], metaDataOffset);
-
-                    Data writeData = new Data(dataSpaces[fcId], meta);
-
-                    result = writeData.put(data);
-
-                    topicData.put(queueId, writeData.getMeta());
-                    qTopicDataMap.put(topicName, topicData);
-
-
-                    String key = topicName + spitMark + queueId;
-                    Map<Long, Long> tmp2 = allDataOffsetMap.get(key);
-                    tmp2.put(result, writeData.tail);
-                    allDataOffsetMap.put(key, tmp2);
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-
-        testStat.appendUpdateStat(topicName, queueId, data);
-        return result;
-    }
-    public Map<Integer, ByteBuffer> getRange(String topicName, int queueId, Long offset, int fetchNum){
-        Map<Integer, ByteBuffer> result = new HashMap<>();
-        try{
-            testStat.getRangeStart();
-            Map<Integer, DataMeta> topicData = qTopicDataMap.get(topicName);
-            if(topicData == null) return result;
-
-            DataMeta meta = topicData.get(queueId);
-            if(meta == null) return result;
-
-            int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
-            Data resData = new Data(dataSpaces[fcId], meta.metaOffset);
-            //Data resData = new Data(fileChannel, metaDataOffset);
-            if(RCOVER) result = resData.getRange(offset, fetchNum);
-            else{
-                String key = topicName + spitMark + queueId;
-                result = resData.getRange(key, offset, fetchNum);
-            }
-            testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
-        }catch(IOException e){
-            logger.error(e);
-        }
-        return result;
-    }
-
-    public Map<Integer, DataMeta> readQueue(Long queueMetaOffset) throws IOException{
-        QueueId resData = new QueueId(metaFileChannel, queueMetaOffset);
-        return resData.readAll();
-    }
-    public void put(String topic, long qHandle){
-
-        StringBuilder padStr = new StringBuilder(topic);
-        char[] help = new char[TOPIC_NAME_SZIE-topic.length() + 1];
-        for(int i=0;i<help.length; ++i){
-            help[i] = ' ';
-        }
-        padStr.append(help);
-
-        ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + TOPIC_NAME_SZIE); // offset : name
-        tmp.putLong(qHandle);
-        tmp.put(padStr.toString().getBytes(), 0, TOPIC_NAME_SZIE);
-        tmp.flip();
-
-        try {
-            metaFileChannel.write(tmp, this.topicArrayOffset + (currentNum.getAndIncrement()) * (TOPIC_NAME_SZIE + Long.BYTES));
-            ByteBuffer metaTmp = ByteBuffer.allocate(Integer.BYTES);
-            metaTmp.putInt(currentNum.get());
-            metaTmp.flip();
-            int len = metaFileChannel.write(metaTmp, 0L);
-        } catch (Exception e) {
-            //TODO: handle exception
-            e.printStackTrace();
-        }
-    }
-
-    private class QueueId{
-        FileChannel metaFileChannel;
-        
-        Long metaDataOffset;
-        int currentNum;
-        Long queueIdArray;
-        
-        public QueueId(FileChannel metaFileChannel, int totalNum)throws IOException{
-            this.metaFileChannel = metaFileChannel;
-
-            this.metaDataOffset = META_FREE_OFFSET.getAndAdd(totalNum * (Long.BYTES + Integer.BYTES) + Integer.BYTES);
-            //updataSpace();
-
-            this.currentNum = 0;
-            ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
-            tmp.putInt(this.currentNum);
-            tmp.flip();
-            metaFileChannel.write(tmp, metaDataOffset);
-//            metaFileChannel.force(true); // TODO:check
-
-            this.queueIdArray = this.metaDataOffset + Integer.BYTES;
-        }
-        public QueueId(FileChannel metaFileChannel, Long metaDataOffset)throws IOException{
-            this.metaFileChannel = metaFileChannel;
-            this.metaDataOffset = metaDataOffset;
-            this.queueIdArray = metaDataOffset + Integer.BYTES;
-
-            // TODO: 恢复 currentNum, should atomic
-            ByteBuffer tmp =  ByteBuffer.allocate(Integer.BYTES);
-            metaFileChannel.read(tmp, this.metaDataOffset);
-            tmp.flip();
-            this.currentNum = tmp.getInt();
-        }
-        public Long put(int queueId, Long dataMetaOffset)throws IOException{
-            long offset = queueIdArray + (long) currentNum * (Integer.BYTES + Long.BYTES);
-
-            ByteBuffer tmpData = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
-            tmpData.putInt(queueId);
-            tmpData.putLong(dataMetaOffset);
-            tmpData.flip();
-            metaFileChannel.write(tmpData, offset);
-            //metaFileChannel.force(true);
-
-            currentNum++;
-            ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES);
-            tmp.putInt(this.currentNum);
-            tmp.flip();
-            metaFileChannel.write(tmp, metaDataOffset);
-            this.queueIdArray = this.metaDataOffset + Integer.BYTES;
-            return offset;
-        }
-        public Long getMetaOffset(){
-            return this.metaDataOffset;
-        }
-        public Map<Integer, DataMeta> readAll() throws IOException{
-            Map<Integer, DataMeta> res = new HashMap<>();
-            ByteBuffer tmp = ByteBuffer.allocate(Integer.BYTES + Long.BYTES);
-            for(int i=0; i<this.currentNum; ++i){
-                int len2 = metaFileChannel.read(tmp, this.queueIdArray + i*(Integer.BYTES + Long.BYTES));
-                tmp.flip();
-                res.put(tmp.getInt(), new DataMeta(tmp.getLong(), 0, -1, 0) );
-                tmp.clear(); // 清空buffer为下一次写buffer作准备
-            }
-            return res;
-        }
-        public String toString(){
-            return "num: " + this.currentNum + " meta:  " + this.metaDataOffset + "  array： " + this.queueIdArray;
-        }
-    }
-    /*
-    * 只存 head
-    *  <Length, nextOffset, Data>
-    */
-
-    
-
-    public class Data{
-        Long totalNum; // 不存
-        Long tail; // 不存
-        Long head; // 存
-        Long metaOffset; //不存
-
-        DataSpace ds;
-        public DataMeta getMeta(){
-            return new DataMeta(metaOffset, head, tail, totalNum);
-        }
-        public Data(DataSpace ds) throws IOException{
-            this.ds  = ds;
-            this.metaOffset = -1L;//ds.createLink();
-
-            this.totalNum = 0L;
-            this.tail = -1L;
-            this.head = -1L;
-        }
-        public Data(DataSpace ds, Long metaOffset) throws IOException{
-            this.ds = ds;
-            this.metaOffset = metaOffset;
-//            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
-//            ds.read(tmp, metaOffset);
-//            tmp.flip();
-//
-//            this.head = tmp.getLong();
-            this.head = metaOffset;
-            this.tail = -1L;
-            this.totalNum = 0L;
-
-            // 恢复 totalNum, tail, head
-            // ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES + Long.BYTES + Long.BYTES);
-            // ds.read(tmp, metaOffset);
-            // tmp.flip();
-
-            // this.totalNum = tmp.getLong();
-            // this.head = tmp.getLong();
-            // this.tail = tmp.getLong();
-        }
-        public Data(DataSpace ds, DataMeta dm){
-            this.ds = ds;
-            this.head = dm.head;
-            this.tail = dm.tail;
-            this.totalNum = dm.totalNum;
-            this.metaOffset = dm.metaOffset;
-        }
-
-        public Long put(ByteBuffer data) throws IOException{
-            long res = totalNum;
-            DataMeta dataMeta = ds.writeAgg(data, this.getMeta());
-            this.head = dataMeta.head;
-            this.tail = dataMeta.tail;
-            this.totalNum = dataMeta.totalNum + 1;
-            this.metaOffset = dataMeta.metaOffset;
-//            if(tail == -1L){
-//                head = offset;
-//                tail = offset;
-//                ds.updateMeta(metaOffset, totalNum, head, tail);
-//            }else{
-//                ds.updateLink(tail, offset);
-//                tail = offset;
-//            }
-//            }
-
-//            totalNum++;
-//            ds.updateMeta(metaOffset, totalNum, head, tail);
-            return res;
-        }
-
-
-        public Map<Integer, ByteBuffer> getRange(String key, Long offset, int fetchNum) throws IOException{
-
-            Map<Long, Long> map = allDataOffsetMap.get(key);
-
-            Long startOffset = map.get(offset);
-            if(startOffset == null){
-                startOffset = tail;
-            }
-
-            //Long cnt = offset;
-
-            Map<Integer, ByteBuffer> res = new HashMap<>();
-            
-            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
-            for(int i=0; i<fetchNum && startOffset != -1L; ++i){
-                buffer.clear();
-                int len1 = ds.read(buffer, startOffset);
-                buffer.flip();
-
-                long dataSize = buffer.getLong();
-                long nextOffset = buffer.getLong();
-
-                ByteBuffer tmp1 = ByteBuffer.allocate((int) dataSize);
-                int len2 = ds.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
-                tmp1.flip();
-                res.put(i, tmp1);
-                // if(startOffset == tail) break;
-                startOffset = nextOffset;
-
-            }
-            return res;
-        }
-
-        public Map<Integer, ByteBuffer> getRange(Long offset, int fetchNum) throws IOException{
-            Long startOffset = head;
-            Map<Integer, ByteBuffer> res = new HashMap<>();
-            ByteBuffer tmp = ByteBuffer.allocate(Long.BYTES);
-
-            for(int i=0; i<offset && startOffset != -1L; ++i){
-                // if(startOffset == tail){
-                //     startOffset = -1L;
-                //     break;
-                // }
-
-                Long nextOffset = startOffset + Long.BYTES;
-                tmp.clear();
-                int len = ds.read(tmp, nextOffset);
-                tmp.flip();
-                startOffset = tmp.getLong();
-            }
-            ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES * 2);
-            for(int i=0; i<fetchNum && startOffset != -1L; ++i){
-                buffer.clear();
-                int len1 = ds.read(buffer, startOffset);
-                buffer.flip();
-
-                long dataSize = buffer.getLong();
-                long nextOffset = buffer.getLong();
-
-                ByteBuffer tmp1 = ByteBuffer.allocate((int) dataSize);
-                int len2 = ds.read(tmp1, startOffset + Long.BYTES + Long.BYTES);
-                tmp1.flip();
-                res.put(i, tmp1);
-                // if(startOffset == tail) break;
-                startOffset = nextOffset;
-
-            }
-            return res;
-        }
-        public Long getMetaOffset(){
-            return this.metaOffset;
-        }
-        public String toString(){
-            return "nums: " + totalNum + " head: " + head + " tail: " + tail + " meta: " + metaOffset;
-        }
-    }
 }

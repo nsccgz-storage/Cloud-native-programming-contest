@@ -25,6 +25,7 @@ import java.util.concurrent.Executors;
 import io.openmessaging.MessageQueue;
 import io.openmessaging.Test1MessageQueue;
 import io.openmessaging.DefaultMessageQueueImpl;
+import io.openmessaging.DefaultTestMessageQueueImpl;
 import io.openmessaging.Test1MessageQueueImpl;
 
 import java.nio.ByteBuffer;
@@ -104,8 +105,7 @@ public class TestMessageQueue {
 			assertEquals(result.get(0).compareTo(msg.checkBuf), 0);
 			if (result.get(0).compareTo(msg.checkBuf) != 0) {
 				log.error("data error !");
-				
-				System.exit(0);
+				System.exit(-1);
 			}
 		}
 		Map<Integer, ByteBuffer> result;
@@ -124,7 +124,7 @@ public class TestMessageQueue {
 				}
 				log.info("***************end*************************");
 				log.error("data error !");
-				System.exit(0);
+				System.exit(-1);
 			}
 		}
 
@@ -188,7 +188,7 @@ public class TestMessageQueue {
 				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
 				if (msg.getOffset != msg.offset) {
 					log.error("offset error !");
-					System.exit(0);
+					System.exit(-1);
 				}
 				Map<Integer, ByteBuffer> result;
 				result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
@@ -196,7 +196,7 @@ public class TestMessageQueue {
 				if (result.get(0).compareTo(msg.buf) != 0) {
 					log.error("data error !");
 					barrier.await();
-					System.exit(0);
+					System.exit(-1);
 				}
 
 			}
@@ -213,7 +213,7 @@ public class TestMessageQueue {
 				msg.buf.position(msg.oriPosition);
 				if (result.get(0).compareTo(msg.checkBuf) != 0) {
 					log.error("data error !");
-					System.exit(0);
+					System.exit(-1);
 				}
 			}
 
@@ -300,7 +300,7 @@ public class TestMessageQueue {
 			Map<Integer, ByteBuffer> result;
 			barrier.await();
 			String topicName = "topic" + threadId;
-			int queueId = 23423;
+			int queueId = 2333;
 			Vector<Message> getRangeMsgs = new Vector<>();
 			for (long offset = 0; offset < 99; offset++) {
 				Message msg = new Message(topicName, queueId, offset);
@@ -323,7 +323,7 @@ public class TestMessageQueue {
 				msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
 				if (msg.getOffset != msg.offset) {
 					log.error("offset error !");
-					System.exit(0);
+					System.exit(-1);
 				}
 				result = mq.getRange(msg.topic, msg.queueId, 0, i+1);
 				for (int j = 0; j <= i; j++){
@@ -338,7 +338,7 @@ public class TestMessageQueue {
 							System.out.print(tmp[ii] + " ");
 						}
 						log.info("***************end*************************");
-						System.exit(0);
+						System.exit(-1);
 					}
 				
 				}
@@ -353,7 +353,7 @@ public class TestMessageQueue {
 						log.debug(getRangeMsgs.get(i-k+j).checkBuf);
 						if (result.get(j).compareTo(getRangeMsgs.get(i-k+j).checkBuf) != 0){
 							log.error("data error !");
-							System.exit(0);
+							System.exit(-1);
 						}
 
 					}
