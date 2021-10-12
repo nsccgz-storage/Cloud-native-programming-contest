@@ -25,6 +25,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
+import java.util.function.IntUnaryOperator;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
@@ -1235,27 +1236,35 @@ public class LSMessageQueue extends MessageQueue {
     public class MyByteBufferPool {
         int capacity;
         byte[] buffer;
-        // AtomicInteger head;
+        AtomicInteger atomicHead;
         int head;
         int slotSize;
         int maxLength;
+        IntUnaryOperator getNext;
         MyByteBufferPool(){
-            // head = new AtomicInteger();
+            atomicHead = new AtomicInteger();
+            atomicHead.set(0);
             head = 0;
-            // head.set(0);
             slotSize = 17*1024;
-            maxLength = 800;
+            maxLength = 500;
             capacity = maxLength * slotSize;
             buffer = new byte[capacity];
+            getNext = (int curHead) -> {
+                int nextHead = curHead+1;
+                nextHead = nextHead % maxLength;
+                return nextHead;
+            };
         }
         public  ByteBuffer allocate(int dataLength){
-            // int thisHead = head.getAndAdd(1);
-            ByteBuffer ret = ByteBuffer.wrap(buffer, head*slotSize, dataLength);
+            int thisHead = atomicHead.getAndUpdate(getNext);
+            // int thisHead = atomicHead.getAndAdd(1);
+            ByteBuffer ret = ByteBuffer.wrap(buffer, thisHead*slotSize, dataLength);
+            // ByteBuffer ret = ByteBuffer.wrap(buffer, head*slotSize, dataLength);
             ret.mark();
-	    assert (ret.arrayOffset() == head*slotSize );
+	    // assert (ret.arrayOffset() == head*slotSize );
 	    // log.info(ret.arrayOffset());
-            head++;
-            head = head % maxLength;
+            // head++;
+            // head = head % maxLength;
             return ret;
         }
     }
