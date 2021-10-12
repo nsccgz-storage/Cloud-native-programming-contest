@@ -403,9 +403,9 @@ public class LSMessageQueue extends MessageQueue {
         // // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
         // if (false){
-        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
-        // 仅未知队列才要双写和预取
-        if ((q.type == 0 ) && (!q.prefetchBuffer.isFull())){
+        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        // TODO: 仅未知队列才要双写和预取
+        // if ((q.type == 0 ) && (!q.prefetchBuffer.isFull())){
             q.prefetchBuffer.prefetch();
             if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset-1){
                 log.debug("double write");
@@ -538,6 +538,15 @@ public class LSMessageQueue extends MessageQueue {
             //     }
             // }
         }
+        // TODO
+        // if (q.type == 2){
+        //     // 冷队列会变热吗？
+        //     if (offset >= q.maxOffset - 5){
+        //         q.type = 3;
+        //         // 3 代表从冷变热后的队列，要怎么用呢，可能没什么用，就是不用触发预取了，另外方便统计
+        //         // 冷队列变热后，就不触发预取了
+        //     }
+        // }
 
         if(mqConfig.useStats){
             testStat.incFetchMsgCount(fetchNum);
@@ -952,7 +961,7 @@ public class LSMessageQueue extends MessageQueue {
             length = 0;
             blockHead = 0;
             blockTail = 0;
-            maxLength = 50;
+            maxLength = 30;
             msgsLength = new int[maxLength];
             msgsBlockAddr = new int[maxLength];
             q = myQ;
