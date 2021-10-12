@@ -403,7 +403,9 @@ public class LSMessageQueue extends MessageQueue {
         // // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
         // if (false){
-        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        // 仅未知队列才要双写和预取
+        if ((q.type == 0 ) && (!q.prefetchBuffer.isFull())){
             q.prefetchBuffer.prefetch();
             if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset-1){
                 log.debug("double write");
@@ -419,6 +421,7 @@ public class LSMessageQueue extends MessageQueue {
 
 
         // 未知队列和热队列需要双写，冷队列不用，冷队列还是预取多一些内容吧
+        // BUG: 不能够异步双写，估计那个buffer在return后就会变
         if (false){
         // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
             final ByteBuffer finalData = data.duplicate();
