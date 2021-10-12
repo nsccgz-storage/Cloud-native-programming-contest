@@ -433,7 +433,6 @@ public class LSMessageQueue extends MessageQueue {
                            log.debug("double write !");
                            // 如果目前要写入的数据刚好就是下一个要预取的内容
                            // 双写
-                           data.reset();
                            q.prefetchBuffer.directAddData(finalData);
                            // TODO: 担心data在异步中途被改
                        }
