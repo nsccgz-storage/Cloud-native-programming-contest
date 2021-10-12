@@ -99,7 +99,7 @@ public class LSMessageQueue extends MessageQueue {
         public int type;
         public long consumeOffset;
         public long prefetchOffset;
-        public QueuePrefetchBuffer prefetchBuffer;
+        public QueuePrefetchBuffer2 prefetchBuffer;
         public Future<Integer> prefetchFuture;
         public MyByteBufferPool bbPool;
 
@@ -109,7 +109,8 @@ public class LSMessageQueue extends MessageQueue {
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
             df = dataFile;
-            prefetchBuffer = new QueuePrefetchBuffer(this, df);
+            prefetchBuffer = new QueuePrefetchBuffer2(this, df);
+            // prefetchBuffer = new QueuePrefetchBuffer(this, df);
             prefetchFuture = null;
         }
         MQQueue(){
@@ -117,7 +118,8 @@ public class LSMessageQueue extends MessageQueue {
             type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
-            prefetchBuffer = new QueuePrefetchBuffer(this, df);
+            prefetchBuffer = new QueuePrefetchBuffer2(this, df);
+            // prefetchBuffer = new QueuePrefetchBuffer(this, df);
             prefetchFuture = null;
         }
 
@@ -207,8 +209,8 @@ public class LSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                // System.exit(-1);
-                recover();
+                System.exit(-1);
+                // recover();
             }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
@@ -921,136 +923,310 @@ public class LSMessageQueue extends MessageQueue {
     }
 
 
-    // public class QueuePrefetchBuffer2{
-    //     public int[] msgsBlockAddr;
-    //     public int[] msgsLength;
+    public class QueuePrefetchBuffer2{
+        public int[] msgsBlockAddr;
+        public int[] msgsLength;
 
-    //     public long headOffset; // == consumeOffset
-    //     public long tailOffset;
-    //     // 缓存 [headOffset, tailOffset] 的内容
-    //     public int head;
-    //     public int tail;
-    //     public int length;
+        public long headOffset; // == consumeOffset
+        public long tailOffset;
+        // 缓存 [headOffset, tailOffset] 的内容
+        public int head;
+        public int tail;
+        public int length;
 
-    //     public MyPMBlock block;
-    //     public int blockHead;
-    //     public int blockTail;
-    //     // public MemoryBlock block;
-    //     public int maxLength;
-    //     public MQQueue q;
-    //     public DataFile df;
-    //     public int slotSize;
+        public MyPMBlock block;
+        public int blockHead;
+        public int blockTail;
+        // public MemoryBlock block;
+        public int maxLength;
+        public MQQueue q;
+        public DataFile df;
 
-    //     QueuePrefetchBuffer2(MQQueue myQ, DataFile myDf){
-    //         head = 0;
-    //         tail = 0;
-    //         length = 0;
-    //         blockHead = 0;
-    //         blockTail = 0;
-    //         maxLength = 9;
-    //         msgsLength = new int[maxLength];
-    //         msgsBlockAddr = new int[maxLength];
-    //         slotSize = 17*1024;
-    //         // FIXME: 性能很差，考虑换掉
-    //         q = myQ;
-    //         df = myDf;
-    //         block = pmBlockPool.allocate();
-    //         // 大小写死在pool的实现里了，改大小的话要改两个地方
-    //     }
+        QueuePrefetchBuffer2(MQQueue myQ, DataFile myDf){
+            head = 0;
+            tail = 0;
+            length = 0;
+            blockHead = 0;
+            blockTail = 0;
+            maxLength = 20;
+            msgsLength = new int[maxLength];
+            msgsBlockAddr = new int[maxLength];
+            // FIXME: 性能很差，考虑换掉
+            q = myQ;
+            df = myDf;
+            block = pmBlockPool.allocate();
+            // 大小写死在pool的实现里了，改大小的话要改两个地方
+        }
 
-    //     public boolean offer(ByteBuffer data){
-    //         data = data.duplicate();
-    //         if (isEmpty()){
-    //             // 把一个消息放到队列末尾
-    //             addr
-    //             msgLengths[tail] = data.remaining();
-    //             block.copyFromArray(data.array(), data.position(), tail*slotSize, msgLengths[tail] );
-    //             length ++;
-    //             return true;
-    //         }
-    //         if (isFull()){
-    //             return false;
-    //         }
-    //         // 把一个消息放到队列末尾
-    //         tail += 1;
-    //         tail = tail % maxLength;
-    //         log.debug("put data on tail : " + tail);
-    //         log.debug(data);
-    //         msgLengths[tail] = data.remaining();
-    //         block.copyFromArray(data.array(), data.position(), tail*slotSize, msgLengths[tail] );
-    //         tailOffset ++;
-    //         length ++;
-    //         return true;
-    //     }
+        public int consume(Map<Integer, ByteBuffer> ret, long offset,  int fetchNum){
+            // 把分配内存放在异步任务中完成
+            if (block == null){
+                block = pmBlockPool.allocate();
+                // block = pmHeap.allocateMemoryBlock(maxLength*slotSize);
+            }
 
-    //     public ByteBuffer poll(){
-    //         if (isEmpty()){
-    //             return null;
-    //         }
-    //         // 把一个消息从队列头部去掉
-    //         int msgLength = msgLengths[head];
-    //         log.debug("msgLength : " + msgLength + " head : " + head);
-    //         ByteBuffer buf;
-    //         if (q.bbPool != null){
-    //             buf = q.bbPool.allocate(msgLength);
-    //         } else {
-    //             buf = ByteBuffer.allocate(msgLength);
-    //         }
-    //         log.debug(buf);
-    //         block.copyToArray(head*slotSize, buf.array(), buf.arrayOffset()+buf.position(), msgLength);
-    //         log.debug(buf.arrayOffset());
-    //         log.debug(buf);
-    //         // block.copyToArray(head*slotSize, buf.array(), 0, msgLength);
-    //         log.debug("get buffer from prefetchqueue : " + buf);
+            log.debug("tail : " + tail + " head : "+head + " length : " + length);
+            log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
+            log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
 
-    //         if (length == 1){
-    //             length --;
-    //             return buf;
-    //         }
+            // 始终假定 offset == q.consumeOffset
+            // 如果 headOffset != offset
+            // 那么 ，两种情况
+            // 一种是 buf中还有需要消费的内容，那么就移动一下队列就好
+            if (offset != headOffset){
+                if (offset < headOffset){
+                    /// 倒退了
+                    // 不管，不预取了
+                    return 0;
+                }
+                if ( headOffset < offset && offset < tailOffset){
+                    // 说明当前要拿的数据还在buf中
+                    // 先移动一下head，让队列符合 headOffset = offset 的假定
+                    long num = offset - headOffset;
+                    for (long i = 0;  i < num; i++){
+                        this.poll();
+                    }
+                } else {
+                    // 说明当前要拿的数据不在buf中
+                    // 另一种是buf中所有内容都没用，直接重置这条buffer吧
+                    // 后面再次调用prefetch的时候会重置的
+                    // 重置buffer，清空
+                    this.reset(offset + fetchNum-1);
 
-    //         head ++;
-    //         head = head % maxLength;
-    //         headOffset ++;
-    //         length --;
-    //         return buf;
-    //     }
+                    return 0;
+                }
+            }
 
-    //     public  void reset(long consumeOffset){
-    //         headOffset = consumeOffset;
-    //         tailOffset = consumeOffset;
-    //         head = 0;
-    //         tail = 0;
-    //         length = 0;
-    //         blockHead = 0;
-    //         blockTail = 0;
-    //     }
+            // read from consume Offset
+            // 假定 刚好匹配，一定是从headOffset开始读取
+            // 想要fetchNum那么多个，但不一定有这么多
+            int consumeNum = Math.min(fetchNum, length);
+            for (int i = 0; i < consumeNum; i++){
+                ByteBuffer buf = this.poll();
+                log.debug(buf);
+                ret.put(i, buf);
+            }
+            // return number of msg  read from buffer
+            log.debug("consume " + consumeNum + " msgs in prefetch buffer");
+            log.debug("tail : " + tail + " head : "+head + " length : " + length);
+            log.debug("tailOffset : " + tailOffset + " headOffset : " + headOffset);
+            log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
 
 
-    //     public boolean isSlotFull(){
-    //         // 变长slot下，可能有两种条件下会满
-    //         // 1. slot数填满了，这么说，我可以把slot数弄得很大
-    //         return length == maxLength;
-    //     }
-    //     public boolean isSpaceFull(int needSize){
-    //         // 变长slot下，这是满的另一个条件
-    //         // 2. 定长buffer不够用了
-    //         if (needSize < (block.capacity - blockTail)){
-    //             return true;
-    //         } 
-    //         if (needSize > (blockHead - 0)){
-    //             return true;
-    //         }
-    //         return false;
-    //     }
-    //     public boolean isEmpty(){
-    //         return length == 0;
-    //     }
+            return consumeNum;
+
+        }
+
+        public void prefetch(){
+            // 先看看能prefetch多少个？
+            // 数一下从consumeOffset开始后面有多少有效消息
+            // 再看看队列还能放多少个
+            if (q.consumeOffset > headOffset){
+                // 说明之前有buffer不够用的情况，consumeOffset走得更快了，此时要更新一下headOffset和prefetchOffset
+                reset(q.consumeOffset);
+                q.prefetchOffset = q.consumeOffset;
+                // 相当于重置 prefetch buffer
+            }
+            log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
+            long prefetchNum = (q.maxOffset-1)-q.prefetchOffset;
+            log.debug("prefetch start from offset : " + q.prefetchOffset);
+            log.debug("prefetchNum : " + prefetchNum);
+            // 得到能够被预取的消息数量
+            if (prefetchNum <= 0){
+                // 没有需要预取的消息，或者所有消息都被预取了
+                log.debug("nothing to prefetch or all msgs has been prefetched");
+                return;
+            }
+            // 检查consumeOffset和队列的headOffset是否对应，如果不对应则释放相关数据
+            // 被消费的时候应当释放队列相关资源
+            assert (q.consumeOffset == headOffset);
+            // 预取的数量最大为当前buffer剩余的空间，再多的也没法预取，确定真正要预取这么多个消息
+            prefetchNum = Math.min(prefetchNum, (maxLength-length));
+            if (prefetchNum <= 0){
+                log.debug("the prefetch buffer is full");
+                return ;
+            }
+
+
+            // 从prefetchOffset开始prefetch，填满数组
+            int actualPrefetchNum = 0;
+            // FIXME: 不读就不知道消息有多长，这会造成一些额外的读取
+
+            for (int i = 0; i < prefetchNum; i++){
+                // FIXME: long转int，不太好
+                long pos = q.offset2position.get((int)q.prefetchOffset); 
+                ByteBuffer buf = df.read(pos);
+                log.debug(buf);
+                if (this.offer(buf)){
+                    q.prefetchOffset++;
+                    actualPrefetchNum++;
+                } else {
+                    break;
+                }
+            }
+            log.debug("prefetch " + actualPrefetchNum + " msgs");
+
+            return ;
+        }
+
+        public void directAddData(ByteBuffer data){
+            // 如果刚好需要预取这个数据，而且预取数量还不够，那就把这个数据加进去
+            // this.offer(data); 
+            if (this.offer(data)){
+                //  可能会加失败
+                q.prefetchOffset++;
+            }
+            return ;
+        }
 
 
 
+        public boolean offer(ByteBuffer data){
+            data = data.duplicate();
+            int msgLength = data.remaining();
+            if (isFull()){
+                return false;
+            }
+            int msgBlockAddr = allocateFromBlock(msgLength);
+            if (msgBlockAddr == -1){
+                // 说明申请不到，已经满了或者已有空间存不下
+                return false;
+            }
+            if (isEmpty()){
+                // 把一个消息放到队列末尾
+                msgsBlockAddr[tail] = msgBlockAddr;
+                msgsLength[tail] = msgLength;
+                block.copyFromArray(data.array(), data.position(), msgBlockAddr, msgLength);
+                length ++;
+                return true;
+            }
+            // 把一个消息放到队列末尾
+            tail += 1;
+            tail = tail % maxLength;
+            msgsBlockAddr[tail] = msgBlockAddr;
+            msgsLength[tail] = msgLength;
+            block.copyFromArray(data.array(), data.position(), msgBlockAddr, msgLength);
+            tailOffset ++;
+            length ++;
+            return true;
+        }
+        public boolean canOffer(ByteBuffer data){
+            data = data.duplicate();
+            int msgLength = data.remaining();
+            if (isFull()){
+                return false;
+            }
+            // 变长slot下，这是满的另一个条件
+            // 2. 定长buffer不够用了，这里又有两种情况
+            // 不允许 blockTail == blockHead （仅在空的时候允许）
+            if (blockTail >= blockHead){
+                // 最正常的情况
+                // blockHead == blockTail ，此种情况当且仅当已用buf长度为0的时候发生，满的时候不会
+                if (msgLength < (block.capacity - blockTail)){
+                    return true;
+                } 
+                if (msgLength < (blockHead - 0)){
+                    return true;
+                }
+            } else if (blockTail < blockHead) {
+                // tail跳到了head前面
+                if (msgLength < (blockHead - blockTail)){
+                    return true;
+               }
+            }
+            // 申请不到
+            return false;
+        }
+
+        public ByteBuffer poll(){
+            if (isEmpty()){
+                return null;
+            }
+            // 把一个消息从队列头部去掉
+            int msgLength = msgsLength[head];
+            int msgBlockAddr = msgsBlockAddr[head];
+            ByteBuffer buf;
+            if (q.bbPool != null){
+                buf = q.bbPool.allocate(msgLength);
+            } else {
+                buf = ByteBuffer.allocate(msgLength);
+            }
+            block.copyToArray(msgBlockAddr, buf.array(), buf.arrayOffset()+buf.position(), msgLength);
+
+            log.debug("get buffer from prefetchqueue : " + buf);
+
+            freeHeadFromBlock(); // 释放掉这个head
+
+            if (length == 1){
+                length --;
+                return buf;
+            }
+
+            head ++;
+            head = head % maxLength;
+            headOffset ++;
+            length --;
+            return buf;
+        }
+
+        public  void reset(long consumeOffset){
+            headOffset = consumeOffset;
+            tailOffset = consumeOffset;
+            head = 0;
+            tail = 0;
+            length = 0;
+            blockHead = 0;
+            blockTail = 0;
+        }
 
 
-    // }
+        public boolean isFull(){
+            // 变长slot下，可能有两种条件下会满
+            // 1. slot数填满了，这么说，我可以把slot数弄得很大
+            return length == maxLength;
+        }
+        public int allocateFromBlock(int needSize){
+            // 变长slot下，这是满的另一个条件
+            // 2. 定长buffer不够用了，这里又有两种情况
+            // 不允许 blockTail == blockHead （仅在空的时候允许）
+            int ret = -1;
+            if (blockTail >= blockHead){
+                // 最正常的情况
+                // blockHead == blockTail ，此种情况当且仅当已用buf长度为0的时候发生，满的时候不会
+                if (needSize < (block.capacity - blockTail)){
+                    ret = blockTail;
+                    blockTail += needSize;
+                    return ret;
+                } 
+                if (needSize < (blockHead - 0)){
+                    blockTail = 0;
+                    ret = blockTail;
+                    blockTail += needSize;
+                    return ret;
+                }
+            } else if (blockTail < blockHead) {
+                // tail跳到了head前面
+                if (needSize < (blockHead - blockTail)){
+                    ret = blockTail;
+                    blockTail += needSize;
+                    return ret;
+               }
+            }
+            // 申请不到
+            return -1;
+        }
+        public void freeHeadFromBlock(){
+            if (msgsBlockAddr[head] == 0){
+                blockHead = 0;
+            }
+            blockHead += msgsLength[head];
+
+
+        }
+        public boolean isEmpty(){
+            return length == 0;
+        }
+    }
 
     public class MyByteBufferPool {
         int capacity;
