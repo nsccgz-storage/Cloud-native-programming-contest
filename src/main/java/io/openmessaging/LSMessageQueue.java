@@ -1337,7 +1337,7 @@ public class LSMessageQueue extends MessageQueue {
             totalCapacity = 60L*1024*1024*1024;
             pool = MemoryPool.createPool(path, totalCapacity);
 
-            blockSize = 10*17*1024; // 8 个slot
+            blockSize = 9*17*1024; // 8 个slot
             bigBlockSize = 200*blockSize;
             atomicGlobalFreeOffset = new AtomicLong();
             atomicGlobalFreeOffset.set(0L);
