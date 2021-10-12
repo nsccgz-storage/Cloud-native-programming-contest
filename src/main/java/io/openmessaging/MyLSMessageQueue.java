@@ -210,8 +210,8 @@ public class MyLSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                System.exit(-1);
-                // recover();
+                // System.exit(-1);
+                recover();
             }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
