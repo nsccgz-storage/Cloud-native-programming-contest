@@ -949,10 +949,9 @@ public class LSMessageQueue extends MessageQueue {
             length = 0;
             blockHead = 0;
             blockTail = 0;
-            maxLength = 100;
+            maxLength = 50;
             msgsLength = new int[maxLength];
             msgsBlockAddr = new int[maxLength];
-            // FIXME: 性能很差，考虑换掉
             q = myQ;
             df = myDf;
             block = pmBlockPool.allocate();
@@ -1230,6 +1229,12 @@ public class LSMessageQueue extends MessageQueue {
         }
         public boolean isEmpty(){
             return length == 0;
+        }
+        public void resizeCapacity(){
+            // 考虑调用这个能够让冷队列的buffer大小变大，方便预取更多的数据（如20个17KiB的数据）
+            // 考虑的实现是： 1）申请大空间 2）复制数据到大空间，并初始化缓存 3）释放小空间
+
+
         }
     }
 
