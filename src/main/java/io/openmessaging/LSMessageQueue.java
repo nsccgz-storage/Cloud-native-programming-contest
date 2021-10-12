@@ -686,7 +686,7 @@ public class LSMessageQueue extends MessageQueue {
             head = 0;
             tail = 0;
             length = 0;
-            maxLength = 8;
+            maxLength = 9;
             msgLengths = new int[maxLength];
             slotSize = 17*1024;
             // FIXME: 性能很差，考虑换掉
@@ -1028,7 +1028,7 @@ public class LSMessageQueue extends MessageQueue {
             totalCapacity = 60L*1024*1024*1024;
             pool = MemoryPool.createPool(path, totalCapacity);
 
-            blockSize = 8*17*1024; // 8 个slot
+            blockSize = 9*17*1024; // 8 个slot
             bigBlockSize = 200*blockSize;
             atomicGlobalFreeOffset = new AtomicLong();
             atomicGlobalFreeOffset.set(0L);
