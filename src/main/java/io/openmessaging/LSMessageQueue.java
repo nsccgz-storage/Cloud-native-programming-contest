@@ -399,8 +399,8 @@ public class LSMessageQueue extends MessageQueue {
 
         // // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
-        if (false){
-        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        // if (false){
+        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
             q.prefetchBuffer.prefetch();
             if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset-1){
                 log.debug("double write");
@@ -416,8 +416,8 @@ public class LSMessageQueue extends MessageQueue {
 
 
         // 未知队列和热队列需要双写，冷队列不用，冷队列还是预取多一些内容吧
-        // if (false){
-        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        if (false){
+        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
             final ByteBuffer finalData = data.duplicate();
             final MQQueue finalQ = q;
             q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
@@ -567,8 +567,8 @@ public class LSMessageQueue extends MessageQueue {
 
         // // 既然从预取中消费了一些数据，那当然可以补回来
         // // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
-        //if (q.type == 2){
-        if (false){
+        if (q.type == 2){
+        // if (false){
             // 冷读才需要预取
             q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
                @Override
