@@ -178,8 +178,11 @@ public class SSDqueue extends MessageQueue {
                 executor.execute(new RWPmem(true));
                 executor.execute(new RWPmem(false));
 
+<<<<<<< HEAD
                 executor.shutdown();
 
+=======
+>>>>>>> 959e761165bb7a93ec8a606bad7a4ac259014767
                 // create new mq    
                 logger.info("create a new queue");
                 
@@ -288,7 +291,7 @@ public class SSDqueue extends MessageQueue {
             }else{
                 int fcId = Math.floorMod(topicName.hashCode(), numOfDataFileChannels);
                 Data resData = new Data(dataSpaces[fcId], dataMeta);
-                result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRange(key, offset, fetchNum);
+                result = RECOVER ? resData.getRange(offset, fetchNum) : resData.getRangePmem(key, offset, fetchNum);
             
             }
             testStat.getRangeUpdateStat(topicName,queueId, offset, fetchNum);
@@ -673,6 +676,7 @@ public class SSDqueue extends MessageQueue {
         long write(ByteBuffer byteBuffer){
             if(size.get() - byteBuffer.remaining() <= 16) return -1L; // TODO，预留一点，怕有额外空间开销
             MemoryBlock block = heap.allocateMemoryBlock(byteBuffer.remaining());
+            if(block == null) return -1L;
             block.copyFromArray(byteBuffer.array(), 0, 0, byteBuffer.remaining());
             size.addAndGet(-block.size() - 512);
             return block.handle();
@@ -683,6 +687,7 @@ public class SSDqueue extends MessageQueue {
             //logger.info(this.size.get()); // 这一部分不大行啊
             if(size.get() - array.length <= 1024*1024L*1024L) return -1L; 
             MemoryBlock block = heap.allocateMemoryBlock(array.length);
+            if(block == null) return -1L;
             block.copyFromArray(array, 0, 0, array.length);
             size.addAndGet(-block.size() - 512);
             return block.handle();
