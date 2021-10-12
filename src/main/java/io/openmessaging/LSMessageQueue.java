@@ -948,7 +948,7 @@ public class LSMessageQueue extends MessageQueue {
             length = 0;
             blockHead = 0;
             blockTail = 0;
-            maxLength = 20;
+            maxLength = 30;
             msgsLength = new int[maxLength];
             msgsBlockAddr = new int[maxLength];
             // FIXME: 性能很差，考虑换掉
