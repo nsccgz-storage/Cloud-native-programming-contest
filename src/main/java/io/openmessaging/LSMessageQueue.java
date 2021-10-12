@@ -1146,6 +1146,10 @@ public class LSMessageQueue extends MessageQueue {
             int msgLength = msgsLength[head];
             int msgBlockAddr = msgsBlockAddr[head];
             ByteBuffer buf;
+
+            // buf = ByteBuffer.allocate(msgLength);
+            // 如果预取太多容易爆
+            // 如果频繁分配容易造成GC
             if (q.bbPool != null){
                 buf = q.bbPool.allocate(msgLength);
             } else {
@@ -1240,7 +1244,7 @@ public class LSMessageQueue extends MessageQueue {
             head = 0;
             // head.set(0);
             slotSize = 17*1024;
-            maxLength = 400;
+            maxLength = 800;
             capacity = maxLength * slotSize;
             buffer = new byte[capacity];
         }
