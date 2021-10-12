@@ -7,9 +7,11 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.lang.Integer;
+import java.lang.management.LockInfo;
 import java.util.Random;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import java.util.Vector;
 
 import org.apache.log4j.spi.LoggerFactory;
@@ -153,7 +155,7 @@ public class TestSSDqueue {
 	
 			//FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
 			//FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-			SSDqueue mq = new SSDqueue("/mnt/ssd/wyk", "/mnt/pmem/wyk");
+			SSDqueue mq = new SSDqueue("/mnt/nvme/wyk", "/mnt/pmem/wyk");
 			int numOfThreads = 16;
 			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -178,11 +180,12 @@ public class TestSSDqueue {
 			}
 			long elapsedTime = System.nanoTime() - startTime;
 			double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
-			log.info("time: " + elapsedTimeS);
+			log.info("succ! The time: " + elapsedTimeS);
+
+
 			mq.freePmemThread.interrupt();
 			mq.writePmemThread.interrupt();
 
-		
 	}
 
 	public static void main(String[] args) {
