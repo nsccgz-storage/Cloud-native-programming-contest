@@ -82,7 +82,8 @@ public class MQBench {
 	// }
 
 	public static void correctBenchByTrace(String dbPath, String pmDirPath) {
-		MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		//MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		MessageQueue mq = new SSDqueue(dbPath, pmDirPath);
 		int numOfThreads = 8;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -234,7 +235,8 @@ public class MQBench {
 
 
 	public static void perfBenchByTrace(String dbPath, String pmDirPath) {
-		MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		//MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		MessageQueue mq = new SSDqueue(dbPath, pmDirPath);
 		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -347,7 +349,7 @@ public class MQBench {
 				log.info("pass !ok !!");
 			}
 
-			((LSMessageQueue)mq).close();
+			
 
 
 
@@ -361,8 +363,10 @@ public class MQBench {
 		// init();
 		log.setLevel(Level.INFO);
 		// log.setLevel(Level.DEBUG);
-		String dbPath = "/mnt/nvme/mq";
-		String pmDirPath = "/mnt/pmem/mq";
+		String dbPath = "/mnt/nvme/wyk";
+		String pmDirPath = "/mnt/pmem/wyk";
+
+		log.info("test from MQBench");
 
 		// correctBenchByTrace(dbPath, pmDirPath);
 

@@ -31,6 +31,7 @@ import java.util.concurrent.locks.LockSupport;
 import com.intel.pmem.llpl.Accessor;
 import com.intel.pmem.llpl.AnyHeap;
 import com.intel.pmem.llpl.Heap;
+import com.intel.pmem.llpl.HeapException;
 import com.intel.pmem.llpl.MemoryBlock;
 import com.intel.pmem.llpl.MemoryPool;
 
@@ -662,27 +663,35 @@ public class SSDqueue extends MessageQueue {
 
     public class PmemManager{
         Heap heap;
+        AtomicLong size;
+        
         public PmemManager(Heap heap){
             this.heap = heap;
+            //logger.info(heap.size());
+            this.size = new AtomicLong(heap.size());
         }
         long write(ByteBuffer byteBuffer){
+            if(size.get() - byteBuffer.remaining() <= 16) return -1L; // TODO，预留一点，怕有额外空间开销
             MemoryBlock block = heap.allocateMemoryBlock(byteBuffer.remaining());
-            if(block == null) return -1L;
             block.copyFromArray(byteBuffer.array(), 0, 0, byteBuffer.remaining());
+            size.addAndGet(-block.size() - 512);
             return block.handle();
+            
+            
         }
         long write(byte[] array){
-
-            //logger.info("pmemManager write: " + new String(array));
-
+            //logger.info(this.size.get()); // 这一部分不大行啊
+            if(size.get() - array.length <= 1024*1024L*1024L) return -1L; 
             MemoryBlock block = heap.allocateMemoryBlock(array.length);
-            if(block == null) return -1L;
             block.copyFromArray(array, 0, 0, array.length);
+            size.addAndGet(-block.size() - 512);
             return block.handle();
         }
         void free(long handle, int dataSize){
             MemoryBlock block = heap.memoryBlockFromHandle(handle);
+            long blockSize = block.size();
             block.freeMemory();
+            size.addAndGet(blockSize);
         }
         int read(ByteBuffer byteBuffer, long handle, int dataSize){
             MemoryBlock block = heap.memoryBlockFromHandle(handle);
