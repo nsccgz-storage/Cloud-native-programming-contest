@@ -177,9 +177,7 @@ public class SSDqueue extends MessageQueue {
                 ExecutorService executor = Executors.newFixedThreadPool(2);
                 executor.execute(new RWPmem(true));
                 executor.execute(new RWPmem(false));
-
                 executor.shutdown();
-
                 // create new mq    
                 logger.info("create a new queue");
                 
