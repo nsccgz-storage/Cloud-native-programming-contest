@@ -399,7 +399,8 @@ public class LSMessageQueue extends MessageQueue {
 
         // // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
-        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        if (false){
+        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
             q.prefetchBuffer.prefetch();
             if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset-1){
                 log.debug("double write");
@@ -415,8 +416,8 @@ public class LSMessageQueue extends MessageQueue {
 
 
         // 未知队列和热队列需要双写，冷队列不用，冷队列还是预取多一些内容吧
-        if (false){
-        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        // if (false){
+        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
             final MQQueue finalQ = q;
             q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
                @Override
