@@ -110,6 +110,8 @@ public class MyLSMessageQueue extends MessageQueue {
         public int type;
 
         public Long uselessIdx;
+        public PmemManager.MyBlock block;
+        
 
         MQQueue(DataFile dataFile){
             type = 0;
@@ -120,6 +122,8 @@ public class MyLSMessageQueue extends MessageQueue {
             offset2info = new HashMap<>();
 
             uselessIdx = 0L;
+
+            block = pmemManager.createBlock(localThreadId.get());
         }
         MQQueue(){
             type = 0;
@@ -129,6 +133,7 @@ public class MyLSMessageQueue extends MessageQueue {
             offset2info = new HashMap<>();
 
             uselessIdx = 0L;
+            block = pmemManager.createBlock(localThreadId.get());
         }
 
     }
@@ -171,7 +176,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
 
     MyLSMessageQueue(String dbDirPath, String pmDirPath){
-        SSDBench.runStandardBench(dbDirPath);
+        // SSDBench.runStandardBench(dbDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath, pmDirPath);
 
@@ -221,9 +226,10 @@ public class MyLSMessageQueue extends MessageQueue {
             }
 
             boolean initialized = Heap.exists(pmDirPath + "/cache");
-            Heap pmemHeap = initialized ? Heap.openHeap(pmDirPath + "/cache") : Heap.createHeap(pmDirPath + "/cache", 60 * 1024L * 1024L * 1024L);
+            // Heap pmemHeap = initialized ? Heap.openHeap(pmDirPath + "/cache") : Heap.createHeap(pmDirPath + "/cache", 60 * 1024L * 1024L * 1024L);
            
-            pmemManager = new PmemManager(pmemHeap);
+            pmemManager = new PmemManager(pmDirPath + "/cache");
+            // pmemManager = new PmemManager(pmemHeap);
             // init prefetchThreads
             numOfPrefetchThreads = mqConfig.numOfThreads;
             executor = Executors.newFixedThreadPool(numOfPrefetchThreads);
@@ -361,10 +367,11 @@ public class MyLSMessageQueue extends MessageQueue {
             // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
             // mqTopic = new MQTopic(topic, dataFileId);
             // mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]); 
-            topic2object.put(topic, mqTopic);
+            
             int taskId = threadId % numOfPrefetchThreads;
             // 那我也每个 MQTopic 直接共用一个预取队列？
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId], prefetchTasks[taskId]);
+            topic2object.put(topic, mqTopic);
             // 
 
         }
@@ -386,13 +393,19 @@ public class MyLSMessageQueue extends MessageQueue {
 
         int size = data.remaining();
         // 先双写
-        data.mark();
-        byte[] writePmemData = data.array();
-        data.reset();
-
-        long handle = pmemManager.write(writePmemData);
         
+        data.mark();
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
+
+        data.reset();
+        // byte[] writePmemData = new byte[data.remaining()];
+        
+        // data.get(writePmemData);
+        
+
+        // long handle = pmemManager.write(writePmemData);
+        long handle = q.block.put(data);
+        //if(handle == -1)log.error("space is full");
 
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
@@ -418,8 +431,8 @@ public class MyLSMessageQueue extends MessageQueue {
         // （TODO:如果后期发现不热了，就把空间释放出来？）
         // 有40%的getRange能够命中这个cache
         // 估计要采用这种方案
-
-        int dataSize = data.capacity();
+        data.reset();
+        int dataSize = data.remaining();
         ByteBuffer hotDataBuf;
         if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
             hotDataBuf = ByteBuffer.allocate(dataSize);
@@ -502,10 +515,11 @@ public class MyLSMessageQueue extends MessageQueue {
             pos = q.offset2position.get(intCurOffset);
             long handle = q.offset2info.get(curOffset).handle;
             int size = q.offset2info.get(curOffset).dataSize;
-            if(handle != -1){
-                ByteBuffer buf = ByteBuffer.allocate(size);
-                pmemManager.read(buf, handle, size);
-                buf.flip();
+            //handle = -1L;
+            if(handle != -1L){
+                // ByteBuffer buf = ByteBuffer.allocate(size);
+                ByteBuffer buf = ByteBuffer.wrap(q.block.get(handle, size));
+                // buf.flip(); // TODO: check wrap meaning
                 ret.put(i, buf);
             }
             // 判断是否在 PMEM 中，若是，则从 PMEM 中读
@@ -1098,7 +1112,7 @@ public class MyLSMessageQueue extends MessageQueue {
                         for(int i=0; i<size; ++i){
                             WritePmemTask curTask = wPmemTaskConcurrentQueue.poll();
                             // 从 SSD 上读入数据并写入到 PMEM 上。               
-                            for(long k=curTask.startIdx; k<curTask.loadNum; ++k){
+                            for(long k=curTask.startIdx; k<curTask.loadNum && k + curTask.startIdx <= curTask.q.maxOffset ; ++k){
                               
                                 // useless task:
                                 long uselessIdx = curTask.q.uselessIdx;
@@ -1113,9 +1127,9 @@ public class MyLSMessageQueue extends MessageQueue {
                                 
                                 // 可以多次判断 uselessIdx 和 k 的值
                                 // TODO: 写到 PMEM
-                                long handle = pmemManager.write(byteBuffer);
+                                long handle = curTask.q.block.put(byteBuffer);
                                 // 更新 DRAM 中的 hashMap
-                                if(handle != -1L){
+                                if(handle == -1L){
                                     curTask.q.offset2info.get(k).handle = handle;
                                 }
                                 
@@ -1135,48 +1149,48 @@ public class MyLSMessageQueue extends MessageQueue {
         }
         
     }
-    public class PmemManager{
-        Heap heap;
-        AtomicLong size;
+    // public class PmemManager{
+    //     Heap heap;
+    //     AtomicLong size;
         
-        public PmemManager(Heap heap){
-            this.heap = heap;
-            //logger.info(heap.size());
-            this.size = new AtomicLong(heap.size());
-        }
-        long write(ByteBuffer byteBuffer){
-            if(size.get() - byteBuffer.remaining() <= 1*1024L*1024L*1024L) return -1L; // TODO，预留一点，怕有额外空间开销
-            MemoryBlock block = heap.allocateMemoryBlock(byteBuffer.remaining());
-            block.copyFromArray(byteBuffer.array(), 0, 0, byteBuffer.remaining());
-            size.addAndGet(-block.size() - 1024);
-            return block.handle();
+    //     public PmemManager(Heap heap){
+    //         this.heap = heap;
+    //         //logger.info(heap.size());
+    //         this.size = new AtomicLong(heap.size());
+    //     }
+    //     long write(ByteBuffer byteBuffer){
+    //         if(size.get() - byteBuffer.remaining() <= 1*1024L*1024L*1024L) return -1L; // TODO，预留一点，怕有额外空间开销
+    //         MemoryBlock block = heap.allocateMemoryBlock(byteBuffer.remaining());
+    //         block.copyFromArray(byteBuffer.array(), 0, 0, byteBuffer.remaining());
+    //         size.addAndGet(-block.size() - 1024);
+    //         return block.handle();
             
             
-        }
-        long write(byte[] array){
-            if(size.get() - array.length <= 1*1024L*1024L*1024L) return -1L; 
-            MemoryBlock block = heap.allocateMemoryBlock(array.length);
-            block.copyFromArray(array, 0, 0, array.length);
-            size.addAndGet(-block.size() - 1024);
-            return block.handle();
-        }
-        void free(long handle, int dataSize){
-            MemoryBlock block = heap.memoryBlockFromHandle(handle);
-            long blockSize = block.size();
-            block.freeMemory();
-            size.addAndGet(blockSize);
-        }
-        int read(ByteBuffer byteBuffer, long handle, int dataSize){
-            MemoryBlock block = heap.memoryBlockFromHandle(handle);
-            byte[] dstArray = new byte[dataSize];
-            block.copyToArray(0, dstArray, 0, dataSize);
-            byteBuffer.put(dstArray);
+    //     }
+    //     long write(byte[] array){
+    //         if(size.get() - array.length <= 1*1024L*1024L*1024L) return -1L; 
+    //         MemoryBlock block = heap.allocateMemoryBlock(array.length);
+    //         block.copyFromArray(array, 0, 0, array.length);
+    //         size.addAndGet(-block.size() - 1024);
+    //         return block.handle();
+    //     }
+    //     void free(long handle, int dataSize){
+    //         MemoryBlock block = heap.memoryBlockFromHandle(handle);
+    //         long blockSize = block.size();
+    //         block.freeMemory();
+    //         size.addAndGet(blockSize);
+    //     }
+    //     int read(ByteBuffer byteBuffer, long handle, int dataSize){
+    //         MemoryBlock block = heap.memoryBlockFromHandle(handle);
+    //         byte[] dstArray = new byte[dataSize];
+    //         block.copyToArray(0, dstArray, 0, dataSize);
+    //         byteBuffer.put(dstArray);
 
-            //logger.info("pmemManager read: " + new String(byteBuffer.array()));
+    //         //logger.info("pmemManager read: " + new String(byteBuffer.array()));
 
-            return dataSize;
-        }
-    }
+    //         return dataSize;
+    //     }
+    // }
 
 
     private TestStat testStat;
@@ -1204,6 +1218,12 @@ public class MyLSMessageQueue extends MessageQueue {
             int coldQueueCount;
             int hotQueueCount;
             Long writeBytes;
+
+            int coldReadPmemCount;
+            int coldReadSSDCount;
+            
+
+
             public int[] bucketBound;
             public int[] bucketCount;
 
@@ -1222,6 +1242,9 @@ public class MyLSMessageQueue extends MessageQueue {
                 hotQueueCount = 0;
                 reported = new AtomicBoolean();
                 reported.set(false);
+
+                coldReadPmemCount = 0;
+                coldReadPmemCount = 0;
 
                 bucketBound = new int[19];
                 bucketBound[0] = 100;

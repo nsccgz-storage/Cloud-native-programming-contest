@@ -19,7 +19,7 @@
 set -x
 
 #DBDIR=/mnt/nvme/mq
-DBDIR=/mnt/nvme/wyk
+DBDIR=/mnt/ssd/wyk
 PMEMDIR=/mnt/pmem/wyk
 
 ulimit -s unlimited

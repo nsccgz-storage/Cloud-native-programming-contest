@@ -40,7 +40,7 @@ public class DefaultMessageQueueImpl extends MessageQueue {
         // SSDBench.runStandardBench(dirPath);
         // String dirPath = "/mnt/ssd/wxr";
         // ssdQueue = new SSDqueue(dirPath);
-        mq = new LSMessageQueue(dirPath, pmDirPath);
+        mq = new MyLSMessageQueue(dirPath, pmDirPath);
 
     }
     @Override

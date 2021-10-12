@@ -80,6 +80,7 @@ public class Main {
 
         
         //LockSupport.unpark(ssdQueue.freePmemThread);
+        System.out.println("hello world");
 
         String dbDirPath = "/mnt/ssd/wyk";
         String pmDirPath = "/mnt/pmem/wyk";

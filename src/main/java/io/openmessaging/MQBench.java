@@ -2,7 +2,7 @@ package io.openmessaging;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-
+import java.net.ConnectException;
 import java.nio.ByteBuffer;
 import java.security.cert.TrustAnchor;
 import java.util.Map;
@@ -83,7 +83,8 @@ public class MQBench {
 
 	public static void correctBenchByTrace(String dbPath, String pmDirPath) {
 		//MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
-		MessageQueue mq = new SSDqueue(dbPath, pmDirPath);
+		// MessageQueue mq = new SSDqueue(dbPath, pmDirPath);
+		MessageQueue mq = new MyLSMessageQueue(dbPath, pmDirPath);
 		int numOfThreads = 8;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -129,6 +130,7 @@ public class MQBench {
 		Vector<Message> step1Msgs = new Vector<>();
 		Vector<Message> step2Msgs = new Vector<>();
 		Vector<Message> msgs = step1Msgs;
+
 		while ((line = reader.readLine()) != null) {
 			// log.debug(line);
 			String item[] = line.split(",");
@@ -236,7 +238,8 @@ public class MQBench {
 
 	public static void perfBenchByTrace(String dbPath, String pmDirPath) {
 		//MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
-		MessageQueue mq = new SSDqueue(dbPath, pmDirPath);
+		// MessageQueue mq = new SSDqueue(dbPath, pmDirPath);
+		MessageQueue mq = new MyLSMessageQueue(dbPath, pmDirPath);
 		int numOfThreads = 40;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -282,8 +285,10 @@ public class MQBench {
 			Vector<Message> step1Msgs = new Vector<>();
 			Vector<Message> step2Msgs = new Vector<>();
 			Vector<Message> msgs = step1Msgs;
+			int num = 0;
 			while ((line = reader.readLine()) != null) {
 				// log.debug(line);
+				if(num++ % 7 != 0) continue;
 				String item[] = line.split(",");
 				// log.debug(item[0]);
 
@@ -363,7 +368,8 @@ public class MQBench {
 		// init();
 		log.setLevel(Level.INFO);
 		// log.setLevel(Level.DEBUG);
-		String dbPath = "/mnt/nvme/wyk";
+		//String dbPath = "/mnt/nvme/wyk";
+		String dbPath = "/mnt/ssd/wyk";
 		String pmDirPath = "/mnt/pmem/wyk";
 
 		log.info("test from MQBench");
