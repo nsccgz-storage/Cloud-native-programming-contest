@@ -24,14 +24,18 @@ public class Main {
 
         // Map<Integer, ByteBuffer> res = mq.getRange("12345", 123, 0L, 100);
 
-
-        String dirPath = "/home/ubuntu/test";
-        SSDqueue ssdQueue = new SSDqueue(dirPath);
+        DefaultTestMessageQueueImpl ssdQueue = new DefaultTestMessageQueueImpl();
+//        String dirPath = "/home/ubuntu/test";
+//        SSDqueue ssdQueue = new SSDqueue(dirPath);
         String t = "1234567890123456789012345678901234567890";
         System.out.println( t.hashCode());
+        t = "a"+t;
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        t = "b"+t;
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        t = "c"+t;
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
+        t = "d"+t;
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));
         System.out.println(ssdQueue.append("12345", 123, ByteBuffer.wrap(t.getBytes())));

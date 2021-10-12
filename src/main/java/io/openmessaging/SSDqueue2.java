@@ -101,7 +101,7 @@ public class SSDqueue2 extends MessageQueue {
             offset2position = new ArrayList<>(512);
             offset2Size = new ArrayList<>(512);
             df = dataFile;
-            block = pmem.createBlock(localThreadId.get());
+//            block = pmem.createBlock(localThreadId.get());
             prefetchFuture = null;
         }
         MQQueue(){
@@ -110,87 +110,115 @@ public class SSDqueue2 extends MessageQueue {
             maxOffset = 0L;
             offset2position = new ArrayList<>(512);
             offset2Size = new ArrayList<>(512);
+//            block = pmem.createBlock(localThreadId.get());
             prefetchFuture = null;
         }
-        public void prefetch(){
-            prefetchFuture = CompletableFuture.supplyAsync(this::doAsyncPrefetch,df.prefetchThread);
-        }
-        public int doAsyncPrefetch(){
-            if(consumeOffset > prefetchOffset){
-                // 当getRange需要读SSD时,consumeOffset会比prefetchOffset大
-                // 此时需要重置 prefetch
-                prefetchOffset = consumeOffset;
-            }
-            if(maxOffset < prefetchOffset){ // 说明最新写入的数据都在缓冲区了 // Check maxOffset
-                log.debug("nothing to prefetch or all msgs has been prefetched");
-                return 0;
-            }
-            long length = prefetchOffset - consumeOffset;
-            // maxOffset-1表示最新写入的数据，保存在DRAM所以不考虑fetch?
-            int prefetchNum = (int) Math.min(maxReaderMsgNum-length, maxOffset-1-prefetchOffset);
-            if (prefetchNum <= 0){
-                log.debug("the prefetch buffer is full");
-                return 0;
-            }
-            for(int i = 0;i < prefetchNum;i++){
-                long pos = offset2position.get((int) prefetchOffset);
-                ByteBuffer buf = df.read(pos);
-                buf.flip();
-                if(buf.remaining() > block.getRemainSize()){
-                    boolean flag = block.doubleCapacity();
-                    if(!flag){
-                        maxReaderMsgNum--; // TODO：试试看能否避免频繁扩容，最后会不会缩小得太小？
-                        log.debug("not reach maxReaderNum but chunk is full, maxReaderNum="+maxReaderMsgNum);
-//                        break;
-                        return i; // 返回fetch的个数
-                    }
-                }
-                block.put(buf.array()); // TODO:应该可以这么写，这里考虑到buf马上就无效了
-                prefetchOffset++;
-            }
-            return prefetchNum;
+//        public void prefetch(){
+//            prefetchFuture = CompletableFuture.supplyAsync(this::doAsyncPrefetch,df.prefetchThread);
+//            // 如果执行成功:
+////            prefetchFuture.thenAccept((result) -> {
+////                System.out.println("price: " + result);
+////            });
+//            // 如果执行异常:
+//            prefetchFuture.exceptionally((e) -> {
+//                e.printStackTrace();
+//                return null;
+//            });
+//        }
+//        public int doAsyncPrefetch(){
+//            if(consumeOffset > prefetchOffset){
+//                // 当getRange需要读SSD时,consumeOffset会比prefetchOffset大
+//                // 此时需要重置 prefetch
+//                prefetchOffset = consumeOffset;
+//            }
+//            if(maxOffset < prefetchOffset){ // 说明最新写入的数据都在缓冲区了 // Check maxOffset
+//                log.debug("nothing to prefetch or all msgs has been prefetched");
+//                return 0;
+//            }
+//            long length = prefetchOffset - consumeOffset;
+//            // maxOffset-1表示最新写入的数据，保存在DRAM所以不考虑fetch?
+//            int prefetchNum = (int) Math.min(maxReaderMsgNum-length, maxOffset-1-prefetchOffset);
+//            if (prefetchNum <= 0){
+//                log.debug("the prefetch buffer is full");
+//                return 0;
+//            }
+//            for(int i = 0;i < prefetchNum;i++){
+//                    long pos = offset2position.get((int) prefetchOffset);
+//                    ByteBuffer buf = df.read(pos);
+//                    buf.flip();
+//                    if(buf.remaining() > block.getRemainSize()){
+//                        boolean flag = block.doubleCapacity();
+//                        if(!flag){
+//                            maxReaderMsgNum--; // TODO：试试看能否避免频繁扩容，最后会不会缩小得太小？
+//                            log.debug("not reach maxReaderNum but chunk is full, maxReaderNum="+maxReaderMsgNum);
+////                        break;
+//                            return i; // 返回fetch的个数
+//                        }
+//                    }
+//                    block.put(buf.array()); // TODO:应该可以这么写，这里考虑到buf马上就无效了
+//                    prefetchOffset++;
+//            }
+//            return prefetchNum;
+//        }
+
+        @Override
+        public String toString() {
+            return "MQQueue{" +
+                    "maxOffset=" + maxOffset +
+                    ", \noffset2position=" + offset2position +
+                    ", \noffset2Size=" + offset2Size +
+                    ", \ndf=" + df +
+                    ", \nmaxOffsetData=" + maxOffsetData +
+                    ", type=" + type +
+                    ", consumeOffset=" + consumeOffset +
+                    ", prefetchOffset=" + prefetchOffset +
+                    ", prefetchFuture=" + prefetchFuture +
+                    ", block=" + block +
+                    ", maxReaderMsgNum=" + maxReaderMsgNum +
+                    '}';
         }
 
-        public void directAddData(ByteBuffer data){
-            if(block.getRemainSize()>=data.remaining()){
-                block.put(data);
-                prefetchOffset++;
-            }
-        }
+//        public void directAddData(ByteBuffer data){
+//            if(block.getRemainSize()>=data.remaining()){
+//                block.put(data);
+//                prefetchOffset++;
+//            }
+//        }
 
-        public int consume(Map<Integer, ByteBuffer> ret, long offset,  int fetchNum){
-            // 始终假定 offset >= q.consumeOffset
-            if (offset > consumeOffset){
-                if ( offset < prefetchOffset){
-                    // 说明当前要拿的数据还在buf中
-                    // 先移动一下head，让队列符合 consumeOffset = offset 的假定
-                    int size = 0;
-                    for (int i = (int) consumeOffset; i < offset; i++){
-                        size += offset2Size.get(i);
-                    }
-                    block.headForward(size);
-                    consumeOffset = offset;
-                } else {
-                    // 说明当前要拿的数据不在buf中
-                    block.reset();
-                    // TODO: consumeOffset & prefetchOffset 记得调整
-                    consumeOffset = offset;
-                    return 0;
-                }
-            }
-            // read from consume offset
-            int consumeNum = Math.min(fetchNum, (int)(prefetchOffset-consumeOffset));
-//            int dataSize = 0;
-            byte[] bytes;
-            for (int i = 0; i < consumeNum; i++){
-                int tmp = offset2Size.get((int) (offset+i));
-//                dataSize += tmp;
-                ByteBuffer buffer = ByteBuffer.allocate(tmp);
-                buffer.put(block.get(tmp));
-                ret.put(i, buffer);
-            }
-            return consumeNum;
-        }
+//        public int consume(Map<Integer, ByteBuffer> ret, long offset,  int fetchNum){
+//            // 始终假定 offset >= q.consumeOffset
+//            if (offset > consumeOffset){
+//                if ( offset < prefetchOffset){
+//                    // 说明当前要拿的数据还在buf中
+//                    // 先移动一下head，让队列符合 consumeOffset = offset 的假定
+//                    int size = 0;
+//                    for (int i = (int) consumeOffset; i < offset; i++){
+//                        size += offset2Size.get(i);
+//                    }
+//                    block.headForward(size);
+//                    consumeOffset = offset;
+//                } else {
+//                    // 说明当前要拿的数据不在buf中
+//                    block.reset();
+//                    // TODO: consumeOffset & prefetchOffset 记得调整
+//                    consumeOffset = offset;
+//                    return 0;
+//                }
+//            }
+//            // read from consume offset
+//            int consumeNum = Math.min(fetchNum, (int)(prefetchOffset-consumeOffset));
+////            int dataSize = 0;
+//            byte[] bytes;
+//            for (int i = 0; i < consumeNum; i++){
+//                int tmp = offset2Size.get((int) (offset+i));
+////                dataSize += tmp;
+//                ByteBuffer buffer = ByteBuffer.allocate(tmp);
+//                buffer.put(block.get(tmp));
+//                buffer.flip();
+//                ret.put(i, buffer);
+//            }
+//            return consumeNum;
+//        }
     }
 
 
@@ -213,7 +241,7 @@ public class SSDqueue2 extends MessageQueue {
     DataFile[] dataFiles;
     int numOfDataFiles;
     ConcurrentHashMap<String, MQTopic> topic2object;
-    PmemManager pmem;
+//    PmemManager pmem;
 
     SSDqueue2(String dbDirPath, String pmDirPath, MQConfig config){
         // SSDBench.runStandardBench(dbDirPath);
@@ -223,7 +251,7 @@ public class SSDqueue2 extends MessageQueue {
 
 
     SSDqueue2(String dbDirPath, String pmDirPath){
-        SSDBench.runStandardBench(dbDirPath);
+//        SSDBench.runStandardBench(dbDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath, pmDirPath);
 
@@ -255,8 +283,10 @@ public class SSDqueue2 extends MessageQueue {
 
             log.info("Initializing metadata file");
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
+
             if (crash) {
                 log.info("recover !!");
+                log.info(metadataFile.getAbsolutePath());
                 System.exit(-1);
                 // recover();
             }
@@ -270,7 +300,7 @@ public class SSDqueue2 extends MessageQueue {
                 testStat = new TestStat(dataFiles);
             }
 
-            pmem = new PmemManager(pmDirPath);
+//            pmem = new PmemManager(pmDirPath);
 
         } catch (IOException ie) {
             ie.printStackTrace();
@@ -408,6 +438,9 @@ public class SSDqueue2 extends MessageQueue {
             int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
             // q = new MQQueue(dataFileId);
             q = new MQQueue(dataFiles[dataFileId]);
+//            if(q.block == null){
+//                log.error("current queue num ="+mqTopic.id2queue.size());
+//            }
             mqTopic.id2queue.put(queueId, q);
             if (mqConfig.useStats){
                 testStat.incQueueCount();
@@ -444,11 +477,11 @@ public class SSDqueue2 extends MessageQueue {
 
         // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
-        if((q.type == MQQueue.UNKNOWN)||(q.type == MQQueue.HOT)){
-            q.prefetch();
-            if(q.prefetchOffset == q.maxOffset-1)
-                q.directAddData(data);
-        }
+//        if((q.type == MQQueue.UNKNOWN)||(q.type == MQQueue.HOT)){
+//            q.prefetch();
+//            if(q.prefetchOffset == q.maxOffset-1)
+//                q.directAddData(data);
+//        }
 
         data.reset();
         int dataSize = data.remaining();
@@ -496,38 +529,40 @@ public class SSDqueue2 extends MessageQueue {
 
         int fetchStartIndex = 0;
         // // 确保和这个queue相关的异步任务已完成
-        if (q.prefetchFuture != null){
-            while (!q.prefetchFuture.isDone()){
-                try {
-                    Thread.sleep(0, 10000);
-                } catch (Throwable ie){
-                    ie.printStackTrace();
-                }
-            }
-            q.prefetchFuture = null;
-        }
-
-
-        int prefetchNum = q.consume(ret,offset,fetchNum); // consume完能保证consumeOffset == offset
-        fetchStartIndex += prefetchNum;
-        q.consumeOffset += prefetchNum;
+//        if (q.prefetchFuture != null){
+////            log.error("before prefetch "+q);
+//            while (!q.prefetchFuture.isDone()){
+//                try {
+//                    Thread.sleep(0, 10000);
+//                } catch (Throwable ie){
+//                    ie.printStackTrace();
+//                }
+//            }
+////            log.error("after prefetch "+q);
+//            q.prefetchFuture = null;
+//        }
+//        log.error(String.format("fetchStartIndex = %d, consumeOffset = %d, prefetchOffset = %d",fetchStartIndex,q.consumeOffset, q.prefetchOffset));
+//        int prefetchNum = q.consume(ret,offset,fetchNum); // consume完能保证consumeOffset == offset
+//        fetchStartIndex += prefetchNum;
+//        q.consumeOffset += prefetchNum;
+//        log.error(String.format("(%s,%d): prefetchNum = %d, fetchStartIndex = %d, consumeOffset = %d, prefetchOffset = %d", topic, queueId,prefetchNum, fetchStartIndex,q.consumeOffset, q.prefetchOffset));
 
         // 分类
-        if (q.type == MQQueue.UNKNOWN){
-            if (offset == 0){
-                q.type = MQQueue.COLD; // cold
-                if (mqConfig.useStats){
-                    testStat.incColdQueueCount();
-                }
-                q.maxReaderMsgNum += 4;
-            } else {
-                q.type = MQQueue.HOT;
-                if (mqConfig.useStats){
-                    testStat.incHotQueueCount();
-                }
-                q.block.freeSpace();
-            }
-        }
+//        if (q.type == MQQueue.UNKNOWN){
+//            if (offset == 0){
+//                q.type = MQQueue.COLD; // cold
+//                if (mqConfig.useStats){
+//                    testStat.incColdQueueCount();
+//                }
+//                q.maxReaderMsgNum += 4;
+//            } else {
+//                q.type = MQQueue.HOT;
+//                if (mqConfig.useStats){
+//                    testStat.incHotQueueCount();
+//                }
+////                q.block.freeSpace();
+//            }
+//        }
         // TODO:想清楚对冷热队列的读&写逻辑！！！
 
         if(mqConfig.useStats){
@@ -544,10 +579,10 @@ public class SSDqueue2 extends MessageQueue {
 
         if (mqConfig.useStats){
             testStat.incReadSSDCount(fetchNum-fetchStartIndex);
-            if (q.type == 1){
+            if (q.type == MQQueue.HOT){
                 // hot
                 testStat.incHotReadSSDCount(fetchNum-fetchStartIndex);
-            } else if (q.type == 2){
+            } else if (q.type == MQQueue.COLD){
                 // cold
                 testStat.incColdReadSSDCount(fetchNum-fetchStartIndex);
             }
@@ -558,9 +593,9 @@ public class SSDqueue2 extends MessageQueue {
 
         // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
         // 期望读SSD的时间可以覆盖掉异步任务的时间
-        if (q.type == MQQueue.COLD){
-            q.prefetch();
-        }
+//        if (q.type == MQQueue.COLD){
+//            q.prefetch();
+//        }
 
         DataFile df = mqTopic.df;
 
@@ -570,6 +605,7 @@ public class SSDqueue2 extends MessageQueue {
             int intCurOffset = (int)curOffset;
             pos = q.offset2position.get(intCurOffset);
             ByteBuffer buf = df.read(pos);
+            buf.flip(); // ?
             if (buf != null){
                 ret.put(i, buf);
             }
@@ -1036,10 +1072,12 @@ public class SSDqueue2 extends MessageQueue {
 
             readMeta.clear();
             try {
-                int ret;
-                ret = dataFileChannel.read(readMeta, position);
-                readMeta.position(6);
-                int dataLength = readMeta.getShort();
+                int ret = dataFileChannel.read(readMeta, position);
+//                readMeta.position(6);
+                readMeta.flip();
+                short t = readMeta.getShort();int tt = readMeta.getInt();
+                short dataLength = readMeta.getShort();
+//                if(dataLength < 0)log.error("data length < 0");
                 ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
                 // log.debug(ret);

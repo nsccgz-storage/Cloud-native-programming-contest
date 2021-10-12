@@ -1,6 +1,7 @@
 package io.openmessaging;
 
 import com.intel.pmem.llpl.MemoryPool;
+import org.apache.log4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -9,7 +10,8 @@ import java.util.HashMap;
 public class PmemManager {
     final long MAX_PMEM_SIZE = 60*1024L*1024L*1024L; // 60GB
     final long CHUNK_SIZE = 1024L*1024L*1024L; // 1GiB 每个线程1个chunk?
-    final long PAGE_SIZE = 256*1024L; // 64KiB
+    final long PAGE_SIZE = 128*1024L; // 64KiB
+    private static final Logger logger = Logger.getLogger(SSDBench.class);
 
     static int[] depthArray;
     HashMap<Integer, Integer> size2Depth;
@@ -33,11 +35,13 @@ public class PmemManager {
             size2Depth.put(tmp, i);
             tmp /= 2;
         }
+        logger.info(String.format("max depth = %d",maxDepth));
     }
 
 
     public MyBlock createBlock(int id){
         MyBlock block = new MyBlock((int)PAGE_SIZE, chunkList[id]);
+//        if(block.index == -1)return null;
         return block; // ensure always allocate successfully?
     }
 
@@ -51,11 +55,14 @@ public class PmemManager {
         // 考虑初始化带来的开销
         public Chunk(int id){
             memoryMap = new ArrayList<>((int) (Math.pow(2, maxDepth+1)-1)); // 2^(maxDepth+1)-1
+            int width = 1;
             for(int i = 0;i <= maxDepth;i++){
-                for(int j = 0;j < i+1;j++){
-                    memoryMap.add(i+1);
+                for(int j = 0;j < width;j++){
+                    memoryMap.add(i);
                 }
+                width <<= 1;
             }
+//            logger.info(String.format("max depth = %d, memoryMap size = %d",maxDepth,memoryMap.size()));
             handle = id * CHUNK_SIZE;
         }
 
@@ -67,17 +74,20 @@ public class PmemManager {
 //            size = normalizeCapacity(size);
 //            if(size > depthArray.get(0)){} // TODO：分配的空间过大与过小的情形
 
-            int depth;
-            for(depth = 0;depth <= maxDepth;depth++){
-                if(size == depthArray[depth])break;
-            }
+//            int depth;
+//            for(depth = 0;depth <= maxDepth;depth++){
+//                if(size == depthArray[depth])break;
+//            }
+            int depth = size2Depth.get(size);
 
             int index = 0, curDepth = 0;
             while(curDepth <= depth){
-                if(memoryMap.get(index) > depth)return -1;
+                if(memoryMap.get(index) > depth){
+                    logger.error(String.format("Now index = %d, memory at index = %d, depth = %d",index,memoryMap.get(index),depth));
+                    return -1;
+                }
 
                 if(memoryMap.get(index) == depth && curDepth == depth){
-                    // TODO: allocate this block
                     int res = index;
                     memoryMap.set(index, maxDepth+1);
                     // update parent node
@@ -87,7 +97,9 @@ public class PmemManager {
                     }
                     return res; // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
                 }
-                else if(memoryMap.get(index*2+1) <= depth){
+//                if(curDepth == depth)break;
+//                logger.info(String.format("depth = %d, index = %d", depth, index));
+                else if(curDepth+1 <= depth && memoryMap.get(index*2+1) <= depth){
                     index = index*2+1;
                 }
                 else{
@@ -115,6 +127,11 @@ public class PmemManager {
         }
 
         public long getAddress(int index, int size){
+            long tmp = (index + 1 - (1L << size2Depth.get(size)))*size + handle;
+            if(tmp < 0){
+                // index = -1 !!!
+                logger.info(String.format("index = %d, size = %d depth = %d handle of chunk = %d", index, size, size2Depth.get(size), handle));
+            }
             return (index + 1 - (1L << size2Depth.get(size)))*size + handle; // FIXME: check size is normalized
         }
 
@@ -161,7 +178,13 @@ public class PmemManager {
             this.size = size;
             chunk = c;
             index = chunk.allocate(size); // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
-            handle = chunk.getAddress(index, size);
+            if(index != -1) {
+                handle = chunk.getAddress(index, size);
+            }
+            else {
+                logger.info(String.format("allocate space failed")); // handle < 0 !!!
+                handle = -1;
+            }
         }
 
         public boolean doubleCapacity(){
@@ -231,6 +254,9 @@ public class PmemManager {
             buffer.get(bytes);
             int position = (int) tail;
             if(size - tail >= bufLen) {
+                if(tail + handle < 0){
+                    logger.info(String.format("tail = %d, handle = %d", tail, handle)); // handle < 0 !!!
+                }
                 copyFromArray(bytes, 0, tail, bytes.length);
                 tail += bufLen;
             }else{

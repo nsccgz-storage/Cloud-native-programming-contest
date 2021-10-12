@@ -129,8 +129,11 @@ public class MQBench {
             Vector<Message> step1Msgs = new Vector<>();
             Vector<Message> step2Msgs = new Vector<>();
             Vector<Message> msgs = step1Msgs;
+            int num = 0;
             while ((line = reader.readLine()) != null) {
                 // log.debug(line);
+                num++;
+                if(num % 10 != 1){continue;}
                 String item[] = line.split(",");
                 // log.debug(item[0]);
 
@@ -207,6 +210,7 @@ public class MQBench {
                                 log.error("j : "+ j);
                                 log.error(msg.results.get(j));
                                 log.error(trueResult.get(j));
+                                log.error(msg.toString());
                                 System.exit(-1);
                             }
                         }
@@ -363,8 +367,8 @@ public class MQBench {
         // init();
         log.setLevel(Level.INFO);
         // log.setLevel(Level.DEBUG);
-        String dbPath = "/mnt/ssd/wxr";
-        String pmDirPath = "/mnt/pmem/wxr";
+        String dbPath = "/mnt/nvme/wxr";
+        String pmDirPath = "/mnt/pmem/wxr/mq";
 
         correctBenchByTrace(dbPath, pmDirPath);
 
