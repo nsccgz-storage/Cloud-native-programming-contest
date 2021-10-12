@@ -418,6 +418,7 @@ public class LSMessageQueue extends MessageQueue {
         // 未知队列和热队列需要双写，冷队列不用，冷队列还是预取多一些内容吧
         // if (false){
         if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+            final ByteBuffer finalData = data.duplicate();
             final MQQueue finalQ = q;
             q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
                @Override
@@ -433,7 +434,7 @@ public class LSMessageQueue extends MessageQueue {
                            // 如果目前要写入的数据刚好就是下一个要预取的内容
                            // 双写
                            data.reset();
-                           q.prefetchBuffer.directAddData(data);
+                           q.prefetchBuffer.directAddData(finalData);
                            // TODO: 担心data在异步中途被改
                        }
                    }
