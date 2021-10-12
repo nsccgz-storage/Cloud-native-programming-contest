@@ -2,6 +2,7 @@ package io.openmessaging;
 
 import com.intel.pmem.llpl.MemoryPool;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -39,6 +40,8 @@ public class PmemManager {
         MyBlock block = new MyBlock((int)PAGE_SIZE, chunkList[id]);
         return block; // ensure always allocate successfully?
     }
+
+
     
 
     private class Chunk{
@@ -114,9 +117,7 @@ public class PmemManager {
         public long getAddress(int index, int size){
             return (index + 1 - (1L << size2Depth.get(size)))*size + handle; // FIXME: check size is normalized
         }
-//        public int doubleCapacity(int index, int originSize){
 
-//        }
     }
 
 //    public void write(byte[] bytes, long handle, int dataSize){
@@ -163,8 +164,8 @@ public class PmemManager {
             handle = chunk.getAddress(index, size);
         }
 
-        public int doubleCapacity(){
-            if(index == 0)return -1;
+        public boolean doubleCapacity(){
+            if(index == 0)return false;
             // 检查相邻的结点是否可以分配
             int neighbor = index % 2 == 0 ? index-1 : index+1;
             int depth = size2Depth.get(size);
@@ -181,7 +182,7 @@ public class PmemManager {
 //                }
 //            } else{
                 int newIndex = chunk.allocate(size*2);
-                if(newIndex == -1)return -1;
+                if(newIndex == -1)return false;
                 long srcOffset = chunk.getAddress(index, size);
                 long dstOffset = chunk.getAddress(newIndex, size*2);
                 if(head <= tail){
@@ -201,15 +202,44 @@ public class PmemManager {
             index = newIndex;
             size *= 2;
             handle = chunk.getAddress(index, size);
-            return index;
+            return true;
+        }
+
+        public void headForward(int length){
+            head = (head + length)%size;
+            // check head ?
         }
 
         public void freeSpace(){
             chunk.free(index);
         }
 
+        public void reset(){
+            head = 0L;
+            tail = 0;
+        }
+
         public long getRemainSize(){
             return (head - tail - 1 + size)%size;
+        }
+
+        public int put(ByteBuffer buffer){
+            if(buffer.remaining() > getRemainSize())return -1; // block 空间已满
+
+            int bufLen = buffer.remaining();
+            byte[] bytes = new byte[bufLen]; // TODO: 不可避免多一次拷贝，是否能优化
+            buffer.get(bytes);
+            int position = (int) tail;
+            if(size - tail >= bufLen) {
+                copyFromArray(bytes, 0, tail, bytes.length);
+                tail += bufLen;
+            }else{
+                int tmp = (int)(size - tail);
+                copyFromArray(bytes, 0, tail, tmp);
+                copyFromArray(bytes, tmp, 0, bytes.length-tmp);
+                tail = bufLen - tmp;
+            }
+            return position;
         }
 
         // TODO: 关注 handle是否为绝对地址
@@ -228,7 +258,24 @@ public class PmemManager {
             }
             return position;
         }
-//           // TODO: 关注 handle是否为绝对地址
+        // TODO: 关注 handle是否为绝对地址
+        // TODO: 确保 head == offset
+        public byte[] get(int length){
+//            if((head<=offset&&offset<tail)||!(tail<=offset&&offset<head)) { // check bound
+            byte[] bytes = new byte[length];
+            if (head + length <= size) {
+                copyToArray(head, bytes, 0, length);
+            } else {
+                int tmp = (int)(size - head);
+                copyToArray(head, bytes, 0, tmp);
+                copyToArray(0, bytes, tmp, length - tmp);
+            }
+            head = (head + length) % size;
+            return bytes;
+//            }else{
+//                return null;
+//            }
+        }
         public byte[] get(long offset, int length){
 //            if((head<=offset&&offset<tail)||!(tail<=offset&&offset<head)) { // check bound
                 byte[] bytes = new byte[length];

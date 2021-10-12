@@ -113,9 +113,9 @@ public class TestSSDqueue {
 		log.info("begin append!");
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
-			
+
 			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-			
+
 			if (msg.getOffset != msg.offset) {
 				log.error("offset error !");
 				return;
@@ -134,7 +134,7 @@ public class TestSSDqueue {
 		Map<Integer, ByteBuffer> result;
 		for (int i = 0; i < msgs.size(); i++) {
 			Message msg = msgs.get(i);
-			
+
 			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 			msg.buf.position(0);
 			if (result.get(0).compareTo(msg.buf) != 0) {
@@ -150,37 +150,37 @@ public class TestSSDqueue {
 		String dataPath = "/mnt/nvme/mq/Data";
 		// System.out.println(" 28 ");
 
-	
-			//FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
-			//FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
-			SSDqueue mq = new SSDqueue("/mnt/ssd/wyk");
-			int numOfThreads = 16;
-			CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
-			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
-			long startTime = System.nanoTime();
-			for (int i = 0; i < numOfThreads; i++) {
-				final int thread_id = i;
-				executor.execute(() -> {
-					threadRun(thread_id, mq, barrier);
 
-				});
+		//FileChannel fileChannel = new RandomAccessFile(new File(dataPath), "rw").getChannel();
+		//FileChannel metaFileChannel = new RandomAccessFile(new File(metaPath), "rw").getChannel();
+		SSDqueue mq = new SSDqueue("/mnt/ssd/wyk");
+		int numOfThreads = 16;
+		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
+		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
+		long startTime = System.nanoTime();
+		for (int i = 0; i < numOfThreads; i++) {
+			final int thread_id = i;
+			executor.execute(() -> {
+				threadRun(thread_id, mq, barrier);
+
+			});
+		}
+
+		executor.shutdown();
+		try {
+			// Wait a while for existing tasks to terminate
+			while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+				System.out.println("Pool did not terminate, waiting ...");
 			}
+		} catch (InterruptedException ie) {
+			executor.shutdownNow();
+			ie.printStackTrace();
+		}
+		long elapsedTime = System.nanoTime() - startTime;
+		double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
+		log.info("time: " + elapsedTimeS);
 
-			executor.shutdown();
-			try {
-				// Wait a while for existing tasks to terminate
-				while (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-					System.out.println("Pool did not terminate, waiting ...");
-				}
-			} catch (InterruptedException ie) {
-				executor.shutdownNow();
-				ie.printStackTrace();
-			}
-			long elapsedTime = System.nanoTime() - startTime;
-			double elapsedTimeS = (double) elapsedTime / (1000 * 1000 * 1000);
-			log.info("time: " + elapsedTimeS);
 
-		
 	}
 
 	public static void main(String[] args) {

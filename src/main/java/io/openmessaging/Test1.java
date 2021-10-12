@@ -84,13 +84,13 @@ public class Test1 {
 			if (result.get(0).compareTo(msg.buf) != 0) {
 
 				log.info("topic: " + msg.topic + " id: " + msg.queueId + " offset: " + msg.offset +" buffer: "  + result.get(0));
-		
+
 				byte[] tmp = msg.buf.array();
-							log.info("***************real*************************");
-							for(int ii=0;  ii < tmp.length; ++ii){
-								System.out.print(tmp[ii] + " ");
-							}
-							log.info("***************end*************************");
+				log.info("***************real*************************");
+				for(int ii=0;  ii < tmp.length; ++ii){
+					System.out.print(tmp[ii] + " ");
+				}
+				log.info("***************end*************************");
 				log.error("data error !");
 				System.exit(0);
 			}
@@ -130,7 +130,7 @@ public class Test1 {
 		}
 		return msgs;
 	}
-	
+
 
 
 	public static void threadRun(int threadId, MessageQueue mq, CyclicBarrier barrier) {
@@ -141,11 +141,11 @@ public class Test1 {
 					log.info("init messages ok");
 				}
 				barrier.await();
-	
+
 				if (threadId == 0){
 					log.info("begin write!");
 				}
-			for (int i = 0; i < msgs.size(); i++) {
+				for (int i = 0; i < msgs.size(); i++) {
 					Message msg = msgs.get(i);
 					msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
 					if (msg.getOffset != msg.offset) {
@@ -160,17 +160,17 @@ public class Test1 {
 					// 	barrier.await();
 					// 	System.exit(0);
 					// }
-	
+
 				}
 				barrier.await();
-	
+
 				if (threadId == 0){
 					log.info("begin read!");
 				}
 				Map<Integer, ByteBuffer> result;
 				for (int i = 0; i < msgs.size(); i++) {
 					Message msg = msgs.get(i);
-	
+
 					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 					msg.buf.position(msg.oriPosition);
 					if (result.get(0).compareTo(msg.checkBuf) != 0) {
@@ -196,8 +196,8 @@ public class Test1 {
 			// 	barrier.await();
 			// 	Vector<Message> getRangeMsgs = generateQueueTestGetRangeMulti(threadId);
 			// 	barrier.await();
-				
-				
+
+
 			// 	if (threadId == 0){
 			// 		log.info("begin getRangeFetchMulti!");
 			// 	}
@@ -225,7 +225,7 @@ public class Test1 {
 			// 				log.info("***************end*************************");
 			// 				System.exit(0);
 			// 			}
-					
+
 			// 		}
 			// 		for (int k = 0; k <= 40 && k <= i; k++){
 			// 			log.debug("k : " + k);
@@ -244,8 +244,8 @@ public class Test1 {
 			// 			}
 
 			// 		}
-	
-				// }
+
+			// }
 			// 	barrier.await();
 
 			// }
@@ -312,7 +312,7 @@ public class Test1 {
 			//TODO: handle exception
 			e.printStackTrace();
 		}
-		
+
 		// testThreadPool(dbPath);
 		// Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
 		// int ioSize = 1000;

@@ -107,7 +107,6 @@ public class CorrectTest {
 
         public boolean compare(ByteBuffer buffer){
             if(buffer == null)return false;
-
             byte[] ans = new byte[buffer.remaining()];
             buffer.get(ans);
             if(ans.length != data.length){

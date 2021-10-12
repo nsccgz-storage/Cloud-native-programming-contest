@@ -24,8 +24,8 @@ public class Main {
 
         // Map<Integer, ByteBuffer> res = mq.getRange("12345", 123, 0L, 100);
 
-        String dirPath = "/home/wangxr/桌面/pmem_test";
-//        String dirPath = "/home/ubuntu/test";
+
+        String dirPath = "/home/ubuntu/test";
         SSDqueue ssdQueue = new SSDqueue(dirPath);
         String t = "1234567890123456789012345678901234567890";
         System.out.println( t.hashCode());
@@ -46,8 +46,7 @@ public class Main {
                 System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
             }
         }
-        
+
     }
 
 }
-
