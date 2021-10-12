@@ -402,8 +402,8 @@ public class LSMessageQueue extends MessageQueue {
 
         // // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
         data.reset();
-        if (false){
-        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
+        // if (false){
+        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
         // TODO: 仅未知队列才要双写和预取
         // if ((q.type == 0 ) && (!q.prefetchBuffer.isFull())){
             q.prefetchBuffer.prefetch();
