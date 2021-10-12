@@ -686,7 +686,7 @@ public class LSMessageQueue extends MessageQueue {
             head = 0;
             tail = 0;
             length = 0;
-            maxLength = 9;
+            maxLength = 10;
             msgLengths = new int[maxLength];
             slotSize = 17*1024;
             // FIXME: 性能很差，考虑换掉
@@ -920,6 +920,138 @@ public class LSMessageQueue extends MessageQueue {
 
     }
 
+
+    // public class QueuePrefetchBuffer2{
+    //     public int[] msgsBlockAddr;
+    //     public int[] msgsLength;
+
+    //     public long headOffset; // == consumeOffset
+    //     public long tailOffset;
+    //     // 缓存 [headOffset, tailOffset] 的内容
+    //     public int head;
+    //     public int tail;
+    //     public int length;
+
+    //     public MyPMBlock block;
+    //     public int blockHead;
+    //     public int blockTail;
+    //     // public MemoryBlock block;
+    //     public int maxLength;
+    //     public MQQueue q;
+    //     public DataFile df;
+    //     public int slotSize;
+
+    //     QueuePrefetchBuffer2(MQQueue myQ, DataFile myDf){
+    //         head = 0;
+    //         tail = 0;
+    //         length = 0;
+    //         blockHead = 0;
+    //         blockTail = 0;
+    //         maxLength = 9;
+    //         msgsLength = new int[maxLength];
+    //         msgsBlockAddr = new int[maxLength];
+    //         slotSize = 17*1024;
+    //         // FIXME: 性能很差，考虑换掉
+    //         q = myQ;
+    //         df = myDf;
+    //         block = pmBlockPool.allocate();
+    //         // 大小写死在pool的实现里了，改大小的话要改两个地方
+    //     }
+
+    //     public boolean offer(ByteBuffer data){
+    //         data = data.duplicate();
+    //         if (isEmpty()){
+    //             // 把一个消息放到队列末尾
+    //             addr
+    //             msgLengths[tail] = data.remaining();
+    //             block.copyFromArray(data.array(), data.position(), tail*slotSize, msgLengths[tail] );
+    //             length ++;
+    //             return true;
+    //         }
+    //         if (isFull()){
+    //             return false;
+    //         }
+    //         // 把一个消息放到队列末尾
+    //         tail += 1;
+    //         tail = tail % maxLength;
+    //         log.debug("put data on tail : " + tail);
+    //         log.debug(data);
+    //         msgLengths[tail] = data.remaining();
+    //         block.copyFromArray(data.array(), data.position(), tail*slotSize, msgLengths[tail] );
+    //         tailOffset ++;
+    //         length ++;
+    //         return true;
+    //     }
+
+    //     public ByteBuffer poll(){
+    //         if (isEmpty()){
+    //             return null;
+    //         }
+    //         // 把一个消息从队列头部去掉
+    //         int msgLength = msgLengths[head];
+    //         log.debug("msgLength : " + msgLength + " head : " + head);
+    //         ByteBuffer buf;
+    //         if (q.bbPool != null){
+    //             buf = q.bbPool.allocate(msgLength);
+    //         } else {
+    //             buf = ByteBuffer.allocate(msgLength);
+    //         }
+    //         log.debug(buf);
+    //         block.copyToArray(head*slotSize, buf.array(), buf.arrayOffset()+buf.position(), msgLength);
+    //         log.debug(buf.arrayOffset());
+    //         log.debug(buf);
+    //         // block.copyToArray(head*slotSize, buf.array(), 0, msgLength);
+    //         log.debug("get buffer from prefetchqueue : " + buf);
+
+    //         if (length == 1){
+    //             length --;
+    //             return buf;
+    //         }
+
+    //         head ++;
+    //         head = head % maxLength;
+    //         headOffset ++;
+    //         length --;
+    //         return buf;
+    //     }
+
+    //     public  void reset(long consumeOffset){
+    //         headOffset = consumeOffset;
+    //         tailOffset = consumeOffset;
+    //         head = 0;
+    //         tail = 0;
+    //         length = 0;
+    //         blockHead = 0;
+    //         blockTail = 0;
+    //     }
+
+
+    //     public boolean isSlotFull(){
+    //         // 变长slot下，可能有两种条件下会满
+    //         // 1. slot数填满了，这么说，我可以把slot数弄得很大
+    //         return length == maxLength;
+    //     }
+    //     public boolean isSpaceFull(int needSize){
+    //         // 变长slot下，这是满的另一个条件
+    //         // 2. 定长buffer不够用了
+    //         if (needSize < (block.capacity - blockTail)){
+    //             return true;
+    //         } 
+    //         if (needSize > (blockHead - 0)){
+    //             return true;
+    //         }
+    //         return false;
+    //     }
+    //     public boolean isEmpty(){
+    //         return length == 0;
+    //     }
+
+
+
+
+
+    // }
+
     public class MyByteBufferPool {
         int capacity;
         byte[] buffer;
@@ -952,9 +1084,10 @@ public class LSMessageQueue extends MessageQueue {
         public MemoryPool pool;
         public long addr;
         public int capacity;
-        MyPMBlock(MemoryPool p, long a){
+        MyPMBlock(MemoryPool p, long a, int c){
             pool = p;
             addr = a;
+            capacity = c;
         }
 
         public void copyFromArray(byte[] srcArray, int srcIndex, long dstOffset, int length){
@@ -979,7 +1112,7 @@ public class LSMessageQueue extends MessageQueue {
             totalCapacity = 60L*1024*1024*1024;
             pool = MemoryPool.createPool(path, totalCapacity);
 
-            blockSize = 8*17*1024; // 8 个slot
+            blockSize = 10*17*1024; // 8 个slot
             bigBlockSize = 200*blockSize;
 
             long bigBlockCount = totalCapacity / bigBlockSize;
@@ -1005,7 +1138,7 @@ public class LSMessageQueue extends MessageQueue {
             long addr = threadLocalBigBlockStartAddr.get() + freeOffset;
             threadLocalBigBlockFreeOffset.set(freeOffset+blockSize);
 
-            return new MyPMBlock(pool, addr);
+            return new MyPMBlock(pool, addr, blockSize);
         }
         public void allocateBigBlock(){
             long bigBlockStartAddr = atomicGlobalFreeOffset.getAndAdd(bigBlockSize);
@@ -1028,7 +1161,7 @@ public class LSMessageQueue extends MessageQueue {
             totalCapacity = 60L*1024*1024*1024;
             pool = MemoryPool.createPool(path, totalCapacity);
 
-            blockSize = 9*17*1024; // 8 个slot
+            blockSize = 10*17*1024; // 8 个slot
             bigBlockSize = 200*blockSize;
             atomicGlobalFreeOffset = new AtomicLong();
             atomicGlobalFreeOffset.set(0L);
@@ -1048,7 +1181,7 @@ public class LSMessageQueue extends MessageQueue {
             long addr = threadLocalBigBlockStartAddr.get() + freeOffset;
             threadLocalBigBlockFreeOffset.set(freeOffset+blockSize);
 
-            return new MyPMBlock(pool, addr);
+            return new MyPMBlock(pool, addr, blockSize);
         }
         public void allocateBigBlock(){
             long bigBlockStartAddr = atomicGlobalFreeOffset.getAndAdd(bigBlockSize);
