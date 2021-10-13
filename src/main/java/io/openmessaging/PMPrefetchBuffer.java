@@ -67,6 +67,18 @@ import java.util.Comparator;
 
 public class PMPrefetchBuffer {
 	private static final Logger log = Logger.getLogger(PMPrefetchBuffer.class);
+    public long totalCapacity;
+    public MemoryPool pool;
+    public PMBlockPool pmBlockPool;
+    PMPrefetchBuffer(String pmDataFile){
+        totalCapacity = 60L*1024*1024*1024;
+        pool = MemoryPool.createPool(pmDataFile, totalCapacity);
+        pmBlockPool = new PMBlockPool(totalCapacity);
+    }
+    public RingBuffer newRingBuffer(){
+        return new RingBuffer();
+    } 
+
     public class PMBlock{
         public long addr;
         public int capacity;
@@ -76,15 +88,12 @@ public class PMPrefetchBuffer {
         }
     }
 
-
-
 	public class PMBlockPool {
         // 分为两个阶段
         // 阶段1：直接通过移动偏移量的方法申请内存
         // 依然是分大池子小池子的情况
         // 释放的时候，可以放到本线程的队列中，以备后续再用，如果本线程的队列满了就放到公共的池子里
         // 阶段2：直接移动偏移量的方法如果申请不了内存了，就从每个线程的队列中拿定长块，如果线程内的队列没有，那就从公共的池子里再拿一些
-		public MemoryPool pool;
 
         // 定长块管理，单个块的大小
 		public int blockSize;
@@ -110,9 +119,8 @@ public class PMPrefetchBuffer {
         // 小池子
 
 
-		PMBlockPool(String path) {
-			totalCapacity = 60L * 1024 * 1024 * 1024;
-			pool = MemoryPool.createPool(path, totalCapacity);
+		PMBlockPool(long capacity) {
+			totalCapacity = capacity;
 
 			blockSize = 128 * 1024; // 8 个slot
             threadLocalBlockNum = 200;
@@ -152,8 +160,8 @@ public class PMPrefetchBuffer {
                 // 如果q是空的，那么从全局队列申请
                 if (blockQueue.isEmpty()){
                     // 如果全局队列空了，那就没办法了，要从其他线程偷一些块过来？
-                    // TODO threadLocal的好像没法偷
-                    log.info("allocate fail !");
+                    // TODO: threadLocal的好像没法偷
+                    log.error("allocate fail !");
                     return null;
                 }
                 ret = blockQueue.poll();
@@ -188,11 +196,12 @@ public class PMPrefetchBuffer {
         }
 
 		public PMBlock step1Allocate() {
-            if (step1.get() == false){
-                return null;
-            }
             if (step1.get() == null){
                 step1.set(true);
+            }
+
+            if (step1.get() == false){
+                return null;
             }
 			if (threadLocalBigBlockStartAddr.get() == null || threadLocalBigBlockFreeOffset.get() == bigBlockSize) {
                 // 本地没有大块，或者大块满了
@@ -215,10 +224,7 @@ public class PMPrefetchBuffer {
 
 	}
 
-    public PMBlockPool pmBlockPool = new PMBlockPool("/mnt/pmem/mq/testdata");
-
     public class RingBuffer {
-        MemoryPool pool;
         int headBlock;
         int tailBlock;
         int headBlockAddr;
@@ -233,14 +239,15 @@ public class PMPrefetchBuffer {
         int maxLength;
         public int[] msgsLength;
         public int[] msgsBlockAddr;
-        // public int[] msgsBlock;
-
 
 
         RingBuffer(){
+            // 一开始都默认有一个块
             curBlockNum = 1;
+            // NOTE: 暂时先最多放4个块
             maxBlockNum = 4;
-            maxLength = 100;
+            maxLength = 100; // 限制一下每个ringBuffer存放的消息数
+            // 总体上，由两个来共同限制，一个是ringBuffer存放的消息数，另一个是ringbuffer的空间大小
             blocks = new PMBlock[maxBlockNum];
             for (int i = 0; i < curBlockNum; i++){
                 blocks[i] = pmBlockPool.allocate();
@@ -251,7 +258,6 @@ public class PMPrefetchBuffer {
             tailBlock = 0;
             headBlockAddr = 0;
             tailBlockAddr = 0;
-            curBlockNum = 0;
             msgsLength = new int[maxLength];
             msgsBlockAddr = new int[maxLength];
             // msgsBlock = new int[maxLength];
@@ -395,6 +401,22 @@ public class PMPrefetchBuffer {
             // 然后还需要重新整理一下数据
             // 还需要把headBlock中, 把0-tailBlockAddr的部分 复制到新块
             pool.copyFromPool(blocks[headBlock].addr, block.addr, tailBlockAddr);
+        }
+    }
+
+    public static void main(String[] args) {
+        PMPrefetchBuffer p = new PMPrefetchBuffer("/mnt/pmem/mq/testdata");
+        RingBuffer b = p.newRingBuffer();
+        byte[] byteData = new byte[100];
+        for (int i = 0; i < 100; i++){
+            byteData[i] = (byte)i;
+        }
+        b.offer(ByteBuffer.wrap(byteData));
+        ByteBuffer ret = b.poll();
+        for (int i = 0; i < 100; i++){
+            if (ret.array()[i] != byteData[i]){
+                log.error("data error !!");
+            }
         }
     }
 
