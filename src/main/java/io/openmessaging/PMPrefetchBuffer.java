@@ -70,6 +70,8 @@ public class PMPrefetchBuffer {
     public PMBlockPool pmBlockPool;
 
     PMPrefetchBuffer(String pmDataFile) {
+        log.setLevel(Level.INFO);
+        log.setLevel(Level.DEBUG);
         totalCapacity = 60L * 1024 * 1024 * 1024;
         pool = MemoryPool.createPool(pmDataFile, totalCapacity);
         pmBlockPool = new PMBlockPool(totalCapacity);
@@ -400,6 +402,46 @@ public class PMPrefetchBuffer {
             }
 
         }
+        public boolean justPoll() {
+            log.debug("poll start !");
+            this.debugLog();
+            try {
+
+                if (isEmpty()) {
+                    return false;
+                }
+                int dataLength = msgsLength[head];
+                long msgPMAddr = blocks[headBlock].addr + headBlockAddr;
+                // justPoll除了不读数据，其他都正常
+                // ByteBuffer data = ByteBuffer.allocate(dataLength);
+                // pool.copyToByteArray(msgPMAddr, data.array(), data.arrayOffset() + data.position(), dataLength);
+                // free the head
+                headBlockAddr += dataLength;
+
+                if (length == 1) {
+                    length--;
+                    return true;
+                }
+                head = (head + 1) % maxLength;
+                length--;
+                return true;
+            } finally {
+                // 说明上次free的时候上一个block已经free完啦，应该把head切换到下一个block来
+                // 如果存在下一条消息，并且加上下一条消息的长度超过了这个block
+                // 那么说明此时应该跳到下一个block
+                if (!isEmpty()) {
+                    if (headBlockAddr + msgsLength[head] >= blocks[headBlock].capacity) {
+                        headBlock = (headBlock + 1) % curBlockNum;
+                        headBlockAddr = 0;
+                    }
+                }
+                log.debug("poll end");
+                this.debugLog();
+            }
+
+        }
+
+
 
         public boolean isFull() {
             return length == maxLength;
@@ -453,9 +495,17 @@ public class PMPrefetchBuffer {
             } finally {
                 log.debug("addBlock end");
                 this.debugLog();
-
             }
 
+        }
+        public void reset(){
+            head = 0;
+            tail = 0;
+            headBlock = 0;
+            tailBlock = 0;
+            headBlockAddr = 0;
+            tailBlockAddr = 0;
+            length = 0;
         }
 
         public void debugLog() {
