@@ -123,6 +123,8 @@ public class MQBench {
 
 	try {
 		String filename = "./workloads/workload.csv";
+		// String filename = "./workloads/case3.csv";
+		// String filename = "./workloads/case2.csv";
 		BufferedReader reader = new BufferedReader(new FileReader(filename));
 		String line = null;
 		Vector<Message> step1Msgs = new Vector<>();
@@ -185,6 +187,8 @@ public class MQBench {
 		if (threadId == 0){
 			log.info("step 1 ok");
 			log.info("start step 2");
+			// LSMessageQueue.log.setLevel(Level.DEBUG);
+			// PMPrefetchBuffer.log.setLevel(Level.DEBUG);
 		}
 
 		for (int i = 0; i < step2Msgs.size(); i++) {
@@ -321,8 +325,14 @@ public class MQBench {
 
 			long step1EndTime = System.nanoTime();
 			long step2StartTime = System.nanoTime();
+
 			if (threadId == 0){
 				log.info("step 1 ok");
+			}
+			barrier.await();
+			// Thread.sleep(20000,0);
+			barrier.await();
+			if (threadId == 0){
 				log.info("start step 2");
 			}
 
@@ -364,9 +374,9 @@ public class MQBench {
 		String dbPath = "/mnt/nvme/mq";
 		String pmDirPath = "/mnt/pmem/mq";
 
-		correctBenchByTrace(dbPath, pmDirPath);
+		// correctBenchByTrace(dbPath, pmDirPath);
 
-		// perfBenchByTrace(dbPath, pmDirPath);
+		perfBenchByTrace(dbPath, pmDirPath);
 
 		// log.setLevel(Level.INFO);
 		// try {

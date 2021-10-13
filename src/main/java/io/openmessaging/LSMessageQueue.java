@@ -932,8 +932,8 @@ public class LSMessageQueue extends MessageQueue {
                 threadLocalReadMetaBuf = new ThreadLocal<>();
 
                 // prefetchThread = Executors.newSingleThreadExecutor();
-                // prefetchThread = Executors.newFixedThreadPool(6);
-                prefetchThread = Executors.newCachedThreadPool();
+                prefetchThread = Executors.newFixedThreadPool(10);
+                // prefetchThread = Executors.newCachedThreadPool();
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
