@@ -1,7 +1,5 @@
 package io.openmessaging;
 
-
-
 import java.io.IOException;
 import java.nio.channels.AsynchronousFileChannel;
 import java.nio.file.StandardOpenOption;
@@ -102,6 +100,7 @@ public class LSMessageQueue extends MessageQueue {
         public QueuePrefetchBuffer prefetchBuffer;
         public Future<Integer> prefetchFuture;
         public MyByteBufferPool bbPool;
+        public MyDirectBufferPool dbPool;
 
         MQQueue(DataFile dataFile){
             consumeOffset = 0L;
@@ -146,6 +145,7 @@ public class LSMessageQueue extends MessageQueue {
     int numOfDataFiles;
     ConcurrentHashMap<String, MQTopic> topic2object;
     ThreadLocal<MyByteBufferPool> threadLocalByteBufferPool;
+    ThreadLocal<MyDirectBufferPool> threadLocalDirectBufferPool;
     boolean isCrash;
     public PMPrefetchBuffer pmRingBuffer;
 
@@ -217,6 +217,7 @@ public class LSMessageQueue extends MessageQueue {
             numOfTopics = new AtomicInteger();
             numOfTopics.set(1);
             threadLocalByteBufferPool = new ThreadLocal<>();
+            threadLocalDirectBufferPool = new ThreadLocal<>();
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
@@ -361,6 +362,7 @@ public class LSMessageQueue extends MessageQueue {
             // q = new MQQueue(dataFiles[dataFileId]);
             q = new MQQueue(mqTopic.df); // 要和topic用一样的df
             q.bbPool = threadLocalByteBufferPool.get();
+            q.dbPool = threadLocalDirectBufferPool.get();
             q.initPrefetchBuffer();
             mqTopic.id2queue.put(queueId, q);
             if (mqConfig.useStats){
@@ -496,7 +498,10 @@ public class LSMessageQueue extends MessageQueue {
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
         q.consumeOffset = offset;
         // 目前消费的offset刚好和我预取好的消息相匹配, 所以前面的消息都不用取了
-        int prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
+        int prefetchNum = 0;
+        if (!isCrash){
+            prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
+        }
         fetchStartIndex += prefetchNum;
 
 
@@ -566,21 +571,24 @@ public class LSMessageQueue extends MessageQueue {
         // q.consumeOffset += fetchNum-fetchStartIndex;
         q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
-        if (q.type == 2){
-            if (!q.prefetchBuffer.ringBuffer.isFull()){
-                final MQQueue finalQ = q;
-                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-                    @Override
-                    public Integer call() throws Exception {
-                        finalQ.prefetchBuffer.prefetch();
-                        return 0;
-                    }
-                });
+        if (!isCrash){
+            if (q.type == 2){
+                if (!q.prefetchBuffer.ringBuffer.isFull()){
+                    final MQQueue finalQ = q;
+                    // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                    q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+                        @Override
+                        public Integer call() throws Exception {
+                            finalQ.prefetchBuffer.prefetch();
+                            return 0;
+                        }
+                    });
 
+                }
             }
-        }
 
+
+        }
         long pos = 0;
         for (int i = fetchStartIndex; i < fetchNum; i++){
             long curOffset = offset + i;
@@ -632,6 +640,10 @@ public class LSMessageQueue extends MessageQueue {
         if (threadLocalByteBufferPool.get() == null){
             threadLocalByteBufferPool.set(new MyByteBufferPool());
         }
+        if (threadLocalDirectBufferPool.get() == null){
+            threadLocalDirectBufferPool.set(new MyDirectBufferPool());
+        }
+
         return localThreadId.get();
     }
 
@@ -853,7 +865,6 @@ public class LSMessageQueue extends MessageQueue {
         }
         public  ByteBuffer allocate(int dataLength){
             int thisHead = atomicHead.getAndUpdate(getNext);
-            // int thisHead = atomicHead.getAndAdd(1);
             ByteBuffer ret = ByteBuffer.wrap(buffer, thisHead*slotSize, dataLength);
             // ByteBuffer ret = ByteBuffer.wrap(buffer, head*slotSize, dataLength);
             ret.mark();
@@ -864,6 +875,41 @@ public class LSMessageQueue extends MessageQueue {
             return ret;
         }
     }
+    public class MyDirectBufferPool {
+        int capacity;
+        byte[] buffer;
+        ByteBuffer directBuffer;
+        AtomicInteger atomicHead;
+        int head;
+        int slotSize;
+        int maxLength;
+        IntUnaryOperator getNext;
+        MyDirectBufferPool(){
+            atomicHead = new AtomicInteger();
+            atomicHead.set(0);
+            head = 0;
+            slotSize = 17*1024;
+            maxLength = 500;
+            capacity = maxLength * slotSize;
+            buffer = new byte[capacity];
+            getNext = (int curHead) -> {
+                int nextHead = curHead+1;
+                nextHead = nextHead % maxLength;
+                return nextHead;
+            };
+            directBuffer = ByteBuffer.allocateDirect(slotSize*maxLength);
+        }
+        public  ByteBuffer allocate(int dataLength){
+            int thisHead = atomicHead.getAndUpdate(getNext);
+            ByteBuffer ret = directBuffer.duplicate();
+            ret.position(thisHead*slotSize);
+            ret.limit(thisHead*slotSize+dataLength);
+            ret.mark();
+            return ret;
+        }
+    }
+
+
 
     public class DataFile {
         public FileChannel dataFileChannel;
@@ -917,8 +963,8 @@ public class LSMessageQueue extends MessageQueue {
                 // dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
                 dataFileChannel.force(true);
                 writerQueueBufferCapacity = 256*1024;
-                commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
-                // commonWriteBuffer = ByteBuffer.allocateDirect(writerQueueBufferCapacity);
+                // commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
+                commonWriteBuffer = ByteBuffer.allocateDirect(writerQueueBufferCapacity);
                 commonWriteBuffer.clear();
 
                 writerConcurrentQueue = new ConcurrentLinkedQueue<>();
@@ -1471,10 +1517,10 @@ public class LSMessageQueue extends MessageQueue {
 
         public ByteBuffer read(long position) {
             if (threadLocalReadMetaBuf.get() == null) {
-                threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
+                threadLocalReadMetaBuf.set(ByteBuffer.allocateDirect(globalMetadataLength));
             }
             ByteBuffer readMeta = threadLocalReadMetaBuf.get();
-            MyByteBufferPool bufPool = threadLocalByteBufferPool.get();
+            MyDirectBufferPool dbPool = threadLocalDirectBufferPool.get();
         
             readMeta.clear();
             try {
@@ -1483,15 +1529,17 @@ public class LSMessageQueue extends MessageQueue {
                 readMeta.position(6);
                 int dataLength = readMeta.getShort();
                 ByteBuffer tmp;
-                if (bufPool != null){
-                    tmp = bufPool.allocate(dataLength);
+                if (dbPool != null){
+                    tmp = dbPool.allocate(dataLength);
                 } else {
                     tmp = ByteBuffer.allocate(dataLength);
                 }
                 tmp.mark();
+                // log.info(tmp);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
+                // log.info(tmp);
                 tmp.reset();
-                // log.debug(ret);
+                // log.info(ret);
                 return tmp;
             } catch (IOException ie) {
                 ie.printStackTrace();
