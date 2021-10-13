@@ -372,6 +372,7 @@ public class PMPrefetchBuffer {
                 }
                 int dataLength = msgsLength[head];
                 long msgPMAddr = blocks[headBlock].addr + headBlockAddr;
+                // FIXME: 需要优化
                 ByteBuffer data = ByteBuffer.allocate(dataLength);
                 pool.copyToByteArray(msgPMAddr, data.array(), data.arrayOffset() + data.position(), dataLength);
                 // free the head
