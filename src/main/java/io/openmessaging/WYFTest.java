@@ -515,6 +515,30 @@ public class WYFTest {
 		// 	}
 
 
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 10);
+		// 	for (int i = 0; i < 10; i++){
+		// 		if (msgs.get(i).checkBuf.compareTo(msgs.get(i).buf) != 0) {
+		// 			log.error("bug1");
+		// 		}
+		// 		if (ret.get(i).compareTo(msgs.get(i).checkBuf) != 0) {
+		// 			log.error(msgs.get(i).buf);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(i).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// } 
+
+		// {
+		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		// 	long currentGetRangeOffset = 0L;
+		// 	for (int i = 0; i < 10; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+
+
 		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
 		// 	for (int i = 0; i < 4; i++){
 		// 		if (msgs.get(i).checkBuf.compareTo(msgs.get(i).buf) != 0) {

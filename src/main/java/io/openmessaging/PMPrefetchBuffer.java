@@ -71,7 +71,7 @@ public class PMPrefetchBuffer {
 
     PMPrefetchBuffer(String pmDataFile) {
         log.setLevel(Level.INFO);
-        log.setLevel(Level.DEBUG);
+        // log.setLevel(Level.DEBUG);
         totalCapacity = 60L * 1024 * 1024 * 1024;
         pool = MemoryPool.createPool(pmDataFile, totalCapacity);
         pmBlockPool = new PMBlockPool(totalCapacity);
@@ -123,8 +123,8 @@ public class PMPrefetchBuffer {
         PMBlockPool(long capacity) {
             totalCapacity = capacity;
 
-            // blockSize = 128 * 1024;
-            blockSize = 170;
+            blockSize = 128 * 1024;
+            // blockSize = 170;
             threadLocalBlockNum = 200;
             bigBlockSize = threadLocalBlockNum * blockSize; // 25MiB
 
