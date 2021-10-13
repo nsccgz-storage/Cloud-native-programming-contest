@@ -395,69 +395,52 @@ public class LSMessageQueue extends MessageQueue {
         long ret = q.maxOffset;
         q.maxOffset++;
 
+        // 未知队列双写
+        if ((q.type == 0) && (!q.prefetchBuffer.ringBuffer.isFull())){
+            final MQQueue finalQ = q;
+            ByteBuffer doubleWriteData = data.duplicate();
+                q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+                    @Override
+                    public Integer call() throws Exception {
+                        finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData);
+                        return 0;
+                    }
+                });
+        }
+
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
 
-        // // // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
-        data.reset();
-        ByteBuffer doubleWriteData = data.duplicate();
-        // // if (false){
-        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.ringBuffer.isFull())){
-        if ((q.type == 0 ) && (!q.prefetchBuffer.ringBuffer.isFull())){
-        // TODO: 仅未知队列才要双写和预取
-        // if ((q.type == 0 ) && (!q.prefetchBuffer.isFull())){
-            // q.prefetchBuffer.prefetch();
-            // if (!q.prefetchBuffer.ringBuffer.isFull() && q.prefetchOffset == q.maxOffset-1){
-            //     log.debug("double write");
-            //     q.prefetchBuffer.directAddData(doubleWriteData);
-            // }
-            // 写满就不管了
-            q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData);
-            // if (q.prefetchOffset == q.maxOffset-1){
-            //     log.debug("double write");
-            //     q.prefetchBuffer.directAddData(data);
-            // }
+
+        // // 确保和这个queue相关的异步任务已完成
+        if (q.prefetchFuture != null){
+            while (!q.prefetchFuture.isDone()){
+                try {
+                    Thread.sleep(0, 10000);
+                } catch (Throwable ie){
+                    ie.printStackTrace();
+                }
+            }
+            q.prefetchFuture = null;
         }
 
-
-
-        // 未知队列和热队列需要双写，冷队列不用，冷队列还是预取多一些内容吧
-        // BUG: 不能够异步双写，估计那个buffer在return后就会变
-        // if (false){
-        // // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
-        //     final ByteBuffer finalData = data.duplicate();
-        //     final MQQueue finalQ = q;
-        //     q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //        @Override
-        //        public Integer call() throws Exception {
-        //            MQQueue q = finalQ;
-        //            long startTime = System.nanoTime();
-        //            if (!q.prefetchBuffer.isFull()){
-        //                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //                q.prefetchBuffer.prefetch();
-        //                long thisOffset = q.maxOffset-1;
-        //                if (!q.prefetchBuffer.isFull() && thisOffset == q.prefetchOffset){
-        //                    log.debug("double write !");
-        //                    // 如果目前要写入的数据刚好就是下一个要预取的内容
-        //                    // 双写
-        //                    q.prefetchBuffer.directAddData(finalData);
-        //                    // TODO: 担心data在异步中途被改
-        //                }
-        //            }
-        //            long endTime = System.nanoTime();
-        //            log.debug("prefetch ok");
-        //            log.debug("time : " + (endTime - startTime) + " ns");
-        //            return 0;
-        //        }
-        //     });
-        // }
+        // 冷队列异步预取
         if (q.type == 2){
             if (!q.prefetchBuffer.ringBuffer.isFull()){
+                final MQQueue finalQ = q;
                 // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                q.prefetchBuffer.prefetch();
+                q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+                    @Override
+                    public Integer call() throws Exception {
+                        finalQ.prefetchBuffer.prefetch();
+                        return 0;
+                    }
+                });
+
             }
         }
+
 
 
 
@@ -511,18 +494,10 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
-        // 如果有东西在prefetchBuffer的话
-        // 需要的数据:      [offset, offset+fetchNum-1]
-        // 已经预取好的数据: [consumeOffset, prefetchOffset-1]
-        // 暂时只考虑 offset == consumeOffset 的情况
-        // assert (offset == q.consumeOffset);
         q.consumeOffset = offset;
-
-        // 目前消费的offset刚好和我预取好的消息相匹配
-        // 所以前面的消息都不用取了
+        // 目前消费的offset刚好和我预取好的消息相匹配, 所以前面的消息都不用取了
         int prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
         fetchStartIndex += prefetchNum;
-        // 当一个热读过来，offset会和consumeOffset不匹配，这个时候我要如何处理？
 
 
         // 分类
@@ -591,34 +566,20 @@ public class LSMessageQueue extends MessageQueue {
         // q.consumeOffset += fetchNum-fetchStartIndex;
         q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
-        // // 既然从预取中消费了一些数据，那当然可以补回来
-        // // getRange 结束后应该要用一个异步任务补一些数据到预取队列中
-        // if (q.type == 2){
-        // if (false){
-        //     // 冷读才需要预取
-        //     q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //        @Override
-        //        public Integer call() throws Exception {
-        //            long startTime = System.nanoTime();
-        //            if (!q.prefetchBuffer.isFull()){
-        //                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //                q.prefetchBuffer.prefetch();
-        //            }
-        //            long endTime = System.nanoTime();
-        //            log.debug("prefetch ok");
-        //            log.debug("time : " + (endTime - startTime) + " ns");
-        //            return 0;
-        //        }
-        //     });
-        // }
+        if (q.type == 2){
+            if (!q.prefetchBuffer.ringBuffer.isFull()){
+                final MQQueue finalQ = q;
+                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+                    @Override
+                    public Integer call() throws Exception {
+                        finalQ.prefetchBuffer.prefetch();
+                        return 0;
+                    }
+                });
 
-        // TODO: 加一个条件，这样合理吗？
-        // if (q.maxOffset - q.consumeOffset < 8L){
-        //     // 队列是可以变热的，热队列可以在append的时候双写
-        //     q.type = 1;
-        // }
-
-
+            }
+        }
 
         long pos = 0;
         for (int i = fetchStartIndex; i < fetchNum; i++){
@@ -632,12 +593,14 @@ public class LSMessageQueue extends MessageQueue {
                 ret.put(i, buf);
             }
         }
-        if (q.type == 2){
-            if (!q.prefetchBuffer.ringBuffer.isFull()){
-                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                q.prefetchBuffer.prefetch();
-            }
-        }
+
+        // 同步预取
+        // if (q.type == 2){
+        //     if (!q.prefetchBuffer.ringBuffer.isFull()){
+        //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //         q.prefetchBuffer.prefetch();
+        //     }
+        // }
 
         return ret;
     }
@@ -899,75 +862,6 @@ public class LSMessageQueue extends MessageQueue {
             // head++;
             // head = head % maxLength;
             return ret;
-        }
-    }
-
-    public class MyPMBlock{
-        public MemoryPool pool;
-        public long addr;
-        public int capacity;
-        MyPMBlock(MemoryPool p, long a, int c){
-            pool = p;
-            addr = a;
-            capacity = c;
-        }
-
-        public void copyFromArray(byte[] srcArray, int srcIndex, long dstOffset, int length){
-            pool.copyFromByteArrayNT(srcArray, srcIndex, addr+dstOffset, length);
-
-        }
-        public void copyToArray(long srcOffset, byte[] dstArray, int dstOffset, int length){
-            pool.copyToByteArray(addr+srcOffset, dstArray, dstOffset, length);
-        }
-    }
-
-    public class MyPMBlockPool2 { // TODO: 支持free的定长块分配器
-        public MemoryPool pool;
-        public int blockSize;
-        public int bigBlockSize;
-        public AtomicLong atomicGlobalFreeOffset;
-        public long totalCapacity;
-        public ThreadLocal<Long> threadLocalBigBlockStartAddr;
-        public ThreadLocal<Integer> threadLocalBigBlockFreeOffset;
-        public ConcurrentLinkedQueue<Long> bigBlockQueue;
-        MyPMBlockPool2(String path){
-            totalCapacity = 60L*1024*1024*1024;
-            pool = MemoryPool.createPool(path, totalCapacity);
-
-            blockSize = 10*17*1024; // 8 个slot
-            bigBlockSize = 200*blockSize;
-
-            long bigBlockCount = totalCapacity / bigBlockSize;
-
-            for (long i = 0; i < bigBlockCount; i++){
-                bigBlockQueue.offer(i*bigBlockSize);
-            }
-            atomicGlobalFreeOffset = new AtomicLong();
-            atomicGlobalFreeOffset.set(0L);
-            threadLocalBigBlockFreeOffset = new ThreadLocal<>();
-            threadLocalBigBlockStartAddr = new ThreadLocal<>();
-            threadLocalBigBlockFreeOffset.set(0);
-        }
-        public MyPMBlock allocate(){
-            if (threadLocalBigBlockStartAddr.get() == null){
-                allocateBigBlock();
-            }
-            if (threadLocalBigBlockFreeOffset.get() == bigBlockSize){
-                // 大块满了，分配新的大块
-                allocateBigBlock();
-            }
-            int freeOffset = threadLocalBigBlockFreeOffset.get();
-            long addr = threadLocalBigBlockStartAddr.get() + freeOffset;
-            threadLocalBigBlockFreeOffset.set(freeOffset+blockSize);
-
-            return new MyPMBlock(pool, addr, blockSize);
-        }
-        public void allocateBigBlock(){
-            long bigBlockStartAddr = atomicGlobalFreeOffset.getAndAdd(bigBlockSize);
-            log.debug("big block addr : " +bigBlockStartAddr);
-            threadLocalBigBlockStartAddr.set(bigBlockStartAddr);
-            threadLocalBigBlockFreeOffset.set(0);
-            assert (atomicGlobalFreeOffset.get() < totalCapacity);
         }
     }
 
