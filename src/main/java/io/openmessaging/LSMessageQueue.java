@@ -1250,6 +1250,131 @@ public class LSMessageQueue extends MessageQueue {
         }
     }
 
+
+
+    // public class QueuePrefetchBuffer3{ // 
+
+    //     public long headOffset; // == consumeOffset
+    //     public long tailOffset;
+    //     // 缓存 [headOffset, tailOffset] 的内容
+
+    //     public MQQueue q;
+    //     public DataFile df;
+
+    //     QueuePrefetchBuffer3(MQQueue myQ, DataFile myDf){
+    //         q = myQ;
+    //         df = myDf;
+    //         // 大小写死在pool的实现里了，改大小的话要改两个地方
+    //     }
+
+    //     public int consume(Map<Integer, ByteBuffer> ret, long offset,  int fetchNum){
+    //         // 始终假定 offset == q.consumeOffset
+    //         // 如果 headOffset != offset
+    //         // 那么 ，两种情况
+    //         // 一种是 buf中还有需要消费的内容，那么就移动一下队列就好
+    //         if (offset != headOffset){
+    //             if (offset < headOffset){
+    //                 /// 倒退了
+    //                 // 不管，不预取了
+    //                 return 0;
+    //             }
+    //             if ( headOffset < offset && offset < tailOffset){
+    //                 // 说明当前要拿的数据还在buf中
+    //                 // 先移动一下head，让队列符合 headOffset = offset 的假定
+    //                 long num = offset - headOffset;
+    //                 for (long i = 0;  i < num; i++){
+    //                     this.poll();
+    //                 }
+    //             } else {
+    //                 // 说明当前要拿的数据不在buf中
+    //                 // 另一种是buf中所有内容都没用，直接重置这条buffer吧
+    //                 // 后面再次调用prefetch的时候会重置的
+    //                 // 重置buffer，清空
+    //                 this.reset(offset + fetchNum-1);
+    //                 headOffset = offset + fetchNum - 1;
+    //                 tailOffset = offset + fetchNum - 1;
+
+    //                 return 0;
+    //             }
+    //         }
+
+    //         // read from consume Offset
+    //         // 假定 刚好匹配，一定是从headOffset开始读取
+    //         // 想要fetchNum那么多个，但不一定有这么多
+    //         int consumeNum = Math.min(fetchNum, length);
+    //         for (int i = 0; i < consumeNum; i++){
+    //             ByteBuffer buf = this.poll();
+    //             log.debug(buf);
+    //             ret.put(i, buf);
+    //         }
+
+    //         return consumeNum;
+
+    //     }
+
+    //     public void prefetch(){
+    //         // 先看看能prefetch多少个？
+    //         // 数一下从consumeOffset开始后面有多少有效消息
+    //         // 再看看队列还能放多少个
+    //         if (q.consumeOffset > headOffset){
+    //             // 说明之前有buffer不够用的情况，consumeOffset走得更快了，此时要更新一下headOffset和prefetchOffset
+    //             reset(q.consumeOffset);
+    //             q.prefetchOffset = q.consumeOffset;
+    //             // 相当于重置 prefetch buffer
+    //         }
+    //         log.debug("q.consumeOffset : " + q.consumeOffset + " q.prefetchOffset : " + q.prefetchOffset);
+    //         long prefetchNum = (q.maxOffset-1)-q.prefetchOffset;
+    //         log.debug("prefetch start from offset : " + q.prefetchOffset);
+    //         log.debug("prefetchNum : " + prefetchNum);
+    //         // 得到能够被预取的消息数量
+    //         if (prefetchNum <= 0){
+    //             // 没有需要预取的消息，或者所有消息都被预取了
+    //             log.debug("nothing to prefetch or all msgs has been prefetched");
+    //             return;
+    //         }
+    //         // 检查consumeOffset和队列的headOffset是否对应，如果不对应则释放相关数据
+    //         // 被消费的时候应当释放队列相关资源
+    //         assert (q.consumeOffset == headOffset);
+    //         // 预取的数量最大为当前buffer剩余的空间，再多的也没法预取，确定真正要预取这么多个消息
+    //         prefetchNum = Math.min(prefetchNum, (maxLength-length));
+    //         if (prefetchNum <= 0){
+    //             log.debug("the prefetch buffer is full");
+    //             return ;
+    //         }
+
+
+    //         // 从prefetchOffset开始prefetch，填满数组
+    //         int actualPrefetchNum = 0;
+    //         // FIXME: 不读就不知道消息有多长，这会造成一些额外的读取
+
+    //         for (int i = 0; i < prefetchNum; i++){
+    //             // FIXME: long转int，不太好
+    //             long pos = q.offset2position.get((int)q.prefetchOffset); 
+    //             ByteBuffer buf = df.read(pos);
+    //             log.debug(buf);
+    //             if (this.offer(buf)){
+    //                 q.prefetchOffset++;
+    //                 actualPrefetchNum++;
+    //             } else {
+    //                 break;
+    //             }
+    //         }
+    //         log.debug("prefetch " + actualPrefetchNum + " msgs");
+
+    //         return ;
+    //     }
+
+    //     public void directAddData(ByteBuffer data){
+    //         // 如果刚好需要预取这个数据，而且预取数量还不够，那就把这个数据加进去
+    //         // this.offer(data); 
+    //         if (this.offer(data)){
+    //             //  可能会加失败
+    //             q.prefetchOffset++;
+    //         }
+    //         return ;
+    //     }
+    // }
+
     public class MyByteBufferPool {
         int capacity;
         byte[] buffer;
