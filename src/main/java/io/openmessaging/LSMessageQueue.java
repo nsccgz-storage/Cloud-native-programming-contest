@@ -397,51 +397,51 @@ public class LSMessageQueue extends MessageQueue {
         long ret = q.maxOffset;
         q.maxOffset++;
 
-        // 未知队列双写
-        if ((q.type == 0) && (!q.prefetchBuffer.ringBuffer.isFull())){
-            final MQQueue finalQ = q;
-            ByteBuffer doubleWriteData = data.duplicate();
-                q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-                    @Override
-                    public Integer call() throws Exception {
-                        finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData);
-                        return 0;
-                    }
-                });
-        }
+        // // 未知队列双写
+        // if ((q.type == 0) && (!q.prefetchBuffer.ringBuffer.isFull())){
+        //     final MQQueue finalQ = q;
+        //     ByteBuffer doubleWriteData = data.duplicate();
+        //         q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //             @Override
+        //             public Integer call() throws Exception {
+        //                 finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData);
+        //                 return 0;
+        //             }
+        //         });
+        // }
 
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
 
 
-        // // 确保和这个queue相关的异步任务已完成
-        if (q.prefetchFuture != null){
-            while (!q.prefetchFuture.isDone()){
-                try {
-                    Thread.sleep(0, 10000);
-                } catch (Throwable ie){
-                    ie.printStackTrace();
-                }
-            }
-            q.prefetchFuture = null;
-        }
+        // // // 确保和这个queue相关的异步任务已完成
+        // if (q.prefetchFuture != null){
+        //     while (!q.prefetchFuture.isDone()){
+        //         try {
+        //             Thread.sleep(0, 10000);
+        //         } catch (Throwable ie){
+        //             ie.printStackTrace();
+        //         }
+        //     }
+        //     q.prefetchFuture = null;
+        // }
 
-        // 冷队列异步预取
-        if (q.type == 2){
-            if (!q.prefetchBuffer.ringBuffer.isFull()){
-                final MQQueue finalQ = q;
-                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-                    @Override
-                    public Integer call() throws Exception {
-                        finalQ.prefetchBuffer.prefetch();
-                        return 0;
-                    }
-                });
+        // // 冷队列异步预取
+        // if (q.type == 2){
+        //     if (!q.prefetchBuffer.ringBuffer.isFull()){
+        //         final MQQueue finalQ = q;
+        //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //         q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //             @Override
+        //             public Integer call() throws Exception {
+        //                 finalQ.prefetchBuffer.prefetch();
+        //                 return 0;
+        //             }
+        //         });
 
-            }
-        }
+        //     }
+        // }
 
 
 
@@ -571,24 +571,23 @@ public class LSMessageQueue extends MessageQueue {
         // q.consumeOffset += fetchNum-fetchStartIndex;
         q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
-        if (!isCrash){
-            if (q.type == 2){
-                if (!q.prefetchBuffer.ringBuffer.isFull()){
-                    final MQQueue finalQ = q;
-                    // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                    q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-                        @Override
-                        public Integer call() throws Exception {
-                            finalQ.prefetchBuffer.prefetch();
-                            return 0;
-                        }
-                    });
+        // if (!isCrash){
+        //     if (q.type == 2){
+        //         if (!q.prefetchBuffer.ringBuffer.isFull()){
+        //             final MQQueue finalQ = q;
+        //             // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //             q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //                 @Override
+        //                 public Integer call() throws Exception {
+        //                     finalQ.prefetchBuffer.prefetch();
+        //                     return 0;
+        //                 }
+        //             });
 
-                }
-            }
+        //         }
+        //     }
+        // }
 
-
-        }
         long pos = 0;
         for (int i = fetchStartIndex; i < fetchNum; i++){
             long curOffset = offset + i;
