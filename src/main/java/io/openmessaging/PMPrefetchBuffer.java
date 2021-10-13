@@ -64,7 +64,7 @@ import com.intel.pmem.llpl.MemoryPool;
 import java.util.Comparator;
 
 public class PMPrefetchBuffer {
-    private static final Logger log = Logger.getLogger(PMPrefetchBuffer.class);
+    public static final Logger log = Logger.getLogger(PMPrefetchBuffer.class);
     public long totalCapacity;
     public MemoryPool pool;
     public PMBlockPool pmBlockPool;
@@ -246,9 +246,9 @@ public class PMPrefetchBuffer {
 
         RingBuffer() {
             // 一开始都默认有一个块
-            curBlockNum = 1;
+            curBlockNum = 2;
             // NOTE: 暂时先最多放4个块
-            maxBlockNum = 4;
+            maxBlockNum = 8;
             maxLength = 100; // 限制一下每个ringBuffer存放的消息数
             // 总体上，由两个来共同限制，一个是ringBuffer存放的消息数，另一个是ringbuffer的空间大小
             blocks = new PMBlock[maxBlockNum];
@@ -373,6 +373,12 @@ public class PMPrefetchBuffer {
                     return null;
                 }
                 int dataLength = msgsLength[head];
+                if (headBlockAddr + dataLength > blocks[headBlock].capacity){
+                    // 说明下一条消息并不在这后面，之前放的时候不够空间，放到了下一个块
+                    // 所以head要移动到下一个块
+                    headBlock = ( headBlock + 1 ) % curBlockNum;
+                    headBlockAddr = 0;
+                }
                 long msgPMAddr = blocks[headBlock].addr + headBlockAddr;
                 // FIXME: 需要优化
                 ByteBuffer data = ByteBuffer.allocate(dataLength);
@@ -402,46 +408,6 @@ public class PMPrefetchBuffer {
             }
 
         }
-        public boolean justPoll() {
-            log.debug("poll start !");
-            this.debugLog();
-            try {
-
-                if (isEmpty()) {
-                    return false;
-                }
-                int dataLength = msgsLength[head];
-                long msgPMAddr = blocks[headBlock].addr + headBlockAddr;
-                // justPoll除了不读数据，其他都正常
-                // ByteBuffer data = ByteBuffer.allocate(dataLength);
-                // pool.copyToByteArray(msgPMAddr, data.array(), data.arrayOffset() + data.position(), dataLength);
-                // free the head
-                headBlockAddr += dataLength;
-
-                if (length == 1) {
-                    length--;
-                    return true;
-                }
-                head = (head + 1) % maxLength;
-                length--;
-                return true;
-            } finally {
-                // 说明上次free的时候上一个block已经free完啦，应该把head切换到下一个block来
-                // 如果存在下一条消息，并且加上下一条消息的长度超过了这个block
-                // 那么说明此时应该跳到下一个block
-                if (!isEmpty()) {
-                    if (headBlockAddr + msgsLength[head] >= blocks[headBlock].capacity) {
-                        headBlock = (headBlock + 1) % curBlockNum;
-                        headBlockAddr = 0;
-                    }
-                }
-                log.debug("poll end");
-                this.debugLog();
-            }
-
-        }
-
-
 
         public boolean isFull() {
             return length == maxLength;
