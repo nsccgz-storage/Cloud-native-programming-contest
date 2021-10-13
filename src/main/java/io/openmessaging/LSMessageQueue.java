@@ -514,28 +514,51 @@ public class LSMessageQueue extends MessageQueue {
 
 
         // 分类
-        if (q.type == 0){
-            if (offset == 0){
-                q.type = 2; // cold
-                if (mqConfig.useStats){
-                    testStat.incColdQueueCount();
+
+        if (!isCrash) {
+            if (q.type == 0) {
+                if (offset == 0) {
+                    q.type = 2; // cold
+                    if (mqConfig.useStats) {
+                        testStat.incColdQueueCount();
+                    }
+                    // TODO: 可以触发 prefetch buffer 扩容
+                    q.prefetchBuffer.ringBuffer.addBlock();
+                } else {
+                    q.type = 1;
+                    if (mqConfig.useStats) {
+                        testStat.incHotQueueCount();
+                    }
+                    // TODO: 可以触发prefetch buffer 释放
+                    q.prefetchBuffer.ringBuffer.close();
                 }
-                // TODO: 可以触发 prefetch buffer 扩容
-                q.prefetchBuffer.ringBuffer.addBlock();
-            } else {
-                q.type = 1;
-                if (mqConfig.useStats){
-                    testStat.incHotQueueCount();
-                }
-                // TODO: 可以触发prefetch buffer 释放
-                q.prefetchBuffer.ringBuffer.close();
+                // } else if (offset >= q.maxOffset-5) {
+                // q.type = 1; // hot
+                // if (mqConfig.useStats){
+                // testStat.incHotQueueCount();
+                // }
+                // }
             }
-            // } else if (offset >= q.maxOffset-5) {
-            //     q.type = 1; // hot
-            //     if (mqConfig.useStats){
-            //         testStat.incHotQueueCount();
-            //     }
-            // }
+            if(mqConfig.useStats){
+                testStat.incFetchMsgCount(fetchNum);
+                if (q.type == 1){
+                    // hot
+                    testStat.incHotFetchMsgCount(fetchNum);
+                } else if (q.type == 2){
+                    // cold
+                    testStat.incColdFetchMsgCount(fetchNum);
+
+                }
+                testStat.incReadSSDCount(fetchNum-fetchStartIndex);
+                if (q.type == 1){
+                    // hot
+                    testStat.incHotReadSSDCount(fetchNum-fetchStartIndex);
+                } else if (q.type == 2){
+                    // cold
+                    testStat.incColdReadSSDCount(fetchNum-fetchStartIndex);
+                }
+
+            }
         }
         // TODO
         // if (q.type == 2){
@@ -547,32 +570,6 @@ public class LSMessageQueue extends MessageQueue {
         //     }
         // }
 
-        if(mqConfig.useStats){
-            testStat.incFetchMsgCount(fetchNum);
-            if (q.type == 1){
-                // hot
-                testStat.incHotFetchMsgCount(fetchNum);
-            } else if (q.type == 2){
-                // cold
-                testStat.incColdFetchMsgCount(fetchNum);
-
-            }
-        }
-
-
-
-
-        if (mqConfig.useStats){
-            testStat.incReadSSDCount(fetchNum-fetchStartIndex);
-            if (q.type == 1){
-                // hot
-                testStat.incHotReadSSDCount(fetchNum-fetchStartIndex);
-            } else if (q.type == 2){
-                // cold
-                testStat.incColdReadSSDCount(fetchNum-fetchStartIndex);
-            }
-
-        }
 
         DataFile df = mqTopic.df;
         // 前面已经把超出maxOffset 的fetchNum 缩小到和maxOffset一样了，这里其实可以直接更新
