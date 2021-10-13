@@ -126,8 +126,8 @@ public class PMPrefetchBuffer {
 
             blockSize = 128 * 1024;
             // blockSize = 170;
-            threadLocalBlockNum = 200;
-            bigBlockSize = threadLocalBlockNum * blockSize; // 25MiB
+            threadLocalBlockNum = 2000;
+            bigBlockSize = threadLocalBlockNum * blockSize; // 250MiB
 
             // 初始化阶段1
             // 大池子
@@ -192,10 +192,10 @@ public class PMPrefetchBuffer {
 
             // free 的时候 往本地的队列里放
             if (q.size() < threadLocalBlockNum) {
-                q.add(block);
+                q.offer(block);
             } else {
                 // 如果本地队列满了那就放到全局队列中
-                blockQueue.add(block);
+                blockQueue.offer(block);
             }
         }
 

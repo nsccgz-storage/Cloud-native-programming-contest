@@ -961,7 +961,7 @@ public class LSMessageQueue extends MessageQueue {
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
                 // dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
                 dataFileChannel.force(true);
-                writerQueueBufferCapacity = 256*1024;
+                writerQueueBufferCapacity = 512*1024;
                 // commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
                 commonWriteBuffer = ByteBuffer.allocateDirect(writerQueueBufferCapacity);
                 commonWriteBuffer.clear();
