@@ -371,8 +371,15 @@ public class MQBench {
 		// init();
 		log.setLevel(Level.INFO);
 		// log.setLevel(Level.DEBUG);
-		String dbPath = "/mnt/nvme/mq";
-		String pmDirPath = "/mnt/pmem/mq";
+		// String dbPath = "/mnt/ssd/mq";
+		if (args.length < 2){
+			System.out.println("java SSDBench ${dbPath} ${pmDirPath}");
+			return ;
+		}
+		System.out.println("dbPath : " + args[0]);
+		System.out.println("pmDIrPath : " + args[1]);
+		String dbPath = args[0] ;
+		String pmDirPath = args[1] ;
 
 		// correctBenchByTrace(dbPath, pmDirPath);
 
