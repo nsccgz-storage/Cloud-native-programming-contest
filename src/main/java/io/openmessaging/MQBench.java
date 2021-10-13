@@ -369,6 +369,10 @@ public class MQBench {
         // log.setLevel(Level.DEBUG);
         String dbPath = "/mnt/nvme/wxr";
         String pmDirPath = "/mnt/pmem/wxr/mq";
+        if(args.length >= 2){
+            dbPath = args[0];
+            pmDirPath = args[1];
+        }
 
         correctBenchByTrace(dbPath, pmDirPath);
 
