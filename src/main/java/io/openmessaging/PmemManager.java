@@ -9,13 +9,13 @@ import java.util.HashMap;
 
 public class PmemManager {
     final long MAX_PMEM_SIZE = 60*1024L*1024L*1024L; // 60GB
-    final long CHUNK_SIZE = 1024L*1024L*1024L; // 1GiB 每个线程1个chunk
-    final long PAGE_SIZE = 64*1024L; // 64KiB
+    final long CHUNK_SIZE = 1024L*1024L*1024L; // 1GiB 每个线程1个chunk?
+    final long PAGE_SIZE = 128*1024L; // 64KiB
     private static final Logger logger = Logger.getLogger(SSDBench.class);
 
     static int[] depthArray;
     HashMap<Integer, Integer> size2Depth;
-    short maxDepth = (short) (Math.log(CHUNK_SIZE/PAGE_SIZE)/Math.log(2));; // Depth从0开始计数，max_depth = log2(CHUNK_SIZE/PAGE_SIZE)
+    int maxDepth = (int) (Math.log(CHUNK_SIZE/PAGE_SIZE)/Math.log(2));; // TODO:Depth从0开始计数，max_depth = log2(CHUNK_SIZE/PAGE_SIZE)
 
     MemoryPool pool;
     Chunk[] chunkList;
@@ -49,14 +49,14 @@ public class PmemManager {
     
 
     private class Chunk{
-        ArrayList<Short> memoryMap; // Vector是线程安全的，而ArrayList不是线程安全的 // 或许可用short来储存
+        ArrayList<Integer> memoryMap; // Vector是线程安全的，而ArrayList不是线程安全的 // 或许可用short来储存
         long handle;
 
         // 考虑初始化带来的开销
         public Chunk(int id){
             memoryMap = new ArrayList<>((int) (Math.pow(2, maxDepth+1)-1)); // 2^(maxDepth+1)-1
             int width = 1;
-            for(short i = 0;i <= maxDepth;i++){
+            for(int i = 0;i <= maxDepth;i++){
                 for(int j = 0;j < width;j++){
                     memoryMap.add(i);
                 }
@@ -89,11 +89,11 @@ public class PmemManager {
 
                 if(memoryMap.get(index) == depth && curDepth == depth){
                     int res = index;
-                    memoryMap.set(index, (short) (maxDepth+1));
+                    memoryMap.set(index, maxDepth+1);
                     // update parent node
                     while(index > 0){
                         index = (index - 1)/2;
-                        memoryMap.set(index, min(memoryMap.get(index*2+1), memoryMap.get(index*2+2))); // 左右子节点的最小值
+                        memoryMap.set(index, Math.min(memoryMap.get(index*2+1), memoryMap.get(index*2+2))); // 左右子节点的最小值
                     }
                     return res; // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
                 }
@@ -113,8 +113,7 @@ public class PmemManager {
         public void free(int index){
 //            size = normalizeCapacity(size);
 //            memoryMap.set(index, );
-            short depth = 0;
-            int tmp = index+1;
+            int depth = 0, tmp = index+1;
             while(tmp > 1){
                 tmp >>= 1;
                 depth++;
@@ -123,7 +122,7 @@ public class PmemManager {
             // update parent node
             while(index > 0){
                 index = (index - 1)/2;
-                memoryMap.set(index, min(memoryMap.get(index*2+1), memoryMap.get(index*2+2))); // 左右子节点的最小值
+                memoryMap.set(index, Math.min(memoryMap.get(index*2+1), memoryMap.get(index*2+2))); // 左右子节点的最小值
             }
         }
 
@@ -161,9 +160,6 @@ public class PmemManager {
         return num + 1;
     }
 
-    public static short min(short var1, short var2){
-        return var1 <= var2 ? var1 : var2;
-    }
 
     // 每个队列对应一个block
     public class MyBlock{
@@ -181,7 +177,10 @@ public class PmemManager {
             tail = 0;
             this.size = size;
             chunk = c;
+            long startTime = System.nanoTime();
             index = chunk.allocate(size); // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
+            logger.info("allocate time = "+(System.nanoTime()-startTime));
+
             if(index != -1) {
                 handle = chunk.getAddress(index, size);
             }
@@ -316,7 +315,8 @@ public class PmemManager {
                     copyToArray(offset, bytes, 0, tmp);
                     copyToArray(0, bytes, tmp, length - tmp);
                 }
-                if (head == offset) head = (head + length) % size;
+                // if (head == offset)
+                head = (offset + length) % size; // head 根据offset进行移动 
                 return bytes;
 //            }else{
 //                return null;
@@ -332,4 +332,3 @@ public class PmemManager {
         }
     }
 }
-
