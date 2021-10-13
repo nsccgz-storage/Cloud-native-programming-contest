@@ -61,8 +61,6 @@ import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
 import com.intel.pmem.llpl.MemoryPool;
 
-import io.openmessaging.SSDBench;
-
 import java.util.Comparator;
 
 public class PMPrefetchBuffer {
@@ -123,7 +121,8 @@ public class PMPrefetchBuffer {
         PMBlockPool(long capacity) {
             totalCapacity = capacity;
 
-            blockSize = 128 * 1024; // 8 个slot
+            // blockSize = 128 * 1024;
+            blockSize = 170;
             threadLocalBlockNum = 200;
             bigBlockSize = threadLocalBlockNum * blockSize; // 25MiB
 
@@ -268,10 +267,10 @@ public class PMPrefetchBuffer {
         public boolean offer(ByteBuffer data) {
             log.debug("offer start !");
             this.debugLog();
+            data = data.duplicate();
+            int dataLength = data.remaining();
             try {
 
-                data = data.duplicate();
-                int dataLength = data.remaining();
                 long savePMAddr = -1;
                 int saveBlockAddr = -1;
                 int saveBlock = -1;
@@ -307,8 +306,20 @@ public class PMPrefetchBuffer {
                             break allocate;
                         } else {
                             // 2. 没有空闲的block了，退化成 headBlock == tailBlock 的情况
-                            tailBlock = nextTailBlock;
-                            tailBlockAddr = 0;
+                            // tailBlock = nextTailBlock;
+                            // tailBlockAddr = 0;
+                            // 下一个就是自己，那就看看headBlockAddr前面还有没有位置
+                            if (dataLength < (headBlockAddr - 0)){
+                                // 能放
+                                tailBlock = nextTailBlock;
+
+                                saveBlockAddr = 0;
+                                saveBlock = nextTailBlock;
+                                savePMAddr = blocks[tailBlock].addr;
+
+                                tailBlockAddr = dataLength;
+                                break allocate;
+                            }
                         }
                     }
                     // 后面的代码处理 headBlock == tailBlock 且 tailBlockAddr < headBlockAddr 的情形
@@ -326,6 +337,7 @@ public class PMPrefetchBuffer {
                 }
                 if (savePMAddr == -1) {
                     // 申请不到
+                    // 申请不到的情况下，不能动tailBlock、tailBlockAddr
                     return false;
                 }
                 // 申请到了
@@ -359,17 +371,11 @@ public class PMPrefetchBuffer {
                     return null;
                 }
                 int dataLength = msgsLength[head];
-                int msgBlockAddr = msgsBlockAddr[head];
-                int msgBlock = msgsBlock[head];
                 long msgPMAddr = blocks[headBlock].addr + headBlockAddr;
                 ByteBuffer data = ByteBuffer.allocate(dataLength);
                 pool.copyToByteArray(msgPMAddr, data.array(), data.arrayOffset() + data.position(), dataLength);
                 // free the head
-                if (msgBlockAddr == 0) {
-                    // 说明上次free的时候上一个block已经free完啦，应该把head切换到下一个block来
-                    headBlock = msgBlock;
-                    headBlockAddr = dataLength;
-                }
+                headBlockAddr += dataLength;
 
                 if (length == 1) {
                     length--;
@@ -379,6 +385,15 @@ public class PMPrefetchBuffer {
                 length--;
                 return data;
             } finally {
+                // 说明上次free的时候上一个block已经free完啦，应该把head切换到下一个block来
+                // 如果存在下一条消息，并且加上下一条消息的长度超过了这个block
+                // 那么说明此时应该跳到下一个block
+                if (!isEmpty()){
+                    if (headBlockAddr + msgsLength[head] >= blocks[headBlock].capacity){
+                        headBlock = (headBlock + 1) % curBlockNum;
+                        headBlockAddr = 0;
+                    }
+                }
                 log.debug("poll end");
                 this.debugLog();
             }
@@ -398,45 +413,47 @@ public class PMPrefetchBuffer {
             this.debugLog();
 
             try {
-            PMBlock block = pmBlockPool.allocate();
-            // 两种情况
-            // 情况1
-            if ((headBlock < tailBlock) || (headBlock == tailBlock && headBlockAddr <= tailBlockAddr)) {
-                // 可以直接将队列向后延伸
-                blocks[curBlockNum] = block;
-                curBlockNum += 1;
-                return;
-            }
-            if (headBlock > tailBlock) {
+                PMBlock block = pmBlockPool.allocate();
+                // 两种情况
+                // 情况1
+                if ((headBlock < tailBlock) || (headBlock == tailBlock && headBlockAddr <= tailBlockAddr)) {
+                    // 可以直接将队列向后延伸
+                    blocks[curBlockNum] = block;
+                    curBlockNum += 1;
+                    return;
+                }
+                if (headBlock > tailBlock) {
+                    // 可以将新增的块放到 tailBlock 和 headBlock 之间
+                    // 准确的说，是headBlock之前
+                    // 然后把 headBlock以及之后的块整体向后移动
+                    for (int i = curBlockNum; i > headBlock; i--) {
+                        blocks[i] = blocks[i - 1];
+                    }
+                    int newBlockIndex = headBlock;
+                    blocks[newBlockIndex] = block;
+                    headBlock += 1;
+                    curBlockNum += 1;
+                    return;
+                }
+                // headBlock == tailBlock && headBlockAddr > tailBlock
                 // 可以将新增的块放到 tailBlock 和 headBlock 之间
                 // 准确的说，是headBlock之前
                 // 然后把 headBlock以及之后的块整体向后移动
-                for (int i = curBlockNum; i >= headBlock; i--) {
+                for (int i = curBlockNum; i > headBlock; i--) {
                     blocks[i] = blocks[i - 1];
                 }
                 int newBlockIndex = headBlock;
                 blocks[newBlockIndex] = block;
                 headBlock += 1;
-                return;
-            }
-            // headBlock == tailBlock && headBlockAddr > tailBlock
-            // 可以将新增的块放到 tailBlock 和 headBlock 之间
-            // 准确的说，是headBlock之前
-            // 然后把 headBlock以及之后的块整体向后移动
-            for (int i = curBlockNum; i >= headBlock; i--) {
-                blocks[i] = blocks[i - 1];
-            }
-            int newBlockIndex = headBlock;
-            blocks[newBlockIndex] = block;
-            headBlock += 1;
-            // 然后还需要重新整理一下数据
-            // 还需要把headBlock中, 把0-tailBlockAddr的部分 复制到新块
-            pool.copyFromPool(blocks[headBlock].addr, block.addr, tailBlockAddr);
-        } finally {
+                // 然后还需要重新整理一下数据
+                // 还需要把headBlock中, 把0-tailBlockAddr的部分 复制到新块
+                pool.copyFromPool(blocks[headBlock].addr, block.addr, tailBlockAddr);
+                curBlockNum += 1;
+            } finally {
                 log.debug("addBlock end");
                 this.debugLog();
 
-        }
+            }
 
         }
 
@@ -463,24 +480,83 @@ public class PMPrefetchBuffer {
         // log.setLevel(Level.INFO);
         PMPrefetchBuffer p = new PMPrefetchBuffer("/mnt/pmem/mq/testdata");
         RingBuffer b = p.newRingBuffer();
-        byte[] byteData = new byte[100];
-        for (int i = 0; i < 100; i++) {
+        byte[] byteData = new byte[40];
+        for (int i = 0; i < 40; i++) {
             byteData[i] = (byte) i;
         }
-        for (int i = 0; i < 10; i++) {
-            b.offer(ByteBuffer.wrap(byteData));
+        boolean ret;
+        ByteBuffer buf;
+        for (int i = 0; i < 4; i++) {
+            ret = b.offer(ByteBuffer.wrap(byteData));
+            if (ret == false) {
+                log.error("data error !");
+                System.exit(-1);
+            }
+        }
+        ret = b.offer(ByteBuffer.wrap(byteData));
+        if (ret == true) {
+            log.error("offer error !");
+                System.exit(-1);
         }
         b.addBlock();
-        for (int i = 0; i < 10; i++) {
-            ByteBuffer ret = b.poll();
-            for (int k = 0; k < 100; k++) {
-                if (ret.array()[k] != byteData[k]) {
+        for (int i = 0; i < 4; i++) {
+            ret = b.offer(ByteBuffer.wrap(byteData));
+            if (ret == false) {
+                log.error("data error !");
+                System.exit(-1);
+            }
+        }
+        // 两块都满了
+
+        for (int i = 0; i < 2; i++) {
+            buf = b.poll();
+            for (int k = 0; k < 40; k++) {
+                if (buf.array()[k] != byteData[k]) {
                     log.error("data error !!");
                     System.exit(-1);
                 }
             }
 
         }
+        // 第一块空出2个位置，其中第二个位置会刚好相等，就不让放了
+        for (int i = 0; i < 1; i++) {
+            ret = b.offer(ByteBuffer.wrap(byteData));
+            if (ret == false) {
+                log.error("offer error !");
+                System.exit(-1);
+            }
+        }
+        for (int i = 0; i < 1; i++) {
+            ret = b.offer(ByteBuffer.wrap(byteData));
+            if (ret == true) {
+                log.error("offer error !");
+                System.exit(-1);
+            }
+        }
+
+        b.addBlock();
+
+        for (int i = 0; i < 1; i++) {
+            ret = b.offer(ByteBuffer.wrap(byteData));
+            if (ret == false) {
+                log.error("offer error !");
+                System.exit(-1);
+            }
+        }
+
+
+        // 这个时候head和tail都在第0块
+        // 扩容，这个时候应该是放在tail前面
+        for (int i = 0; i < 8; i++) {
+            buf = b.poll();
+            for (int k = 0; k < 40; k++) {
+                if (buf.array()[k] != byteData[k]) {
+                    log.error("data error !!");
+                    System.exit(-1);
+                }
+            }
+        }
+
     }
 
 }
