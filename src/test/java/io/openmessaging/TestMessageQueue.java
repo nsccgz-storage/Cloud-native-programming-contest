@@ -163,7 +163,7 @@ public class TestMessageQueue {
 	}
 
 	public static void threadRunTestMultiThreadAppendAndGetRange(int threadId, MessageQueue mq,
-			CyclicBarrier barrier) {
+																 CyclicBarrier barrier) {
 		try {
 			String topicName = "testMultiThreadAppendAndGetRange" + threadId;
 			Vector<Message> msgs = new Vector<>();
@@ -292,7 +292,7 @@ public class TestMessageQueue {
 	}
 
 	public static void threadRunTestMultiThreadGetRangeFetchNum(int threadId, MessageQueue mq,
-			CyclicBarrier barrier) {
+																CyclicBarrier barrier) {
 		try {
 
 			Map<Integer, ByteBuffer> result;
@@ -307,10 +307,10 @@ public class TestMessageQueue {
 			if (threadId == 0) {
 				log.info("init messages ok");
 			}
-	
+
 			barrier.await();
-			
-			
+
+
 			if (threadId == 0){
 				log.info("begin getRangeFetchMulti!");
 			}
@@ -338,7 +338,7 @@ public class TestMessageQueue {
 						log.info("***************end*************************");
 						System.exit(-1);
 					}
-				
+
 				}
 				for (int k = 0; k <= 40 && k <= i; k++){
 					log.debug("k : " + k);
