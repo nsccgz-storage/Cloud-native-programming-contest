@@ -404,22 +404,23 @@ public class LSMessageQueue extends MessageQueue {
         q.offset2position.add(position);
 
         // // // 换成在每个append中写pm，而不是在聚合中写pm，也会有明显的开销
-        // data.reset();
+        data.reset();
+        ByteBuffer doubleWriteData = data.duplicate();
         // // if (false){
-        // if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.isFull())){
-        // // TODO: 仅未知队列才要双写和预取
-        // // if ((q.type == 0 ) && (!q.prefetchBuffer.isFull())){
-        //     q.prefetchBuffer.prefetch();
-        //     if (!q.prefetchBuffer.isFull() && q.prefetchOffset == q.maxOffset-1){
-        //         log.debug("double write");
-        //         q.prefetchBuffer.directAddData(data);
-        //     }
-        //     // 写满就不管了
-        //     // if (q.prefetchOffset == q.maxOffset){
-        //     //     log.debug("double write");
-        //     //     q.prefetchBuffer.directAddData(data);
-        //     // }
-        // }
+        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.ringBuffer.isFull())){
+        // TODO: 仅未知队列才要双写和预取
+        // if ((q.type == 0 ) && (!q.prefetchBuffer.isFull())){
+            q.prefetchBuffer.prefetch();
+            if (!q.prefetchBuffer.ringBuffer.isFull() && q.prefetchOffset == q.maxOffset-1){
+                log.debug("double write");
+                q.prefetchBuffer.directAddData(doubleWriteData);
+            }
+            // 写满就不管了
+            // if (q.prefetchOffset == q.maxOffset){
+            //     log.debug("double write");
+            //     q.prefetchBuffer.directAddData(data);
+            // }
+        }
 
 
 
@@ -1386,9 +1387,11 @@ public class LSMessageQueue extends MessageQueue {
             // 如果刚好需要预取这个数据，而且预取数量还不够，那就把这个数据加进去
             // this.offer(data); 
             if (ringBuffer.offer(data)){
-                //  可能会加失败
                 q.prefetchOffset++;
+                return ;
             }
+            log.debug("can not offer new data in ringBuffer");
+            //  可能会加失败
             return ;
         }
         public void debuglog(){
