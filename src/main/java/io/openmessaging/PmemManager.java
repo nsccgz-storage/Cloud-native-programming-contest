@@ -10,7 +10,7 @@ import java.util.HashMap;
 public class PmemManager {
     final long MAX_PMEM_SIZE = 60*1024L*1024L*1024L; // 60GB
     final long CHUNK_SIZE = 1024L*1024L*1024L; // 1GiB 每个线程1个chunk?
-    final long PAGE_SIZE = 128*1024L; // 64KiB
+    final long PAGE_SIZE = 64*1024L; // 64KiB // 8*1024=8000+
     private static final Logger logger = Logger.getLogger(SSDBench.class);
 
     static int[] depthArray;
