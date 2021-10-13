@@ -626,12 +626,12 @@ public class LSMessageQueue extends MessageQueue {
                 ret.put(i, buf);
             }
         }
-        // if (q.type == 2){
-        //     if (!q.prefetchBuffer.ringBuffer.isFull()){
-        //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //         q.prefetchBuffer.prefetch();
-        //     }
-        // }
+        if (q.type == 2){
+            if (!q.prefetchBuffer.ringBuffer.isFull()){
+                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                q.prefetchBuffer.prefetch();
+            }
+        }
 
         return ret;
     }
@@ -1342,66 +1342,61 @@ public class LSMessageQueue extends MessageQueue {
             }
         }
 
-        // public void prefetch() {
-        //     log.debug("before prefetch");
-        //     this.debuglog();
-        //     try {
+        public void prefetch() {
+            log.debug("before prefetch");
+            this.debuglog();
+            try {
 
-        //         // 先看看能prefetch多少个？
-        //         // 数一下从consumeOffset开始后面有多少有效消息
-        //         // 再看看队列还能放多少个
-        //         if (q.consumeOffset > headOffset) {
-        //             // 说明之前有buffer不够用的情况，consumeOffset走得更快了，此时要更新一下headOffset和prefetchOffset
-        //             // TODO: 可以用just Poll
-        //             ringBuffer.reset();
-        //             headOffset = q.consumeOffset;
-        //             q.prefetchOffset = q.consumeOffset;
-        //             // 相当于重置 prefetch buffer
-        //         }
-        //         long prefetchNum = (q.maxOffset - 1) - q.prefetchOffset;
-        //         // 得到能够被预取的消息数量
-        //         if (prefetchNum <= 0) {
-        //             // 没有需要预取的消息，或者所有消息都被预取了
-        //             log.debug("nothing to prefetch or all msgs has been prefetched");
-        //             return;
-        //         }
-        //         // 检查consumeOffset和队列的headOffset是否对应，如果不对应则释放相关数据
-        //         // 被消费的时候应当释放队列相关资源
-        //         assert (q.consumeOffset == headOffset);
-        //         // 预取的数量最大为当前buffer剩余的空间，再多的也没法预取，确定真正要预取这么多个消息
-        //         prefetchNum = Math.min(prefetchNum, (ringBuffer.maxLength - ringBuffer.length));
-        //         if (prefetchNum <= 0) {
-        //             log.debug("the prefetch buffer is full");
-        //             return;
-        //         }
+                // 先看看能prefetch多少个？
+                // 数一下从consumeOffset开始后面有多少有效消息
+                // 再看看队列还能放多少个
+                if (q.consumeOffset != headOffset) {
+                    // 要求 q.consumeOffset 一定和 headOffset 相等，如果不相等就重置buffer
+                    // TODO: 可以用just Poll
+                    ringBuffer.reset();
+                    headOffset = q.consumeOffset;
+                    nextPrefetchOffset = q.consumeOffset;
+                    // 相当于重置 prefetch buffer
+                }
+                long prefetchNum = q.maxOffset - nextPrefetchOffset;
+                // 得到能够被预取的消息数量
+                if (prefetchNum <= 0) {
+                    // 没有需要预取的消息，或者所有消息都被预取了
+                    log.debug("nothing to prefetch or all msgs has been prefetched");
+                    return;
+                }
+                // 预取的数量最大为当前buffer剩余的空间，再多的也没法预取，确定真正要预取这么多个消息
+                prefetchNum = Math.min(prefetchNum, (ringBuffer.maxLength - ringBuffer.length));
+                if (prefetchNum <= 0) {
+                    log.debug("the prefetch buffer is full");
+                    return;
+                }
 
-        //         // 从prefetchOffset开始prefetch，填满数组
-        //         // TODO: 如果ringBuffer满了就不放了，早点停
-        //         int actualPrefetchNum = 0;
-        //         // FIXME: 不读就不知道消息有多长，这会造成一些额外的读取
+                // 从prefetchOffset开始prefetch，填满数组
+                // TODO: 如果ringBuffer满了就不放了，早点停
+                int actualPrefetchNum = 0;
+                // FIXME: 不读就不知道消息有多长，这会造成一些额外的读取
 
-        //         for (int i = 0; i < prefetchNum; i++) {
-        //             // FIXME: long转int，不太好
-        //             long pos = q.offset2position.get((int) q.prefetchOffset);
-        //             ByteBuffer buf = df.read(pos);
-        //             log.debug(buf);
-        //             if (ringBuffer.offer(buf)) {
-        //                 q.prefetchOffset ++;
-        //                 actualPrefetchNum++;
-        //             } else {
-        //                 break;
-        //             }
-        //         }
-        //         tailOffset += actualPrefetchNum;
-        //         log.debug("prefetch " + actualPrefetchNum + " msgs");
+                for (int i = 0; i < prefetchNum; i++) {
+                    // FIXME: long转int，不太好
+                    long pos = q.offset2position.get((int) nextPrefetchOffset);
+                    ByteBuffer buf = df.read(pos);
+                    log.debug(buf);
+                    if (ringBuffer.offer(buf)) {
+                        nextPrefetchOffset++;
+                        actualPrefetchNum++;
+                    } else {
+                        break;
+                    }
+                }
+                log.debug("prefetch " + actualPrefetchNum + " msgs");
 
-        //     } finally {
-        //         log.debug("after prefetch");
-        //         this.debuglog();
-        //     }
-
-        //     return;
-        // }
+            } finally {
+                log.debug("after prefetch");
+                this.debuglog();
+            }
+            return;
+        }
 
         public void directAddData(long offset, ByteBuffer data){
             log.debug("before direct add data");
