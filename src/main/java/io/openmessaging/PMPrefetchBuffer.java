@@ -411,12 +411,19 @@ public class PMPrefetchBuffer {
         for (int i = 0; i < 100; i++){
             byteData[i] = (byte)i;
         }
-        b.offer(ByteBuffer.wrap(byteData));
-        ByteBuffer ret = b.poll();
-        for (int i = 0; i < 100; i++){
-            if (ret.array()[i] != byteData[i]){
-                log.error("data error !!");
+        for (int i = 0; i < 10; i++){
+            b.offer(ByteBuffer.wrap(byteData));
+        }
+        b.addBlock();
+        for (int i = 0; i < 10; i++){
+            ByteBuffer ret = b.poll();
+            for (int k = 0; k < 100; k++){
+                if (ret.array()[k] != byteData[k]){
+                    log.error("data error !!");
+                    System.exit(-1);
+                }
             }
+
         }
     }
 
