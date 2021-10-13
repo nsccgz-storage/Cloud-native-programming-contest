@@ -182,10 +182,6 @@ public class PmemManager {
             this.size = size;
             chunk = c;
             index = chunk.allocate(size); // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
-<<<<<<< HEAD
-            // logger.info("allocate time = "+(System.nanoTime()-startTime));
-=======
->>>>>>> dcc29824e4f2d1e979d8b2b05fb36bcc984ed493
 
             if(index != -1) {
                 handle = chunk.getAddress(index, size);

@@ -416,7 +416,8 @@ public class MyLSMessageQueue extends MessageQueue {
         // 写 PMEM 的异步任务设计
         AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        if(q.type != 2){// 不是冷队列，开启双写
+        if(false){
+        //if(q.type != 2){// 不是冷队列，开启双写
             exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         }
          // 发起一个异步任务表示写 pmem
@@ -470,12 +471,15 @@ public class MyLSMessageQueue extends MessageQueue {
         q.maxOffsetData = hotDataBuf;
 
         // 等待异步任务的结束
-        if(q.type != 2){
+        // if(q.type != 2){
+        if(false){
             try{
                 q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
             }catch(Exception e){
                 e.printStackTrace();
             }
+        }else{
+            q.offset2info.put(q.maxOffset, new IndexInfo(position, size , -1));
         }
         q.maxOffset++;
         return ret;
