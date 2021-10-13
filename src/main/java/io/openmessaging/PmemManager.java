@@ -177,7 +177,10 @@ public class PmemManager {
             tail = 0;
             this.size = size;
             chunk = c;
+            long startTime = System.nanoTime();
             index = chunk.allocate(size); // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
+            // logger.info("allocate time = "+(System.nanoTime()-startTime));
+            // index = chunk.allocate(size); // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
             if(index != -1) {
                 handle = chunk.getAddress(index, size);
             }

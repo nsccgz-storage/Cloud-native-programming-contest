@@ -18,8 +18,8 @@
 
 set -x
 
-#DBDIR=/mnt/nvme/mq
-DBDIR=/mnt/ssd/wyk
+DBDIR=/mnt/nvme/wyk
+#DBDIR=/mnt/ssd/wyk
 PMEMDIR=/mnt/pmem/wyk
 
 ulimit -s unlimited
@@ -41,7 +41,7 @@ ls -l ${PMEMDIR}
 mvn clean package -Dmaven.test.skip=true assembly:single
 
 # mvn exec:java -Dexec.mainClass="io.openmessaging.Test1" -Dexec.args="${DBDIR}" -Dexec.classpathScope=test  -e
-java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx128g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR}
+taskset -c 1-4 java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx128g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR}
 
 ls -l ${DBDIR}
 ls -l ${PMEMDIR}

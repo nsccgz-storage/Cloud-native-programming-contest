@@ -288,7 +288,7 @@ public class MQBench {
 			int num = 0;
 			while ((line = reader.readLine()) != null) {
 				// log.debug(line);
-				if(num++ % 7 != 0) continue;
+				//if(num++ % 7 != 0) continue;
 				String item[] = line.split(",");
 				// log.debug(item[0]);
 
@@ -368,8 +368,8 @@ public class MQBench {
 		// init();
 		log.setLevel(Level.INFO);
 		// log.setLevel(Level.DEBUG);
-		//String dbPath = "/mnt/nvme/wyk";
-		String dbPath = "/mnt/ssd/wyk";
+		String dbPath = "/mnt/nvme/wyk";
+		// String dbPath = "/mnt/ssd/wyk";
 		String pmDirPath = "/mnt/pmem/wyk";
 
 		log.info("test from MQBench");
