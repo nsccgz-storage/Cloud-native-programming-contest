@@ -11,6 +11,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +37,7 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 import java.util.TreeMap;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.ArrayDeque;
@@ -169,6 +172,12 @@ public class MyLSMessageQueue extends MessageQueue {
     int numOfPrefetchThreads;
     PrefetchTask[] prefetchTasks;
     PmemManager pmemManager;
+
+    public void shutdown(){
+        for(int i=0; i<numOfPrefetchThreads; i++){
+            prefetchTasks[i].t.interrupt();
+        }
+    }
 
     MyLSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         // SSDBench.runStandardBench(dbDirPath);
@@ -315,8 +324,6 @@ public class MyLSMessageQueue extends MessageQueue {
         } catch (IOException ie) {
             ie.printStackTrace();
         }
-
-
     }
 
     public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position) {
@@ -347,6 +354,18 @@ public class MyLSMessageQueue extends MessageQueue {
         return ret;
     }
 
+
+    class AsyWritePmemTask implements Callable<Integer>{
+        MQQueue q;
+        ByteBuffer data;
+        public AsyWritePmemTask(MQQueue q, ByteBuffer data){
+            this.q = q;
+        }
+        @Override
+        public Integer call() throws Exception{
+            return q.block.put(data);
+        }
+    }
 
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
@@ -396,23 +415,28 @@ public class MyLSMessageQueue extends MessageQueue {
         int size = data.remaining();
         // 先双写
         
+
+         // 发起一个异步任务表示写 pmem
         data.mark();
-        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
+
+        // 写 PMEM 的异步任务设计
+        AsyWritePmemTask task = new AsyWritePmemTask(q, data);
+        FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
+        ExecutorService exec = Executors.newFixedThreadPool(1);
+        exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
+        //int handle = q.block.put(data);
+        exec.shutdown();
 
         data.reset();
+        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
+
         // byte[] writePmemData = new byte[data.remaining()];
-        
         // data.get(writePmemData);
-        
-
         // long handle = pmemManager.write(writePmemData);
-        long handle = q.block.put(data);
-        //if(handle == -1)log.error("space is full");
-
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
-        q.offset2info.put(q.maxOffset, new IndexInfo(position, size , handle));
+        
         long ret = q.maxOffset;
 
         // 热读方案1：需要时才分配内存
@@ -448,6 +472,17 @@ public class MyLSMessageQueue extends MessageQueue {
         q.maxOffsetData = hotDataBuf;
 
         q.maxOffset++;
+
+        // 等待异步任务的结束
+        try{
+            while(!futureTask.isDone()){
+                Thread.sleep(100);
+            }
+            q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+       
         return ret;
     }
 
