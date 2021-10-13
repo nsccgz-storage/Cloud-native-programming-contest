@@ -309,7 +309,7 @@ public class PMPrefetchBuffer {
                             // tailBlock = nextTailBlock;
                             // tailBlockAddr = 0;
                             // 下一个就是自己，那就看看headBlockAddr前面还有没有位置
-                            if (dataLength < (headBlockAddr - 0)){
+                            if (dataLength < (headBlockAddr - 0)) {
                                 // 能放
                                 tailBlock = nextTailBlock;
 
@@ -388,8 +388,8 @@ public class PMPrefetchBuffer {
                 // 说明上次free的时候上一个block已经free完啦，应该把head切换到下一个block来
                 // 如果存在下一条消息，并且加上下一条消息的长度超过了这个block
                 // 那么说明此时应该跳到下一个block
-                if (!isEmpty()){
-                    if (headBlockAddr + msgsLength[head] >= blocks[headBlock].capacity){
+                if (!isEmpty()) {
+                    if (headBlockAddr + msgsLength[head] >= blocks[headBlock].capacity) {
                         headBlock = (headBlock + 1) % curBlockNum;
                         headBlockAddr = 0;
                     }
@@ -479,80 +479,149 @@ public class PMPrefetchBuffer {
         log.setLevel(Level.DEBUG);
         // log.setLevel(Level.INFO);
         PMPrefetchBuffer p = new PMPrefetchBuffer("/mnt/pmem/mq/testdata");
-        RingBuffer b = p.newRingBuffer();
         byte[] byteData = new byte[40];
         for (int i = 0; i < 40; i++) {
             byteData[i] = (byte) i;
         }
         boolean ret;
         ByteBuffer buf;
-        for (int i = 0; i < 4; i++) {
-            ret = b.offer(ByteBuffer.wrap(byteData));
-            if (ret == false) {
-                log.error("data error !");
-                System.exit(-1);
-            }
-        }
-        ret = b.offer(ByteBuffer.wrap(byteData));
-        if (ret == true) {
-            log.error("offer error !");
-                System.exit(-1);
-        }
-        b.addBlock();
-        for (int i = 0; i < 4; i++) {
-            ret = b.offer(ByteBuffer.wrap(byteData));
-            if (ret == false) {
-                log.error("data error !");
-                System.exit(-1);
-            }
-        }
-        // 两块都满了
+        // {
+        //     RingBuffer b = p.newRingBuffer();
+        //     // test case 1, set block size to 170 Bytes
+        //     for (int i = 0; i < 4; i++) {
+        //         ret = b.offer(ByteBuffer.wrap(byteData));
+        //         if (ret == false) {
+        //             log.error("data error !");
+        //             System.exit(-1);
+        //         }
+        //     }
+        //     ret = b.offer(ByteBuffer.wrap(byteData));
+        //     if (ret == true) {
+        //         log.error("offer error !");
+        //         System.exit(-1);
+        //     }
+        //     b.addBlock();
+        //     for (int i = 0; i < 4; i++) {
+        //         ret = b.offer(ByteBuffer.wrap(byteData));
+        //         if (ret == false) {
+        //             log.error("data error !");
+        //             System.exit(-1);
+        //         }
+        //     }
+        //     // 两块都满了
 
-        for (int i = 0; i < 2; i++) {
-            buf = b.poll();
-            for (int k = 0; k < 40; k++) {
-                if (buf.array()[k] != byteData[k]) {
-                    log.error("data error !!");
+        //     for (int i = 0; i < 2; i++) {
+        //         buf = b.poll();
+        //         for (int k = 0; k < 40; k++) {
+        //             if (buf.array()[k] != byteData[k]) {
+        //                 log.error("data error !!");
+        //                 System.exit(-1);
+        //             }
+        //         }
+
+        //     }
+        //     // 第一块空出2个位置，其中第二个位置会刚好相等，就不让放了
+        //     for (int i = 0; i < 1; i++) {
+        //         ret = b.offer(ByteBuffer.wrap(byteData));
+        //         if (ret == false) {
+        //             log.error("offer error !");
+        //             System.exit(-1);
+        //         }
+        //     }
+        //     for (int i = 0; i < 1; i++) {
+        //         ret = b.offer(ByteBuffer.wrap(byteData));
+        //         if (ret == true) {
+        //             log.error("offer error !");
+        //             System.exit(-1);
+        //         }
+        //     }
+
+        //     b.addBlock();
+
+        //     for (int i = 0; i < 1; i++) {
+        //         ret = b.offer(ByteBuffer.wrap(byteData));
+        //         if (ret == false) {
+        //             log.error("offer error !");
+        //             System.exit(-1);
+        //         }
+        //     }
+
+        //     // 这个时候head和tail都在第0块
+        //     // 扩容，这个时候应该是放在tail前面
+        //     for (int i = 0; i < 8; i++) {
+        //         buf = b.poll();
+        //         for (int k = 0; k < 40; k++) {
+        //             if (buf.array()[k] != byteData[k]) {
+        //                 log.error("data error !!");
+        //                 System.exit(-1);
+        //             }
+        //         }
+        //     }
+
+        // }
+        {
+            RingBuffer b = p.newRingBuffer();
+            // test case 2, set block size to 170 Bytes
+            for (int i = 0; i < 4; i++) {
+                ret = b.offer(ByteBuffer.wrap(byteData));
+                if (ret == false) {
+                    log.error("offer error !");
                     System.exit(-1);
                 }
             }
-
-        }
-        // 第一块空出2个位置，其中第二个位置会刚好相等，就不让放了
-        for (int i = 0; i < 1; i++) {
-            ret = b.offer(ByteBuffer.wrap(byteData));
-            if (ret == false) {
-                log.error("offer error !");
-                System.exit(-1);
-            }
-        }
-        for (int i = 0; i < 1; i++) {
-            ret = b.offer(ByteBuffer.wrap(byteData));
-            if (ret == true) {
-                log.error("offer error !");
-                System.exit(-1);
-            }
-        }
-
-        b.addBlock();
-
-        for (int i = 0; i < 1; i++) {
-            ret = b.offer(ByteBuffer.wrap(byteData));
-            if (ret == false) {
-                log.error("offer error !");
-                System.exit(-1);
-            }
-        }
-
-
-        // 这个时候head和tail都在第0块
-        // 扩容，这个时候应该是放在tail前面
-        for (int i = 0; i < 8; i++) {
-            buf = b.poll();
-            for (int k = 0; k < 40; k++) {
-                if (buf.array()[k] != byteData[k]) {
-                    log.error("data error !!");
+            b.addBlock();
+            for (int i = 0; i < 4; i++) {
+                ret = b.offer(ByteBuffer.wrap(byteData));
+                if (ret == false) {
+                    log.error("offer error !");
                     System.exit(-1);
+                }
+            }
+            b.addBlock();
+            for (int i = 0; i < 4; i++) {
+                ret = b.offer(ByteBuffer.wrap(byteData));
+                if (ret == false) {
+                    log.error("offer error !");
+                    System.exit(-1);
+                }
+            }
+            // 这个时候3个block都填满了，消费两个block
+            for (int i = 0; i < 8; i++) {
+                buf = b.poll();
+                for (int k = 0; k < 40; k++) {
+                    if (buf.array()[k] != byteData[k]) {
+                        log.error("data error !!");
+                        System.exit(-1);
+                    }
+                }
+            }
+            // 再填第0个block里，此时0block有东西，1block没东西，2block有东西
+            for (int i = 0; i < 4; i++) {
+                ret = b.offer(ByteBuffer.wrap(byteData));
+                if (ret == false) {
+                    log.error("offer error !");
+                    System.exit(-1);
+                }
+            }
+            log.info("step 1 ok");
+            b.addBlock();
+            // 再填第1个block里，此时0block有东西，1block有东西，2block有东西
+            for (int i = 0; i < 8; i++) {
+                ret = b.offer(ByteBuffer.wrap(byteData));
+                if (ret == false) {
+                    log.error("offer error !");
+                    System.exit(-1);
+                }
+            }
+            log.info("offer agin ok");
+            // 现在4个block都有消息，总共16个，全部取出来检查一下
+            for (int i = 0; i < 16; i++) {
+                buf = b.poll();
+                for (int k = 0; k < 40; k++) {
+                    if (buf.array()[k] != byteData[k]) {
+                        log.error("data error !!");
+                        System.exit(-1);
+                    }
                 }
             }
         }
