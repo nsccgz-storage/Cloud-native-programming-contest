@@ -1,0 +1,300 @@
+total 0
+total 0
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< io.openmessaging:race2021 >----------------------
+[INFO] Building race2021 1.0-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- maven-clean-plugin:2.5:clean (default-clean) @ race2021 ---
+[INFO] Deleting /home/wyk/AliContest/subTest/Cloud-native-programming-contest/target
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ race2021 ---
+[WARNING] Using platform encoding (UTF-8 actually) to copy filtered resources, i.e. build is platform dependent!
+[INFO] Copying 2 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:2.3.2:compile (default-compile) @ race2021 ---
+[INFO] Compiling 27 source files to /home/wyk/AliContest/subTest/Cloud-native-programming-contest/target/classes
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/UnsafeUtil.java:[3,15] Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/UnsafeUtil.java:[4,17] DirectBuffer is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/MMapper.java:[8,17] FileChannelImpl is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/MMapper.java:[9,15] Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/SSDBench.java:[27,17] DirectBuffer is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/UnsafeUtil.java:[9,21] Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/UnsafeUtil.java:[12,16] Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/UnsafeUtil.java:[14,12] Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/MMapper.java:[14,22] Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/MMapper.java:[24,34] Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/MMapper.java:[26,13] Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/MMapper.java:[28,20] FileChannelImpl is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/MMapper.java:[29,22] FileChannelImpl is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/SSDBench.java:[592,38] DirectBuffer is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/SSDBench.java:[602,29] DirectBuffer is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/SSDBench.java:[682,38] DirectBuffer is internal proprietary API and may be removed in a future release
+[WARNING] /home/wyk/AliContest/subTest/Cloud-native-programming-contest/src/main/java/io/openmessaging/SSDBench.java:[686,29] DirectBuffer is internal proprietary API and may be removed in a future release
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ race2021 ---
+[INFO] Not copying test resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:2.3.2:testCompile (default-testCompile) @ race2021 ---
+[INFO] Not compiling test sources
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.12.4:test (default-test) @ race2021 ---
+[INFO] Tests are skipped.
+[INFO] 
+[INFO] --- maven-jar-plugin:2.4:jar (default-jar) @ race2021 ---
+[INFO] Building jar: /home/wyk/AliContest/subTest/Cloud-native-programming-contest/target/race2021-1.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- maven-assembly-plugin:2.2.1:single (make-assembly) @ race2021 ---
+[INFO] META-INF/ already added, skipping
+[INFO] META-INF/MANIFEST.MF already added, skipping
+[INFO] Building jar: /home/wyk/AliContest/subTest/Cloud-native-programming-contest/target/mq-sample.jar
+[INFO] META-INF/ already added, skipping
+[INFO] META-INF/MANIFEST.MF already added, skipping
+[INFO] 
+[INFO] --- maven-assembly-plugin:2.2.1:single (default-cli) @ race2021 ---
+[INFO] META-INF/ already added, skipping
+[INFO] META-INF/MANIFEST.MF already added, skipping
+[INFO] Building jar: /home/wyk/AliContest/subTest/Cloud-native-programming-contest/target/mq-sample.jar
+[INFO] META-INF/ already added, skipping
+[INFO] META-INF/MANIFEST.MF already added, skipping
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  3.551 s
+[INFO] Finished at: 2021-10-13T21:12:43+08:00
+[INFO] ------------------------------------------------------------------------
+[  INFO] 21:12:44,025[MQBench.java: 375] [main] [0] - test from MQBench
+[  INFO] 21:12:44,028[MyLSMessageQueue.java: 200] [main] [3] - useStats=true | writeMethod=12 | numOfDataFiles=4 | maxBufLength=69632 | maxBufNum=8 | 
+[  INFO] 21:12:44,031[MyLSMessageQueue.java: 217] [main] [6] - Initializing datafile: /mnt/nvme/wyk/db0
+[  INFO] 21:12:44,035[MyLSMessageQueue.java: 217] [main] [10] - Initializing datafile: /mnt/nvme/wyk/db1
+[  INFO] 21:12:44,035[MyLSMessageQueue.java: 217] [main] [10] - Initializing datafile: /mnt/nvme/wyk/db2
+[  INFO] 21:12:44,036[MyLSMessageQueue.java: 217] [main] [11] - Initializing datafile: /mnt/nvme/wyk/db3
+[  INFO] 21:12:44,036[MyLSMessageQueue.java: 221] [main] [11] - Initializing metadata file
+[  INFO] 21:12:44,105[PmemManager.java:  38] [main] [80] - max depth = 13
+[  INFO] 21:12:44,188[MyLSMessageQueue.java: 261] [main] [163] - init ok!
+[  INFO] 21:12:44,233[MQBench.java: 274] [pool-2-thread-1] [208] - start
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-17] [27360] - init thread id : 0
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-2] [27360] - init thread id : 7
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-27] [27361] - init thread id : 13
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-10] [27361] - init thread id : 20
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-23] [27361] - init thread id : 27
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-21] [27360] - init thread id : 6
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-22] [27360] - init thread id : 3
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-25] [27360] - init thread id : 5
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-34] [27360] - init thread id : 4
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-3] [27360] - init thread id : 2
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-15] [27360] - init thread id : 1
+[  INFO] 21:13:11,387[MyLSMessageQueue.java: 582] [pool-2-thread-3] [27362] - init thread id : 9
+[  INFO] 21:13:11,387[MyLSMessageQueue.java: 582] [pool-2-thread-34] [27362] - init thread id : 8
+[  INFO] 21:13:11,387[MyLSMessageQueue.java: 582] [pool-2-thread-25] [27362] - init thread id : 7
+[  INFO] 21:13:11,387[MyLSMessageQueue.java: 582] [pool-2-thread-22] [27362] - init thread id : 6
+[  INFO] 21:13:11,387[MyLSMessageQueue.java: 582] [pool-2-thread-21] [27362] - init thread id : 5
+[  INFO] 21:13:11,387[MyLSMessageQueue.java:1359] [pool-2-thread-24] [27362] - init thread id : 38
+[  INFO] 21:13:11,392[MyLSMessageQueue.java: 582] [pool-2-thread-24] [27367] - init thread id : 11
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-16] [27361] - init thread id : 37
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-19] [27361] - init thread id : 36
+[  INFO] 21:13:11,393[MyLSMessageQueue.java: 600] [pool-2-thread-25] [27368] - get topic id : 3
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-20] [27361] - init thread id : 35
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-39] [27361] - init thread id : 34
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-13] [27361] - init thread id : 33
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-32] [27361] - init thread id : 32
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-33] [27361] - init thread id : 31
+[  INFO] 21:13:11,386[MyLSMessageQueue.java: 582] [pool-2-thread-23] [27361] - init thread id : 4
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-28] [27361] - init thread id : 30
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-36] [27361] - init thread id : 29
+[  INFO] 21:13:11,386[MyLSMessageQueue.java: 582] [pool-2-thread-10] [27361] - init thread id : 3
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-40] [27361] - init thread id : 28
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-5] [27361] - init thread id : 25
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-38] [27361] - init thread id : 26
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-31] [27361] - init thread id : 24
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-35] [27361] - init thread id : 23
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-14] [27361] - init thread id : 22
+[  INFO] 21:13:11,386[MyLSMessageQueue.java: 582] [pool-2-thread-27] [27361] - init thread id : 2
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-18] [27361] - init thread id : 21
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-9] [27361] - init thread id : 18
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-6] [27361] - init thread id : 19
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-37] [27361] - init thread id : 17
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-8] [27361] - init thread id : 15
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-12] [27361] - init thread id : 16
+[  INFO] 21:13:11,386[MyLSMessageQueue.java: 582] [pool-2-thread-2] [27361] - init thread id : 1
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-30] [27361] - init thread id : 14
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-29] [27361] - init thread id : 10
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-7] [27361] - init thread id : 11
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-26] [27361] - init thread id : 12
+[  INFO] 21:13:11,386[MQBench.java: 316] [pool-2-thread-1] [27361] - init message ok
+[  INFO] 21:13:11,386[MyLSMessageQueue.java:1359] [pool-2-thread-11] [27361] - init thread id : 9
+[  INFO] 21:13:11,386[MyLSMessageQueue.java: 582] [pool-2-thread-17] [27361] - init thread id : 0
+[  INFO] 21:13:11,385[MyLSMessageQueue.java:1359] [pool-2-thread-4] [27360] - init thread id : 8
+[  INFO] 21:13:11,399[MyLSMessageQueue.java: 582] [pool-2-thread-11] [27374] - init thread id : 37
+[  INFO] 21:13:11,399[MQBench.java: 317] [pool-2-thread-1] [27374] - start step 1
+[  INFO] 21:13:11,399[MyLSMessageQueue.java: 582] [pool-2-thread-26] [27374] - init thread id : 36
+[  INFO] 21:13:11,399[MyLSMessageQueue.java: 582] [pool-2-thread-7] [27374] - init thread id : 35
+[  INFO] 21:13:11,399[MyLSMessageQueue.java: 582] [pool-2-thread-29] [27374] - init thread id : 34
+[  INFO] 21:13:11,399[MyLSMessageQueue.java: 600] [pool-2-thread-2] [27374] - get topic id : 10
+[  INFO] 21:13:11,399[MyLSMessageQueue.java: 582] [pool-2-thread-30] [27374] - init thread id : 33
+[  INFO] 21:13:11,400[MyLSMessageQueue.java: 600] [pool-2-thread-30] [27375] - get topic id : 16
+[  INFO] 21:13:11,400[MyLSMessageQueue.java: 600] [pool-2-thread-29] [27375] - get topic id : 15
+[  INFO] 21:13:11,398[MyLSMessageQueue.java: 582] [pool-2-thread-12] [27373] - init thread id : 32
+[  INFO] 21:13:11,398[MyLSMessageQueue.java: 582] [pool-2-thread-8] [27373] - init thread id : 31
+[  INFO] 21:13:11,398[MyLSMessageQueue.java: 582] [pool-2-thread-37] [27373] - init thread id : 30
+[  INFO] 21:13:11,398[MyLSMessageQueue.java: 582] [pool-2-thread-6] [27373] - init thread id : 29
+[  INFO] 21:13:11,398[MyLSMessageQueue.java: 582] [pool-2-thread-9] [27373] - init thread id : 28
+[  INFO] 21:13:11,398[MyLSMessageQueue.java: 600] [pool-2-thread-27] [27373] - get topic id : 9
+[  INFO] 21:13:11,397[MyLSMessageQueue.java: 582] [pool-2-thread-18] [27372] - init thread id : 27
+[  INFO] 21:13:11,397[MyLSMessageQueue.java: 582] [pool-2-thread-14] [27372] - init thread id : 26
+[  INFO] 21:13:11,397[MyLSMessageQueue.java: 582] [pool-2-thread-35] [27372] - init thread id : 25
+[  INFO] 21:13:11,397[MyLSMessageQueue.java: 582] [pool-2-thread-31] [27372] - init thread id : 24
+[  INFO] 21:13:11,397[MyLSMessageQueue.java: 582] [pool-2-thread-38] [27372] - init thread id : 23
+[  INFO] 21:13:11,397[MyLSMessageQueue.java: 582] [pool-2-thread-5] [27372] - init thread id : 22
+[  INFO] 21:13:11,397[MyLSMessageQueue.java: 582] [pool-2-thread-40] [27372] - init thread id : 21
+[  INFO] 21:13:11,396[MyLSMessageQueue.java: 600] [pool-2-thread-10] [27371] - get topic id : 8
+[  INFO] 21:13:11,396[MyLSMessageQueue.java: 582] [pool-2-thread-36] [27371] - init thread id : 20
+[  INFO] 21:13:11,396[MyLSMessageQueue.java: 600] [pool-2-thread-23] [27371] - get topic id : 7
+[  INFO] 21:13:11,396[MyLSMessageQueue.java: 582] [pool-2-thread-28] [27371] - init thread id : 19
+[  INFO] 21:13:11,396[MyLSMessageQueue.java: 582] [pool-2-thread-33] [27371] - init thread id : 18
+[  INFO] 21:13:11,396[MyLSMessageQueue.java: 582] [pool-2-thread-32] [27371] - init thread id : 17
+[  INFO] 21:13:11,395[MyLSMessageQueue.java: 582] [pool-2-thread-13] [27370] - init thread id : 16
+[  INFO] 21:13:11,395[MyLSMessageQueue.java: 582] [pool-2-thread-39] [27370] - init thread id : 15
+[  INFO] 21:13:11,395[MyLSMessageQueue.java: 582] [pool-2-thread-20] [27370] - init thread id : 14
+[  INFO] 21:13:11,408[MyLSMessageQueue.java: 600] [pool-2-thread-39] [27383] - get topic id : 34
+[  INFO] 21:13:11,395[MyLSMessageQueue.java: 582] [pool-2-thread-19] [27370] - init thread id : 13
+[  INFO] 21:13:11,393[MyLSMessageQueue.java: 600] [pool-2-thread-34] [27368] - get topic id : 2
+[  INFO] 21:13:11,392[MyLSMessageQueue.java: 600] [pool-2-thread-24] [27367] - get topic id : 6
+[  INFO] 21:13:11,392[MyLSMessageQueue.java: 600] [pool-2-thread-21] [27367] - get topic id : 5
+[  INFO] 21:13:11,392[MyLSMessageQueue.java: 582] [pool-2-thread-16] [27367] - init thread id : 12
+[  INFO] 21:13:11,392[MyLSMessageQueue.java: 600] [pool-2-thread-22] [27367] - get topic id : 4
+[  INFO] 21:13:11,389[MyLSMessageQueue.java: 600] [pool-2-thread-3] [27364] - get topic id : 1
+[  INFO] 21:13:11,387[MyLSMessageQueue.java: 582] [pool-2-thread-15] [27362] - init thread id : 10
+[  INFO] 21:13:11,409[MyLSMessageQueue.java: 600] [pool-2-thread-16] [27384] - get topic id : 37
+[  INFO] 21:13:11,408[MyLSMessageQueue.java: 600] [pool-2-thread-19] [27383] - get topic id : 36
+[  INFO] 21:13:11,408[MyLSMessageQueue.java: 600] [pool-2-thread-20] [27383] - get topic id : 35
+[  INFO] 21:13:11,408[MyLSMessageQueue.java: 600] [pool-2-thread-33] [27383] - get topic id : 31
+[  INFO] 21:13:11,408[MyLSMessageQueue.java: 600] [pool-2-thread-13] [27383] - get topic id : 33
+[  INFO] 21:13:11,408[MyLSMessageQueue.java: 600] [pool-2-thread-32] [27383] - get topic id : 32
+[  INFO] 21:13:11,407[MyLSMessageQueue.java: 600] [pool-2-thread-28] [27382] - get topic id : 30
+[  INFO] 21:13:11,407[MyLSMessageQueue.java: 600] [pool-2-thread-36] [27382] - get topic id : 29
+[  INFO] 21:13:11,407[MyLSMessageQueue.java: 600] [pool-2-thread-40] [27382] - get topic id : 28
+[  INFO] 21:13:11,407[MyLSMessageQueue.java: 600] [pool-2-thread-5] [27382] - get topic id : 27
+[  INFO] 21:13:11,407[MyLSMessageQueue.java: 600] [pool-2-thread-38] [27382] - get topic id : 26
+[  INFO] 21:13:11,406[MyLSMessageQueue.java: 600] [pool-2-thread-31] [27381] - get topic id : 25
+[  INFO] 21:13:11,406[MyLSMessageQueue.java: 600] [pool-2-thread-35] [27381] - get topic id : 24
+[  INFO] 21:13:11,406[MyLSMessageQueue.java: 600] [pool-2-thread-14] [27381] - get topic id : 23
+[  INFO] 21:13:11,406[MyLSMessageQueue.java: 600] [pool-2-thread-18] [27381] - get topic id : 22
+[  INFO] 21:13:11,406[MyLSMessageQueue.java: 600] [pool-2-thread-9] [27381] - get topic id : 21
+[  INFO] 21:13:11,406[MyLSMessageQueue.java: 600] [pool-2-thread-6] [27381] - get topic id : 20
+[  INFO] 21:13:11,406[MyLSMessageQueue.java: 600] [pool-2-thread-37] [27381] - get topic id : 19
+[  INFO] 21:13:11,406[MyLSMessageQueue.java: 600] [pool-2-thread-8] [27381] - get topic id : 18
+[  INFO] 21:13:11,405[MyLSMessageQueue.java: 600] [pool-2-thread-12] [27380] - get topic id : 17
+[  INFO] 21:13:11,405[MyLSMessageQueue.java: 600] [pool-2-thread-7] [27380] - get topic id : 14
+[  INFO] 21:13:11,400[MyLSMessageQueue.java: 600] [pool-2-thread-26] [27375] - get topic id : 13
+[  INFO] 21:13:11,400[MyLSMessageQueue.java: 600] [pool-2-thread-11] [27375] - get topic id : 12
+[  INFO] 21:13:11,400[MyLSMessageQueue.java:1359] [pool-2-thread-1] [27375] - init thread id : 39
+[  INFO] 21:13:11,399[MyLSMessageQueue.java: 600] [pool-2-thread-17] [27374] - get topic id : 11
+[  INFO] 21:13:11,399[MyLSMessageQueue.java: 582] [pool-2-thread-4] [27374] - init thread id : 38
+[  INFO] 21:13:11,413[MyLSMessageQueue.java: 582] [pool-2-thread-1] [27388] - init thread id : 39
+[  INFO] 21:13:11,409[MyLSMessageQueue.java: 600] [pool-2-thread-15] [27384] - get topic id : 38
+[  INFO] 21:13:11,413[MyLSMessageQueue.java: 600] [pool-2-thread-4] [27388] - get topic id : 39
+[  INFO] 21:13:11,413[MyLSMessageQueue.java: 600] [pool-2-thread-1] [27388] - get topic id : 40
+[  INFO] 21:13:11,553[MyLSMessageQueue.java: 600] [pool-2-thread-29] [27528] - get topic id : 41
+[  INFO] 21:13:11,554[MyLSMessageQueue.java: 600] [pool-2-thread-19] [27529] - get topic id : 42
+[  INFO] 21:13:11,560[MyLSMessageQueue.java: 600] [pool-2-thread-13] [27535] - get topic id : 43
+[  INFO] 21:13:11,560[MyLSMessageQueue.java: 600] [pool-2-thread-7] [27535] - get topic id : 44
+[  INFO] 21:13:11,567[MyLSMessageQueue.java: 600] [pool-2-thread-37] [27542] - get topic id : 45
+[  INFO] 21:13:12,234[MyLSMessageQueue.java: 600] [pool-2-thread-36] [28209] - get topic id : 46
+[  INFO] 21:13:12,235[MyLSMessageQueue.java: 600] [pool-2-thread-25] [28210] - get topic id : 47
+[  INFO] 21:13:12,235[MyLSMessageQueue.java: 600] [pool-2-thread-16] [28210] - get topic id : 48
+[  INFO] 21:13:12,239[MyLSMessageQueue.java: 600] [pool-2-thread-22] [28214] - get topic id : 49
+[  INFO] 21:13:12,260[MyLSMessageQueue.java: 600] [pool-2-thread-10] [28235] - get topic id : 50
+[  INFO] 21:13:12,260[MyLSMessageQueue.java: 600] [pool-2-thread-26] [28235] - get topic id : 51
+[  INFO] 21:13:12,266[MyLSMessageQueue.java: 600] [pool-2-thread-32] [28241] - get topic id : 52
+[  INFO] 21:13:12,267[MyLSMessageQueue.java: 600] [pool-2-thread-23] [28242] - get topic id : 53
+[  INFO] 21:13:12,267[MyLSMessageQueue.java: 600] [pool-2-thread-3] [28242] - get topic id : 54
+[  INFO] 21:13:12,268[MyLSMessageQueue.java: 600] [pool-2-thread-24] [28243] - get topic id : 55
+[  INFO] 21:13:12,279[MyLSMessageQueue.java: 600] [pool-2-thread-4] [28254] - get topic id : 56
+[  INFO] 21:13:12,299[MyLSMessageQueue.java: 600] [pool-2-thread-4] [28274] - get topic id : 57
+[  INFO] 21:13:12,344[MyLSMessageQueue.java: 600] [pool-2-thread-35] [28319] - get topic id : 58
+[  INFO] 21:13:12,344[MyLSMessageQueue.java: 600] [pool-2-thread-33] [28319] - get topic id : 59
+[  INFO] 21:13:12,346[MyLSMessageQueue.java: 600] [pool-2-thread-1] [28321] - get topic id : 60
+[  INFO] 21:13:12,370[MyLSMessageQueue.java: 600] [pool-2-thread-14] [28345] - get topic id : 61
+[  INFO] 21:13:12,376[MyLSMessageQueue.java: 600] [pool-2-thread-39] [28351] - get topic id : 62
+[  INFO] 21:13:12,377[MyLSMessageQueue.java: 600] [pool-2-thread-17] [28352] - get topic id : 63
+[  INFO] 21:13:12,380[MyLSMessageQueue.java: 600] [pool-2-thread-11] [28355] - get topic id : 64
+[  INFO] 21:13:12,381[MyLSMessageQueue.java: 600] [pool-2-thread-38] [28356] - get topic id : 65
+[  INFO] 21:13:12,448[MyLSMessageQueue.java: 600] [pool-2-thread-40] [28423] - get topic id : 66
+[  INFO] 21:13:12,463[MyLSMessageQueue.java: 600] [pool-2-thread-15] [28438] - get topic id : 67
+[  INFO] 21:13:12,467[MyLSMessageQueue.java: 600] [pool-2-thread-28] [28442] - get topic id : 68
+[  INFO] 21:13:12,468[MyLSMessageQueue.java: 600] [pool-2-thread-8] [28443] - get topic id : 69
+[  INFO] 21:13:12,470[MyLSMessageQueue.java: 600] [pool-2-thread-30] [28445] - get topic id : 70
+[  INFO] 21:13:12,472[MyLSMessageQueue.java: 600] [pool-2-thread-20] [28447] - get topic id : 71
+[  INFO] 21:13:12,473[MyLSMessageQueue.java: 600] [pool-2-thread-27] [28448] - get topic id : 72
+[  INFO] 21:13:12,475[MyLSMessageQueue.java: 600] [pool-2-thread-18] [28450] - get topic id : 73
+[  INFO] 21:13:12,476[MyLSMessageQueue.java: 600] [pool-2-thread-31] [28451] - get topic id : 74
+[  INFO] 21:13:12,478[MyLSMessageQueue.java: 600] [pool-2-thread-21] [28453] - get topic id : 75
+[  INFO] 21:13:12,479[MyLSMessageQueue.java: 600] [pool-2-thread-9] [28454] - get topic id : 76
+[  INFO] 21:13:12,564[MyLSMessageQueue.java: 600] [pool-2-thread-5] [28539] - get topic id : 77
+[  INFO] 21:13:12,569[MyLSMessageQueue.java: 600] [pool-2-thread-12] [28544] - get topic id : 78
+[  INFO] 21:13:12,573[MyLSMessageQueue.java: 600] [pool-2-thread-34] [28548] - get topic id : 79
+[  INFO] 21:13:12,576[MyLSMessageQueue.java: 600] [pool-2-thread-2] [28551] - get topic id : 80
+[  INFO] 21:13:12,581[MyLSMessageQueue.java: 600] [pool-2-thread-6] [28556] - get topic id : 81
+[  INFO] 21:13:13,070[MyLSMessageQueue.java: 600] [pool-2-thread-29] [29045] - get topic id : 82
+[  INFO] 21:13:13,377[MyLSMessageQueue.java: 600] [pool-2-thread-36] [29352] - get topic id : 83
+[  INFO] 21:13:13,380[MyLSMessageQueue.java: 600] [pool-2-thread-37] [29355] - get topic id : 84
+[  INFO] 21:13:13,477[MyLSMessageQueue.java: 600] [pool-2-thread-13] [29452] - get topic id : 85
+[  INFO] 21:13:13,531[MyLSMessageQueue.java: 600] [pool-2-thread-11] [29506] - get topic id : 86
+[  INFO] 21:13:14,376[MyLSMessageQueue.java: 600] [pool-2-thread-22] [30351] - get topic id : 87
+[  INFO] 21:13:14,428[MyLSMessageQueue.java: 600] [pool-2-thread-20] [30403] - get topic id : 88
+[  INFO] 21:13:14,591[MyLSMessageQueue.java: 600] [pool-2-thread-6] [30566] - get topic id : 89
+[  INFO] 21:13:14,809[MyLSMessageQueue.java: 600] [pool-2-thread-33] [30784] - get topic id : 90
+[  INFO] 21:13:14,821[MyLSMessageQueue.java: 600] [pool-2-thread-19] [30796] - get topic id : 91
+[  INFO] 21:13:14,833[MyLSMessageQueue.java: 600] [pool-2-thread-32] [30808] - get topic id : 92
+[  INFO] 21:13:14,882[MyLSMessageQueue.java: 600] [pool-2-thread-7] [30857] - get topic id : 93
+[  INFO] 21:13:14,892[MyLSMessageQueue.java: 600] [pool-2-thread-17] [30867] - get topic id : 94
+[  INFO] 21:13:14,904[MyLSMessageQueue.java: 600] [pool-2-thread-35] [30879] - get topic id : 95
+[  INFO] 21:13:14,927[MyLSMessageQueue.java: 600] [pool-2-thread-26] [30902] - get topic id : 96
+[  INFO] 21:13:14,947[MyLSMessageQueue.java: 600] [pool-2-thread-2] [30922] - get topic id : 97
+[  INFO] 21:13:15,004[MyLSMessageQueue.java: 600] [pool-2-thread-24] [30979] - get topic id : 98
+[  INFO] 21:13:15,134[MyLSMessageQueue.java: 600] [pool-2-thread-1] [31109] - get topic id : 99
+[  INFO] 21:13:15,144[MyLSMessageQueue.java: 600] [pool-2-thread-15] [31119] - get topic id : 100
+[  INFO] 21:13:15,163[MyLSMessageQueue.java: 600] [pool-2-thread-16] [31138] - get topic id : 101
+[  INFO] 21:13:15,188[MyLSMessageQueue.java: 600] [pool-2-thread-10] [31163] - get topic id : 102
+[  INFO] 21:13:15,246[MyLSMessageQueue.java: 600] [pool-2-thread-40] [31221] - get topic id : 103
+[  INFO] 21:13:15,273[MyLSMessageQueue.java: 600] [pool-2-thread-27] [31248] - get topic id : 104
+[  INFO] 21:13:15,365[MyLSMessageQueue.java: 600] [pool-2-thread-23] [31340] - get topic id : 105
+[  INFO] 21:13:15,444[MyLSMessageQueue.java: 600] [pool-2-thread-9] [31419] - get topic id : 106
+[  INFO] 21:13:15,450[MyLSMessageQueue.java: 600] [pool-2-thread-14] [31425] - get topic id : 107
+[  INFO] 21:13:15,532[MyLSMessageQueue.java: 600] [pool-2-thread-21] [31507] - get topic id : 108
+[  INFO] 21:13:15,596[MyLSMessageQueue.java: 600] [pool-2-thread-39] [31571] - get topic id : 109
+[  INFO] 21:13:15,600[MyLSMessageQueue.java: 600] [pool-2-thread-38] [31575] - get topic id : 110
+[  INFO] 21:13:15,650[MyLSMessageQueue.java: 600] [pool-2-thread-28] [31625] - get topic id : 111
+[  INFO] 21:13:15,834[MyLSMessageQueue.java: 600] [pool-2-thread-30] [31809] - get topic id : 112
+[  INFO] 21:13:15,840[MyLSMessageQueue.java: 600] [pool-2-thread-25] [31815] - get topic id : 113
+[  INFO] 21:13:15,843[MyLSMessageQueue.java: 600] [pool-2-thread-3] [31818] - get topic id : 114
+[  INFO] 21:13:15,856[MyLSMessageQueue.java: 600] [pool-2-thread-18] [31831] - get topic id : 115
+[  INFO] 21:13:15,858[MyLSMessageQueue.java: 600] [pool-2-thread-8] [31833] - get topic id : 116
+[  INFO] 21:13:15,955[MyLSMessageQueue.java: 600] [pool-2-thread-34] [31930] - get topic id : 117
+[  INFO] 21:13:16,063[MyLSMessageQueue.java: 600] [pool-2-thread-5] [32038] - get topic id : 118
+[  INFO] 21:13:16,270[MyLSMessageQueue.java: 600] [pool-2-thread-12] [32245] - get topic id : 119
+[  INFO] 21:13:16,371[MyLSMessageQueue.java: 600] [pool-2-thread-31] [32346] - get topic id : 120
+[  INFO] 21:13:16,386[MyLSMessageQueue.java:1444] [pool-2-thread-26] [32361] - ============================================================================
+[  INFO] 21:13:16,386[MyLSMessageQueue.java:1445] [pool-2-thread-26] [32361] - ==================================report====================================
+[  INFO] 21:13:16,391[MyLSMessageQueue.java:1592] [pool-2-thread-26] [32366] - csvStat      :9.223,5.000,1106.297,43.872,NaN,NaN,XXXX,0.000,0.000,0.000,0.000,0.000,0.000
+[  INFO] 21:13:16,391[MyLSMessageQueue.java:1593] [pool-2-thread-26] [32366] - appendStat   :0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+[  INFO] 21:13:16,391[MyLSMessageQueue.java:1594] [pool-2-thread-26] [32366] - getRangeStat :0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+[  INFO] 21:13:16,392[MyLSMessageQueue.java:1595] [pool-2-thread-26] [32367] - total appendStat   :96,99,78,114,81,80,86,219,256,432,139,125,115,109,94,74,67,184,116,103,149,75,116,104,69,77,111,217,94,174,84,103,268,216,132,260,196,166,99,99,
+[  INFO] 21:13:16,392[MyLSMessageQueue.java:1596] [pool-2-thread-26] [32367] - total getRangeStat :0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+[  INFO] 21:13:16,393[MyLSMessageQueue.java:1605] [pool-2-thread-26] [32368] - [hit hot data counter] : 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+[  INFO] 21:13:16,394[MyLSMessageQueue.java:1606] [pool-2-thread-26] [32369] - [hit hot data] : NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,
+[  INFO] 21:13:16,394[MyLSMessageQueue.java:1609] [pool-2-thread-26] [32369] - Memory Used (GiB) : 0.02001958340406418
+[  INFO] 21:13:16,396[MyLSMessageQueue.java:1664] [pool-2-thread-26] [32371] - [queueCount report]95,98,77,113,80,79,85,211,245,398,135,123,113,108,93,73,66,179,115,102,145,74,115,103,68,76,110,209,93,169,83,102,257,208,130,249,190,161,98,98,
+[  INFO] 21:13:16,397[MyLSMessageQueue.java:1665] [pool-2-thread-26] [32372] - [hot queueCount report]0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+[  INFO] 21:13:16,397[MyLSMessageQueue.java:1666] [pool-2-thread-26] [32372] - [cold queueCount report]0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+[  INFO] 21:13:16,397[MyLSMessageQueue.java:1667] [pool-2-thread-26] [32372] - [other queueCount report]95,98,77,113,80,79,85,211,245,398,135,123,113,108,93,73,66,179,115,102,145,74,115,103,68,76,110,209,93,169,83,102,257,208,130,249,190,161,98,98,
+total 125900
+-rw-rw-r--. 1 wyk wyk 29623248 Oct 13 21:13 db0
+-rw-rw-r--. 1 wyk wyk 34366264 Oct 13 21:13 db1
+-rw-rw-r--. 1 wyk wyk 30296639 Oct 13 21:13 db2
+-rw-rw-r--. 1 wyk wyk 34594494 Oct 13 21:13 db3
+-rw-rw-r--. 1 wyk wyk    15360 Oct 13 21:13 meta
+total 62914568
+-rw-rw-r--. 1 wyk wyk 64424509440 Oct 13 21:12 cache

@@ -172,6 +172,7 @@ public class MyLSMessageQueue extends MessageQueue {
     int numOfPrefetchThreads;
     PrefetchTask[] prefetchTasks;
     PmemManager pmemManager;
+    ExecutorService exec = Executors.newFixedThreadPool(16);
 
     public void shutdown(){
         for(int i=0; i<numOfPrefetchThreads; i++){
@@ -360,13 +361,14 @@ public class MyLSMessageQueue extends MessageQueue {
         ByteBuffer data;
         public AsyWritePmemTask(MQQueue q, ByteBuffer data){
             this.q = q;
+            this.data = data;
         }
         @Override
         public Integer call() throws Exception{
             return q.block.put(data);
         }
     }
-
+    boolean writeOver = false;
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
         log.debug("append : "+topic+","+queueId + data);
@@ -376,7 +378,6 @@ public class MyLSMessageQueue extends MessageQueue {
         }
     
         // FIXME: 申请内存需要占用额外时间，因为这段内存不能被重复使用，生命周期较短，还可能频繁触发GC
-
 
         MQTopic mqTopic;
         MQQueue q;
@@ -393,7 +394,6 @@ public class MyLSMessageQueue extends MessageQueue {
             // 那我也每个 MQTopic 直接共用一个预取队列？
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId], prefetchTasks[taskId]);
             topic2object.put(topic, mqTopic);
-            // 
 
         }
         data = data.slice();
@@ -409,23 +409,20 @@ public class MyLSMessageQueue extends MessageQueue {
                 testStat.incQueueCount();
             }
         }
-
         DataFile df = mqTopic.df; // 
-
         int size = data.remaining();
         // 先双写
         
-
          // 发起一个异步任务表示写 pmem
         data.mark();
 
+        ByteBuffer tmpData = data.duplicate();
         // 写 PMEM 的异步任务设计
-        AsyWritePmemTask task = new AsyWritePmemTask(q, data);
+        AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        ExecutorService exec = Executors.newFixedThreadPool(1);
         exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         //int handle = q.block.put(data);
-        exec.shutdown();
+        // exec.shutdown();
 
         data.reset();
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
@@ -471,23 +468,21 @@ public class MyLSMessageQueue extends MessageQueue {
         hotDataBuf.flip();
         q.maxOffsetData = hotDataBuf;
 
-        q.maxOffset++;
+        
 
         // 等待异步任务的结束
         try{
-            while(!futureTask.isDone()){
-                Thread.sleep(100);
-            }
             q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
         }catch(Exception e){
             e.printStackTrace();
         }
-       
+        q.maxOffset++;
         return ret;
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
+        writeOver = true;
         log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
         if (mqConfig.useStats){
             testStat.getRangeStart();
@@ -1042,7 +1037,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 int threadId = localThreadId.get(); // threadId 怎么搞？可以使用 ThreadLocal<Integer> 来记录，每次递增的设置
                 tmp.position(threadId * (17 * 1024));
                 tmp.limit(threadId * (17 * 1024) + dataLength);
-
+                tmp = tmp.slice();
                 // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
                 // log.debug(ret);
