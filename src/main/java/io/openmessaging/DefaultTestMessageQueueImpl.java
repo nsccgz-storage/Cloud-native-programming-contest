@@ -28,7 +28,7 @@ import org.apache.log4j.Logger;
  */
 public class DefaultTestMessageQueueImpl extends MessageQueue {
     // Initialization
-    
+
     public MessageQueue mq;
     public SSDqueue ssdQueue;
 

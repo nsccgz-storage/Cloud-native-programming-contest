@@ -30,6 +30,7 @@ public class CorrectTest {
     public static void main(String[] args) {
         // just for test
         String localPath = "/home/wangxr/桌面/pmem_test";
+//        String localPath = "/mnt/ssd/wxr";
         try {
             File dir = new File(localPath);
             for(File f:dir.listFiles()){
@@ -41,7 +42,7 @@ public class CorrectTest {
             System.out.println("===== Stage 1: write data =====");
             Files.createFile(Paths.get(localPath+messagePath));
             writer = new BufferedWriter(new FileWriter(localPath+messagePath));
-            writeTest(10, 10L*1024L*1024L, new DefaultMessageQueueImpl()); // 40 thread, 10 MiB test data
+            writeTest(10, 1L*1024L*1024L, new DefaultMessageQueueImpl()); // 40 thread, 10 MiB test data
             writer.close();
 
             /////////////////////////////////////////////////////////////
@@ -54,7 +55,8 @@ public class CorrectTest {
             for(Message msg:msgs){
                 Map<Integer, ByteBuffer> mp = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
                 ByteBuffer buffer = mp.get(0);
-                if(buffer != null && !msg.compare(buffer)){
+                if(!msg.compare(buffer)){
+                    System.out.println("msg = "+msg);
                     System.out.println("error");
                     errorCount++;
                 }
@@ -104,6 +106,7 @@ public class CorrectTest {
         }
 
         public boolean compare(ByteBuffer buffer){
+            if(buffer == null)return false;
             byte[] ans = new byte[buffer.remaining()];
             buffer.get(ans);
             if(ans.length != data.length){
