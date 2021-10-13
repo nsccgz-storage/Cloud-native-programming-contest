@@ -67,84 +67,155 @@ import java.util.Comparator;
 
 public class PMPrefetchBuffer {
 	private static final Logger log = Logger.getLogger(PMPrefetchBuffer.class);
+    public class PMBlock{
+        public long addr;
+        public int capacity;
+        PMBlock(long a, int c){
+            addr = a;
+            capacity = c;
+        }
+    }
 
-	public class MyPMBlockPool {
+
+
+	public class PMBlockPool {
+        // 分为两个阶段
+        // 阶段1：直接通过移动偏移量的方法申请内存
+        // 依然是分大池子小池子的情况
+        // 释放的时候，可以放到本线程的队列中，以备后续再用，如果本线程的队列满了就放到公共的池子里
+        // 阶段2：直接移动偏移量的方法如果申请不了内存了，就从每个线程的队列中拿定长块，如果线程内的队列没有，那就从公共的池子里再拿一些
 		public MemoryPool pool;
+
+        // 定长块管理，单个块的大小
 		public int blockSize;
-		public int bigBlockSize;
-		public AtomicLong atomicGlobalFreeOffset;
+        // 线程内可以存放这么多个块
+        public int threadLocalBlockNum;
+        // 总容量
 		public long totalCapacity;
+
+        // 阶段1
+		public int bigBlockSize;
+        // 大池子
+		public AtomicLong atomicGlobalFreeOffset;
+        // 小池子
 		public ThreadLocal<Long> threadLocalBigBlockStartAddr;
 		public ThreadLocal<Integer> threadLocalBigBlockFreeOffset;
+        public ThreadLocal<Boolean> step1;
 
-		MyPMBlockPool(String path) {
+
+        // 阶段2
+        public ConcurrentLinkedQueue<PMBlock> blockQueue;
+        // 大池子
+        public ThreadLocal<Queue<PMBlock>> threadLocalBlockQueue;
+        // 小池子
+
+
+		PMBlockPool(String path) {
 			totalCapacity = 60L * 1024 * 1024 * 1024;
 			pool = MemoryPool.createPool(path, totalCapacity);
 
-			blockSize = 9 * 17 * 1024; // 8 个slot
-			bigBlockSize = 200 * blockSize;
+			blockSize = 128 * 1024; // 8 个slot
+            threadLocalBlockNum = 200;
+			bigBlockSize = threadLocalBlockNum * blockSize; // 25MiB
+
+            // 初始化阶段1
+            // 大池子
 			atomicGlobalFreeOffset = new AtomicLong();
 			atomicGlobalFreeOffset.set(0L);
+            // 小池子
 			threadLocalBigBlockFreeOffset = new ThreadLocal<>();
 			threadLocalBigBlockStartAddr = new ThreadLocal<>();
 			threadLocalBigBlockFreeOffset.set(0);
+            step1 = new ThreadLocal<>();
+
+            // 初始化阶段2
+            // 大池子
+            blockQueue = new ConcurrentLinkedQueue<>();
+            // 小池子
+            threadLocalBlockQueue = new ThreadLocal<>();
 		}
 
-		public MyPMBlock allocate() {
-			if (threadLocalBigBlockStartAddr.get() == null) {
-				allocateBigBlock();
-			}
-			if (threadLocalBigBlockFreeOffset.get() == bigBlockSize) {
-				// 大块满了，分配新的大块
-				allocateBigBlock();
+        public PMBlock allocate(){
+            // 先尝试直接申请
+            PMBlock ret = null;
+            ret = this.step1Allocate();
+            if (ret != null){
+                return ret;
+            }
+            // 如果不能，那就从本线程的队列中申请
+            Queue<PMBlock> q = threadLocalBlockQueue.get();
+            if (q == null){
+                q = new ArrayDeque<PMBlock>(threadLocalBlockNum);
+                threadLocalBlockQueue.set(q);
+            }
+            if (q.isEmpty()){
+                // 如果q是空的，那么从全局队列申请
+                if (blockQueue.isEmpty()){
+                    // 如果全局队列空了，那就没办法了，要从其他线程偷一些块过来？
+                    // TODO threadLocal的好像没法偷
+                    log.info("allocate fail !");
+                    return null;
+                }
+                ret = blockQueue.poll();
+                // TODO: 并且往小池子里补充一些，补充一半吧
+                for (int i = 0; i < threadLocalBlockNum/2; i++){
+                    PMBlock b = blockQueue.poll();
+                    if (b != null){
+                        q.offer(b);
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                ret = q.poll();
+            }
+            return ret;
+        }
+        public void free(PMBlock block){
+            Queue<PMBlock> q = threadLocalBlockQueue.get();
+            if (q == null){
+                q = new ArrayDeque<PMBlock>(threadLocalBlockNum);
+                threadLocalBlockQueue.set(q);
+            }
+
+            // free 的时候 往本地的队列里放
+            if (q.size() < threadLocalBlockNum){
+                q.add(block);
+            } else {
+                // 如果本地队列满了那就放到全局队列中
+                blockQueue.add(block);
+            }
+        }
+
+		public PMBlock step1Allocate() {
+            if (step1.get() == false){
+                return null;
+            }
+            if (step1.get() == null){
+                step1.set(true);
+            }
+			if (threadLocalBigBlockStartAddr.get() == null || threadLocalBigBlockFreeOffset.get() == bigBlockSize) {
+                // 本地没有大块，或者大块满了
+                if (atomicGlobalFreeOffset.get() > totalCapacity){
+                    // 阶段1可以结束了
+                    step1.set(false);
+                    return null;
+                }
+				// 分配新的大块
+    			long bigBlockStartAddr = atomicGlobalFreeOffset.getAndAdd(bigBlockSize);
+    			threadLocalBigBlockStartAddr.set(bigBlockStartAddr);
+    			threadLocalBigBlockFreeOffset.set(0);
 			}
 			int freeOffset = threadLocalBigBlockFreeOffset.get();
 			long addr = threadLocalBigBlockStartAddr.get() + freeOffset;
 			threadLocalBigBlockFreeOffset.set(freeOffset + blockSize);
 
-			return new MyPMBlock(pool, addr, blockSize);
+			return new PMBlock(addr, blockSize);
 		}
 
-		public void allocateBigBlock() {
-			long bigBlockStartAddr = atomicGlobalFreeOffset.getAndAdd(bigBlockSize);
-			log.debug("big block addr : " + bigBlockStartAddr);
-			threadLocalBigBlockStartAddr.set(bigBlockStartAddr);
-			threadLocalBigBlockFreeOffset.set(0);
-			assert (atomicGlobalFreeOffset.get() < totalCapacity);
-		}
 	}
 
-	public class MyPMBlock {
-		public MemoryPool pool;
-		public long addr;
-		public int capacity;
-
-		MyPMBlock(MemoryPool p, long a, int c) {
-			pool = p;
-			addr = a;
-			capacity = c;
-		}
-
-		public void copyFromArray(byte[] srcArray, int srcIndex, long dstOffset, int length) {
-			pool.copyFromByteArrayNT(srcArray, srcIndex, addr + dstOffset, length);
-
-		}
-
-		public void copyToArray(long srcOffset, byte[] dstArray, int dstOffset, int length) {
-			pool.copyToByteArray(addr + srcOffset, dstArray, dstOffset, length);
-		}
-	}
-
-    public static class PMBlockPool {
-        // 定长buffer管理器
-        public PMBlock allocate(){
-            return null;
-        }
-        public void free(PMBlock block){
-            return ;
-        }
-    }
-    public static PMBlockPool pmBlockPool = new PMBlockPool();
+    public PMBlockPool pmBlockPool = new PMBlockPool("/mnt/pmem/mq/testdata");
 
     public class RingBuffer {
         MemoryPool pool;
@@ -190,7 +261,6 @@ public class PMPrefetchBuffer {
             data = data.duplicate();
             int dataLength = data.remaining();
             long savePMAddr = -1;
-            int saveBlock = -1;
             int saveBlockAddr = -1;
             if (isFull()){
                 return false;
@@ -201,7 +271,6 @@ public class PMPrefetchBuffer {
                     // 最正常的情况，在tail那一块直接放
                     // 无论是head < tail 还是 head > tail 都是这样
                     if ( dataLength < (blocks[tailBlock].capacity - tailBlockAddr)){
-                        saveBlock = tailBlock;
                         saveBlockAddr = tailBlockAddr;
 
                         savePMAddr = blocks[tailBlock].addr + tailBlockAddr;
@@ -213,7 +282,6 @@ public class PMPrefetchBuffer {
                     int nextTailBlock = ( tailBlock + 1 ) % curBlockNum;
                     if (nextTailBlock != headBlock){
                         // 1. 说明还有空闲的block，那就用这个空闲的block
-                        saveBlock = tailBlock;
                         saveBlockAddr = tailBlockAddr;
 
                         tailBlock = nextTailBlock;
@@ -232,7 +300,6 @@ public class PMPrefetchBuffer {
                 // tail 追上 head 的时候，看看tail和head之间的空隙能否放数据
                 if (dataLength < (headBlockAddr-tailBlockAddr)){
                     // 能放
-                    saveBlock = tailBlock;
                     saveBlockAddr = tailBlockAddr;
 
 
@@ -328,25 +395,6 @@ public class PMPrefetchBuffer {
             // 然后还需要重新整理一下数据
             // 还需要把headBlock中, 把0-tailBlockAddr的部分 复制到新块
             pool.copyFromPool(blocks[headBlock].addr, block.addr, tailBlockAddr);
-        }
-    }
-
-    public class PMBlock{
-        public MemoryPool pool;
-        public long addr;
-        public int capacity;
-        PMBlock(MemoryPool p, long a, int c){
-            pool = p;
-            addr = a;
-            capacity = c;
-        }
-
-        public void copyFromArray(byte[] srcArray, int srcIndex, long dstOffset, int length){
-            pool.copyFromByteArrayNT(srcArray, srcIndex, addr+dstOffset, length);
-
-        }
-        public void copyToArray(long srcOffset, byte[] dstArray, int dstOffset, int length){
-            pool.copyToByteArray(addr+srcOffset, dstArray, dstOffset, length);
         }
     }
 
