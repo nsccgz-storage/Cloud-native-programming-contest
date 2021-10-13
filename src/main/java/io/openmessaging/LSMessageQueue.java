@@ -397,22 +397,30 @@ public class LSMessageQueue extends MessageQueue {
         long ret = q.maxOffset;
         q.maxOffset++;
 
-        // // 未知队列双写
+        // // // 未知队列双写
         // if ((q.type == 0) && (!q.prefetchBuffer.ringBuffer.isFull())){
         //     final MQQueue finalQ = q;
         //     ByteBuffer doubleWriteData = data.duplicate();
-        //         q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //             @Override
-        //             public Integer call() throws Exception {
-        //                 finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData);
-        //                 return 0;
-        //             }
-        //         });
+        //     q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //         @Override
+        //         public Integer call() throws Exception {
+        //             finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData);
+        //             return 0;
+        //         }
+        //     });
         // }
 
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
+
+        // // 未知队列同步双写
+        if ((q.type == 0) && (!q.prefetchBuffer.ringBuffer.isFull())){
+            final MQQueue finalQ = q;
+            ByteBuffer doubleWriteData = data.duplicate();
+            finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData);
+        }
+
 
 
         // // // 确保和这个queue相关的异步任务已完成
