@@ -69,6 +69,9 @@ import java.util.Comparator;
 
 public class MyLSMessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(LSMessageQueue.class);
+    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocate(17 * 1024 * 40); //17kB * 40 线程
+    // private static final ByteBuffer globalDirByteBuffer = ByteBuffer.allocateDirect(17 * 1024 * 40);
+
     public class MQConfig {
         Level logLevel = Level.INFO;
         // Level logLevel = Level.DEBUG;
@@ -210,7 +213,7 @@ public class MyLSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                // System.exit(-1);
+                System.exit(-1);
                 recover();
             }
             localThreadId = new ThreadLocal<>();
@@ -239,7 +242,6 @@ public class MyLSMessageQueue extends MessageQueue {
             }
 
             executor.shutdown();
-
 
         } catch (IOException ie) {
             ie.printStackTrace();
@@ -998,14 +1000,21 @@ public class MyLSMessageQueue extends MessageQueue {
                 ret = dataFileChannel.read(readMeta, position);
                 readMeta.position(6);
                 int dataLength = readMeta.getShort();
-                ByteBuffer tmp = ByteBuffer.allocate(dataLength);
+
+                // 获取线程的 id
+                // int threadId;
+                ByteBuffer tmp = globalByteBuffer.duplicate();
+                int threadId = localThreadId.get(); // threadId 怎么搞？可以使用 ThreadLocal<Integer> 来记录，每次递增的设置
+                tmp.position(threadId * (17 * 1024));
+                tmp.limit(threadId * (17 * 1024) + dataLength);
+
+                // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
                 // log.debug(ret);
                 return tmp;
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
-        
             return null;
         }
 
