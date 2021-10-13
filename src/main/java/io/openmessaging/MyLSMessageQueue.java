@@ -91,13 +91,13 @@ public class MyLSMessageQueue extends MessageQueue {
     public class IndexInfo{
         // long index; 
         long offset; // the offset in SSD
-        int dataSize; 
+        int dataSize;
         long handle; // the offset in PMEM
         public IndexInfo(long offset, int dataSize, long hanlde){
             this.offset = offset;
             this.dataSize = dataSize;
             this.handle = hanlde;
-        }   
+        }
     }
 
     public class MQQueue {
@@ -111,7 +111,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
         public Long uselessIdx;
         public PmemManager.MyBlock block;
-        
+
 
         MQQueue(DataFile dataFile){
             type = 0;
@@ -219,7 +219,7 @@ public class MyLSMessageQueue extends MessageQueue {
             numOfTopics = new AtomicInteger();
             numOfTopics.set(1);
 
-            
+
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
@@ -227,7 +227,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
             boolean initialized = Heap.exists(pmDirPath + "/cache");
             // Heap pmemHeap = initialized ? Heap.openHeap(pmDirPath + "/cache") : Heap.createHeap(pmDirPath + "/cache", 60 * 1024L * 1024L * 1024L);
-           
+
             pmemManager = new PmemManager(pmDirPath + "/cache");
             // pmemManager = new PmemManager(pmemHeap);
             // init prefetchThreads
@@ -250,6 +250,11 @@ public class MyLSMessageQueue extends MessageQueue {
         log.info("init ok!");
     }
 
+    public void shutdown(){
+        for(int i = 0;i < numOfPrefetchThreads;i++){
+            prefetchTasks[i].t.interrupt();
+        }
+    }
     public void recover(){
         try {
             // topic2object
@@ -276,7 +281,7 @@ public class MyLSMessageQueue extends MessageQueue {
                     strBuffer.clear();
                 }
             }
-            
+
 
             // topicId -> topic
 
@@ -353,7 +358,7 @@ public class MyLSMessageQueue extends MessageQueue {
             testStat.appendStart();
             testStat.appendUpdateStat(topic, queueId, data);
         }
-    
+
         // FIXME: 申请内存需要占用额外时间，因为这段内存不能被重复使用，生命周期较短，还可能频繁触发GC
 
 
@@ -362,17 +367,17 @@ public class MyLSMessageQueue extends MessageQueue {
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             int threadId = updateThreadId();
-            int dataFileId = threadId / 10; 
+            int dataFileId = threadId / 10;
             short topicId = getAndUpdateTopicId(topic);
             // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
             // mqTopic = new MQTopic(topic, dataFileId);
-            // mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]); 
-            
+            // mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
+
             int taskId = threadId % numOfPrefetchThreads;
             // 那我也每个 MQTopic 直接共用一个预取队列？
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId], prefetchTasks[taskId]);
             topic2object.put(topic, mqTopic);
-            // 
+            //
 
         }
         data = data.slice();
@@ -389,19 +394,19 @@ public class MyLSMessageQueue extends MessageQueue {
             }
         }
 
-        DataFile df = mqTopic.df; // 
+        DataFile df = mqTopic.df; //
 
         int size = data.remaining();
         // 先双写
-        
+
         data.mark();
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
 
         data.reset();
         // byte[] writePmemData = new byte[data.remaining()];
-        
+
         // data.get(writePmemData);
-        
+
 
         // long handle = pmemManager.write(writePmemData);
         long handle = q.block.put(data);
@@ -467,7 +472,7 @@ public class MyLSMessageQueue extends MessageQueue {
         if (q == null){
             return ret;
         }
-        
+
         if (offset >= q.maxOffset){
             return ret;
         }
@@ -507,7 +512,7 @@ public class MyLSMessageQueue extends MessageQueue {
         int loadNum = 12;
         pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
 
-        
+
         long pos = 0;
         for (int i = 0; i < fetchNum; i++){
             long curOffset = offset + i;
@@ -521,6 +526,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 ByteBuffer buf = ByteBuffer.wrap(q.block.get(handle, size));
                 // buf.flip(); // TODO: check wrap meaning
                 ret.put(i, buf);
+                testStat.incColdReadPmemCount(1);
             }
             // 判断是否在 PMEM 中，若是，则从 PMEM 中读
             else{
@@ -529,6 +535,7 @@ public class MyLSMessageQueue extends MessageQueue {
                     buf.position(0);
                     buf.limit(buf.capacity());
                     ret.put(i, buf);
+                    testStat.incColdReadSSDCount(1);
                 }
             }
         }
@@ -652,7 +659,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 if (w.done == 1){
                     return w.position;
                 }
-                
+
                 int bufLength = bufMetadataLength;
                 int maxBufLength = mqConfig.maxBufLength;
                 int bufNum = 0;
@@ -755,7 +762,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 if (w.done == 1){
                     return w.position;
                 }
-                
+
                 int bufLength = bufMetadataLength;
                 int maxBufLength = mqConfig.maxBufLength;
                 int bufNum = 0;
@@ -858,7 +865,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 if (w.done == 1){
                     return w.position;
                 }
-                
+
                 int maxBufLength = mqConfig.maxBufLength;
                 int maxBufNum = mqConfig.maxBufNum;
 
@@ -991,7 +998,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
             }
             ByteBuffer readMeta = threadLocalReadMetaBuf.get();
-        
+
             readMeta.clear();
             try {
                 int ret;
@@ -1005,7 +1012,7 @@ public class MyLSMessageQueue extends MessageQueue {
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
-        
+
             return null;
         }
 
@@ -1052,7 +1059,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 ret += bucketBound[0] + " < ";
                 for (int i = 0; i < bucketCount.length; i++){
                     ret += "[" + bucketCount[i] + "]";
-                    ret += " < " + bucketBound[i+1] + " < "; 
+                    ret += " < " + bucketBound[i+1] + " < ";
                 }
                 return ret;
             }
@@ -1072,7 +1079,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
     }
 
-    class WritePmemTask{  
+    class WritePmemTask{
         public int loadNum;
         public long startIdx;
         public DataFile df;
@@ -1087,11 +1094,11 @@ public class MyLSMessageQueue extends MessageQueue {
     ExecutorService executor;
     //ExecutorService executor = Executors.newFixedThreadPool(2);
     public class PrefetchTask{
-        Queue<WritePmemTask> wPmemTaskConcurrentQueue; // 
+        Queue<WritePmemTask> wPmemTaskConcurrentQueue; //
         Thread t;
         public PrefetchTask(){
             wPmemTaskConcurrentQueue = new ConcurrentLinkedQueue<>();
-             // 放全局
+            // 放全局
             executor.execute(new Prefetch());
             // prefetch(); // 开启一个异步线程
             // t = 这个线程
@@ -1111,20 +1118,20 @@ public class MyLSMessageQueue extends MessageQueue {
                         //logger.info("---- write pmem --- Quese size: " + size);
                         for(int i=0; i<size; ++i){
                             WritePmemTask curTask = wPmemTaskConcurrentQueue.poll();
-                            // 从 SSD 上读入数据并写入到 PMEM 上。               
+                            // 从 SSD 上读入数据并写入到 PMEM 上。
                             for(long k=curTask.startIdx; k<curTask.loadNum && k + curTask.startIdx <= curTask.q.maxOffset ; ++k){
-                              
+
                                 // useless task:
                                 long uselessIdx = curTask.q.uselessIdx;
-                                
+
                                 if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L) continue; // 丢弃任务不执行
-    
+
                                 long offset = curTask.q.offset2info.get(k).offset;
                                 int dataSize = curTask.q.offset2info.get(k).dataSize;
-                                
+
                                 ByteBuffer byteBuffer = curTask.df.read(offset);
                                 byteBuffer.flip();
-                                
+
                                 // 可以多次判断 uselessIdx 和 k 的值
                                 // TODO: 写到 PMEM
                                 long handle = curTask.q.block.put(byteBuffer);
@@ -1132,11 +1139,11 @@ public class MyLSMessageQueue extends MessageQueue {
                                 if(handle == -1L){
                                     curTask.q.offset2info.get(k).handle = handle;
                                 }
-                                
+
                                 //logger.info("test multithread!---- write pmem");
                             }
                             //logger.info("test multithread!---- write pmem");
-                        } 
+                        }
                         if(wPmemTaskConcurrentQueue.isEmpty()){
                             //logger.info("---------------writeThread sleep!-------------------");
                             LockSupport.park();
@@ -1147,12 +1154,12 @@ public class MyLSMessageQueue extends MessageQueue {
                 }
             }
         }
-        
+
     }
     // public class PmemManager{
     //     Heap heap;
     //     AtomicLong size;
-        
+
     //     public PmemManager(Heap heap){
     //         this.heap = heap;
     //         //logger.info(heap.size());
@@ -1164,11 +1171,11 @@ public class MyLSMessageQueue extends MessageQueue {
     //         block.copyFromArray(byteBuffer.array(), 0, 0, byteBuffer.remaining());
     //         size.addAndGet(-block.size() - 1024);
     //         return block.handle();
-            
-            
+
+
     //     }
     //     long write(byte[] array){
-    //         if(size.get() - array.length <= 1*1024L*1024L*1024L) return -1L; 
+    //         if(size.get() - array.length <= 1*1024L*1024L*1024L) return -1L;
     //         MemoryBlock block = heap.allocateMemoryBlock(array.length);
     //         block.copyFromArray(array, 0, 0, array.length);
     //         size.addAndGet(-block.size() - 1024);
@@ -1221,7 +1228,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
             int coldReadPmemCount;
             int coldReadSSDCount;
-            
+
 
 
             public int[] bucketBound;
@@ -1244,7 +1251,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 reported.set(false);
 
                 coldReadPmemCount = 0;
-                coldReadPmemCount = 0;
+                coldReadSSDCount = 0;
 
                 bucketBound = new int[19];
                 bucketBound[0] = 100;
@@ -1328,7 +1335,14 @@ public class MyLSMessageQueue extends MessageQueue {
             int id = threadId.get();
             stats[id].coldQueueCount++;
         }
-
+        void incColdReadPmemCount(int fetchNum){
+            int id = threadId.get();
+            stats[id].coldReadPmemCount += fetchNum;
+        }
+        void incColdReadSSDCount(int fetchNum){
+            int id = threadId.get();
+            stats[id].coldReadSSDCount += fetchNum;
+        }
 
 
 
@@ -1445,7 +1459,7 @@ public class MyLSMessageQueue extends MessageQueue {
             appendLatency /= getNumOfThreads;
             getRangeLatency /= getNumOfThreads;
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
-            
+
             // 报告总的写入大小分布
             // int[] totalWriteBucketCount = new int[100];
             // int[] myBucketBound = stats[0].bucketBound;
@@ -1529,7 +1543,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 curAppendLatency /= getNumOfThreads;
                 curGetRangeLatency /= getNumOfThreads;
             }
-            
+
             StringBuilder totalAppendStat = new StringBuilder();
             StringBuilder totalGetRangeStat = new StringBuilder();
             StringBuilder appendStat = new StringBuilder();
@@ -1568,7 +1582,7 @@ public class MyLSMessageQueue extends MessageQueue {
             for (int i = 0; i < dataFiles.length; i++){
                 if (oldWriteStats[i] != null){
                     // get total write stat and cur write stat
-                    
+
                     DataFile.WriteStat curWriteStat = dataFiles[i].writeStat;
                     DataFile.WriteStat oldWriteStat = oldWriteStats[i];
                     String writeReport = "";
@@ -1597,7 +1611,7 @@ public class MyLSMessageQueue extends MessageQueue {
                     log.info(writeReport);
                     log.info("Write Size Dist : "+curWriteStat.toString());
 
- 
+
                 }
                 oldWriteStats[i] = dataFiles[i].writeStat.clone();
             }
@@ -1622,6 +1636,15 @@ public class MyLSMessageQueue extends MessageQueue {
             log.info(coldQueueCountReport);
             log.info(otherQueueCountReport);
 
+            StringBuilder coldReadPmemCountReport = new StringBuilder("[cold read pmem count]");
+            StringBuilder coldReadSSDCountReport = new StringBuilder("[cold read SSD count]");
+            for(int i = 0;i < getNumOfThreads;i++){
+                coldReadPmemCountReport.append(String.format("%d,",stats[i].coldReadPmemCount));
+                coldReadSSDCountReport.append(String.format("%d,", stats[i].coldReadSSDCount));
+
+            }
+            log.info(coldReadPmemCountReport);
+            log.info(coldReadSSDCountReport);
 
 
 
