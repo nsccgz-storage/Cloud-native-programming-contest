@@ -412,15 +412,16 @@ public class MyLSMessageQueue extends MessageQueue {
         DataFile df = mqTopic.df; // 
         int size = data.remaining();
         // 先双写
-        
-         // 发起一个异步任务表示写 pmem
-        data.mark();
-
         ByteBuffer tmpData = data.duplicate();
         // 写 PMEM 的异步任务设计
         AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
+        if(q.type != 2){// 不是冷队列，开启双写
+            exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
+        }
+         // 发起一个异步任务表示写 pmem
+        data.mark();
+        
         //int handle = q.block.put(data);
         // exec.shutdown();
 
@@ -468,13 +469,13 @@ public class MyLSMessageQueue extends MessageQueue {
         hotDataBuf.flip();
         q.maxOffsetData = hotDataBuf;
 
-        
-
         // 等待异步任务的结束
-        try{
-            q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
-        }catch(Exception e){
-            e.printStackTrace();
+        if(q.type != 2){
+            try{
+                q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
+            }catch(Exception e){
+                e.printStackTrace();
+            }
         }
         q.maxOffset++;
         return ret;
