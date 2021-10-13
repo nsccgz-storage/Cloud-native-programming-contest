@@ -39,6 +39,7 @@ import java.util.ArrayList;
 
 import org.apache.log4j.spi.LoggerFactory;
 
+import io.openmessaging.LSMessageQueue.MyByteBufferPool;
 import io.openmessaging.SSDqueue.HotData;
 
 import org.apache.log4j.Level;
@@ -77,8 +78,8 @@ public class PMPrefetchBuffer {
         pmBlockPool = new PMBlockPool(totalCapacity);
     }
 
-    public RingBuffer newRingBuffer() {
-        return new RingBuffer();
+    public RingBuffer newRingBuffer(MyByteBufferPool bbPool) {
+        return new RingBuffer(bbPool);
     }
 
     public class PMBlock {
@@ -243,10 +244,11 @@ public class PMPrefetchBuffer {
         public int[] msgsLength;
         public int[] msgsBlockAddr;
         public int[] msgsBlock;
+        MyByteBufferPool bbPool;
 
-        RingBuffer() {
+        RingBuffer(MyByteBufferPool myBBPool) {
             // 一开始都默认有一个块
-            curBlockNum = 2;
+            curBlockNum = 1;
             // NOTE: 暂时先最多放4个块
             maxBlockNum = 8;
             maxLength = 100; // 限制一下每个ringBuffer存放的消息数
@@ -264,6 +266,7 @@ public class PMPrefetchBuffer {
             msgsLength = new int[maxLength];
             msgsBlockAddr = new int[maxLength];
             msgsBlock = new int[maxLength];
+            bbPool = myBBPool;
         }
 
         public boolean offer(ByteBuffer data) {
@@ -381,7 +384,12 @@ public class PMPrefetchBuffer {
                 }
                 long msgPMAddr = blocks[headBlock].addr + headBlockAddr;
                 // FIXME: 需要优化
-                ByteBuffer data = ByteBuffer.allocate(dataLength);
+                ByteBuffer data;
+                if (bbPool != null){
+                    data = bbPool.allocate(dataLength);
+                } else {
+                    data = ByteBuffer.allocate(dataLength);
+                }
                 pool.copyToByteArray(msgPMAddr, data.array(), data.arrayOffset() + data.position(), dataLength);
                 // free the head
                 headBlockAddr += dataLength;
@@ -462,7 +470,13 @@ public class PMPrefetchBuffer {
                 log.debug("addBlock end");
                 this.debugLog();
             }
-
+        }
+        public void close(){
+            for (int i = 0; i < curBlockNum; i++){
+                pmBlockPool.free(blocks[i]);
+            }
+            curBlockNum = 0;
+            reset();
         }
         public void reset(){
             head = 0;
@@ -577,7 +591,7 @@ public class PMPrefetchBuffer {
 
         // }
         {
-            RingBuffer b = p.newRingBuffer();
+            RingBuffer b = p.newRingBuffer(null);
             // test case 2, set block size to 170 Bytes
             for (int i = 0; i < 4; i++) {
                 ret = b.offer(ByteBuffer.wrap(byteData));
