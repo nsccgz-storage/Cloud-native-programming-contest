@@ -425,7 +425,7 @@ public class MyLSMessageQueue extends MessageQueue {
         ExecutorService exec = Executors.newFixedThreadPool(1);
         exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         //int handle = q.block.put(data);
-        exec.shutdown();
+        // exec.shutdown();
 
         data.reset();
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
@@ -1042,7 +1042,8 @@ public class MyLSMessageQueue extends MessageQueue {
                 int threadId = localThreadId.get(); // threadId 怎么搞？可以使用 ThreadLocal<Integer> 来记录，每次递增的设置
                 tmp.position(threadId * (17 * 1024));
                 tmp.limit(threadId * (17 * 1024) + dataLength);
-
+                tmp = tmp.slice();
+                // TODO: don't use tmp.clear(), because the capacity don't change
                 // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
                 // log.debug(ret);
