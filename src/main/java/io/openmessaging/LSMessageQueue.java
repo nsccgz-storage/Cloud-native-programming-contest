@@ -101,6 +101,7 @@ public class LSMessageQueue extends MessageQueue {
         public Future<Integer> prefetchFuture;
         public MyByteBufferPool bbPool;
         public MyDirectBufferPool dbPool;
+        public ExecutorService prefetchThread;
 
         MQQueue(DataFile dataFile){
             consumeOffset = 0L;
@@ -146,6 +147,7 @@ public class LSMessageQueue extends MessageQueue {
     ConcurrentHashMap<String, MQTopic> topic2object;
     ThreadLocal<MyByteBufferPool> threadLocalByteBufferPool;
     ThreadLocal<MyDirectBufferPool> threadLocalDirectBufferPool;
+    public ThreadLocal<ExecutorService> threadLocalPrefetchThread;
     boolean isCrash;
     public PMPrefetchBuffer pmRingBuffer;
 
@@ -208,8 +210,8 @@ public class LSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                // System.exit(-1);
-                recover();
+                System.exit(-1);
+                // recover();
             }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
@@ -218,6 +220,7 @@ public class LSMessageQueue extends MessageQueue {
             numOfTopics.set(1);
             threadLocalByteBufferPool = new ThreadLocal<>();
             threadLocalDirectBufferPool = new ThreadLocal<>();
+            threadLocalPrefetchThread = new ThreadLocal<>();
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
@@ -363,6 +366,8 @@ public class LSMessageQueue extends MessageQueue {
             q = new MQQueue(mqTopic.df); // 要和topic用一样的df
             q.bbPool = threadLocalByteBufferPool.get();
             q.dbPool = threadLocalDirectBufferPool.get();
+            // q.prefetchThread = threadLocalPrefetchThread.get();
+            
             q.initPrefetchBuffer();
             mqTopic.id2queue.put(queueId, q);
             if (mqConfig.useStats){
@@ -664,6 +669,10 @@ public class LSMessageQueue extends MessageQueue {
         if (threadLocalDirectBufferPool.get() == null){
             threadLocalDirectBufferPool.set(new MyDirectBufferPool());
         }
+        // if (threadLocalPrefetchThread.get() == null){
+            // threadLocalPrefetchThread.set(Executors.newSingleThreadExecutor());
+            // threadLocalPrefetchThread.set(Executors.newCachedThreadPool());
+        // }
 
         return localThreadId.get();
     }
@@ -999,8 +1008,8 @@ public class LSMessageQueue extends MessageQueue {
                 threadLocalReadMetaBuf = new ThreadLocal<>();
 
                 // prefetchThread = Executors.newSingleThreadExecutor();
-                // prefetchThread = Executors.newFixedThreadPool(10);
-                prefetchThread = Executors.newCachedThreadPool();
+                prefetchThread = Executors.newFixedThreadPool(10);
+                // prefetchThread = Executors.newCachedThreadPool();
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
