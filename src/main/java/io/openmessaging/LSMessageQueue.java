@@ -136,15 +136,14 @@ public class LSMessageQueue extends MessageQueue {
             id2queue = new HashMap<Integer, MQQueue>();
             df = dataFile;
         }
-
-
     }
 
     MQConfig mqConfig;
     private FileChannel metadataFileChannel;
     DataFile[] dataFiles;
     int numOfDataFiles;
-    ConcurrentHashMap<String, MQTopic> topic2object;
+    // ConcurrentHashMap<String, MQTopic> topic2object;
+    ThreadLocal< HashMap<String, MQTopic> > threadLocalTopic2object;
     ThreadLocal<MyByteBufferPool> threadLocalByteBufferPool;
     ThreadLocal<MyDirectBufferPool> threadLocalDirectBufferPool;
     public ThreadLocal<ExecutorService> threadLocalPrefetchThread;
@@ -185,7 +184,7 @@ public class LSMessageQueue extends MessageQueue {
             }
 
 
-            topic2object = new ConcurrentHashMap<String, MQTopic>();
+            // topic2object = new ConcurrentHashMap<String, MQTopic>();
             log.info("Initializing on PM : " + pmDataFile);
 
             pmRingBuffer = new PMPrefetchBuffer(pmDataFile);
@@ -221,6 +220,7 @@ public class LSMessageQueue extends MessageQueue {
             threadLocalByteBufferPool = new ThreadLocal<>();
             threadLocalDirectBufferPool = new ThreadLocal<>();
             threadLocalPrefetchThread = new ThreadLocal<>();
+            threadLocalTopic2object = new ThreadLocal<>();
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
@@ -307,6 +307,11 @@ public class LSMessageQueue extends MessageQueue {
         log.debug("append : " + topic + "," + queueId + "," + position);
         MQTopic mqTopic;
         MQQueue q;
+        if (threadLocalTopic2object.get() == null){
+            threadLocalTopic2object.set(new HashMap<>());
+        }
+        HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
+
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
@@ -338,12 +343,15 @@ public class LSMessageQueue extends MessageQueue {
             testStat.appendStart();
             testStat.appendUpdateStat(topic, queueId, data);
         }
-    
         // FIXME: 申请内存需要占用额外时间，因为这段内存不能被重复使用，生命周期较短，还可能频繁触发GC
 
 
         MQTopic mqTopic;
         MQQueue q;
+        if (threadLocalTopic2object.get() == null){
+            threadLocalTopic2object.set(new HashMap<>());
+        }
+        HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             int threadId = updateThreadId();
@@ -377,14 +385,14 @@ public class LSMessageQueue extends MessageQueue {
 
         // // 确保和这个queue相关的异步任务已完成
         if (q.prefetchFuture != null){
-            q.prefetchFuture.cancel(false);
-            // while (!q.prefetchFuture.isDone()){
-            //     try {
-            //         Thread.sleep(0, 10000);
-            //     } catch (Throwable ie){
-            //         ie.printStackTrace();
-            //     }
-            // }
+            // q.prefetchFuture.cancel(false); // TODO: 好像会导致问题
+            while (!q.prefetchFuture.isDone()){
+                try {
+                    Thread.sleep(0, 10000);
+                } catch (Throwable ie){
+                    ie.printStackTrace();
+                }
+            }
             q.prefetchFuture = null;
         }
 
@@ -420,7 +428,7 @@ public class LSMessageQueue extends MessageQueue {
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
 
-        // // // 未知队列同步双写
+        // // // // 未知队列同步双写
         if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
             final MQQueue finalQ = q;
             data.reset();
@@ -435,8 +443,6 @@ public class LSMessageQueue extends MessageQueue {
                         return 0;
                     }
                 });
-                
-
             }
         }
 
@@ -454,9 +460,9 @@ public class LSMessageQueue extends MessageQueue {
         //     q.prefetchFuture = null;
         // }
 
-        // // 冷队列异步预取
-        // if (q.type == 1 && q.type == 2){
-        // if (q.type == 2){
+        // // // 冷队列异步预取
+        // // if (q.type == 2){
+        // if (q.type == 1 || q.type == 2){
         //     if (!q.prefetchBuffer.ringBuffer.isFull()){
         //         final MQQueue finalQ = q;
         //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
@@ -467,7 +473,6 @@ public class LSMessageQueue extends MessageQueue {
         //                 return 0;
         //             }
         //         });
-
         //     }
         // }
 
@@ -487,6 +492,10 @@ public class LSMessageQueue extends MessageQueue {
         Map<Integer, ByteBuffer> ret = new HashMap<>();
         MQTopic mqTopic;
         MQQueue q;
+        if (threadLocalTopic2object.get() == null){
+            threadLocalTopic2object.set(new HashMap<>());
+        }
+        HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             return ret;
@@ -513,14 +522,14 @@ public class LSMessageQueue extends MessageQueue {
         int fetchStartIndex = 0;
         // // 确保和这个queue相关的异步任务已完成
         if (q.prefetchFuture != null){
-            q.prefetchFuture.cancel(false);
-        //    while (!q.prefetchFuture.isDone()){
-        //        try {
-        //            Thread.sleep(0, 10000);
-        //        } catch (Throwable ie){
-        //            ie.printStackTrace();
-        //        }
-        //    }
+            // q.prefetchFuture.cancel(false); // TODO: 会导致问题
+           while (!q.prefetchFuture.isDone()){
+               try {
+                   Thread.sleep(0, 10000);
+               } catch (Throwable ie){
+                   ie.printStackTrace();
+               }
+           }
            q.prefetchFuture = null;
         }
 
@@ -597,9 +606,9 @@ public class LSMessageQueue extends MessageQueue {
         // q.consumeOffset += fetchNum-fetchStartIndex;
         q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
+        // 异步预取
         if (!isCrash){
             if ( q.type == 1 || q.type == 2){
-            // if (q.type == 2){
                 if (!q.prefetchBuffer.ringBuffer.isFull()){
                     final MQQueue finalQ = q;
                     // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
@@ -628,8 +637,8 @@ public class LSMessageQueue extends MessageQueue {
             }
         }
 
-        // 同步预取
-        // if (q.type == 2){
+        // // 同步预取
+        // if (q.type == 1 || q.type == 2){
         //     if (!q.prefetchBuffer.ringBuffer.isFull()){
         //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
         //         q.prefetchBuffer.prefetch();
@@ -1551,6 +1560,7 @@ public class LSMessageQueue extends MessageQueue {
             }
             ByteBuffer readMeta = threadLocalReadMetaBuf.get();
             MyDirectBufferPool dbPool = threadLocalDirectBufferPool.get();
+            MyByteBufferPool bbPool = threadLocalByteBufferPool.get();
         
             readMeta.clear();
             try {
@@ -1559,8 +1569,10 @@ public class LSMessageQueue extends MessageQueue {
                 readMeta.position(6);
                 int dataLength = readMeta.getShort();
                 ByteBuffer tmp;
-                if (dbPool != null){
-                    tmp = dbPool.allocate(dataLength);
+                if (bbPool != null){
+                    tmp = bbPool.allocate(dataLength);
+                // if (dbPool != null){
+                    // tmp = dbPool.allocate(dataLength);
                 } else {
                     tmp = ByteBuffer.allocate(dataLength);
                 }

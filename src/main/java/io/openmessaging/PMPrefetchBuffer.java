@@ -62,10 +62,37 @@ import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
 import com.intel.pmem.llpl.MemoryPool;
 
+
+import sun.misc.Unsafe;
+import sun.nio.ch.DirectBuffer;
+import java.lang.reflect.Field;
+
+
+
 import java.util.Comparator;
 
 public class PMPrefetchBuffer {
     public static final Logger log = Logger.getLogger(PMPrefetchBuffer.class);
+	public static final Unsafe UNSAFE;
+	static {
+	    try {
+		Field field = Unsafe.class.getDeclaredField("theUnsafe");
+		field.setAccessible(true);
+		UNSAFE = (Unsafe) field.get(null);
+	    } catch (Exception e) {
+		throw new RuntimeException(e);
+	    }
+	}
+    public static void copyFromDirectBufferToPM(DirectBuffer srcBuf, MemoryPool dstPool, long PMAddr, int length){
+        // TODO: 实现DirectBuffer 复制到 PM （llpl原来不支持这个，不过可以自己实现）
+        // long addr = srcBuf.address();
+        // Field pmAddrField = dstPool.getClass().getDeclaredField("poolAddress");
+        // pmAddrField.setAccessible(true);
+        // long pmPoolAddr = pmAddrField.get(dstPool);
+        // UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
+        return ;
+    }
+
     public long totalCapacity;
     public MemoryPool pool;
     public PMBlockPool pmBlockPool;
