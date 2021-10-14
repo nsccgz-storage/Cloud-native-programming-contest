@@ -417,6 +417,7 @@ public class LSMessageQueue extends MessageQueue {
         // // 未知队列同步双写
         if ((q.type == 0) && (!q.prefetchBuffer.ringBuffer.isFull())){
             final MQQueue finalQ = q;
+            data.reset();
             ByteBuffer doubleWriteData = data.duplicate();
             finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData);
         }
