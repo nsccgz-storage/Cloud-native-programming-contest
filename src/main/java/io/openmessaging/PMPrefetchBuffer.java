@@ -251,7 +251,7 @@ public class PMPrefetchBuffer {
             curBlockNum = 1;
             // NOTE: 暂时先最多放4个块
             maxBlockNum = 8;
-            maxLength = 100; // 限制一下每个ringBuffer存放的消息数
+            maxLength = 13; // 限制一下每个ringBuffer存放的消息数
             // 总体上，由两个来共同限制，一个是ringBuffer存放的消息数，另一个是ringbuffer的空间大小
             blocks = new PMBlock[maxBlockNum];
             for (int i = 0; i < curBlockNum; i++) {
@@ -350,7 +350,11 @@ public class PMPrefetchBuffer {
                     msgsBlockAddr[tail] = saveBlockAddr;
                     msgsBlock[tail] = saveBlock;
                     msgsLength[tail] = dataLength;
-                    pool.copyFromByteArray(data.array(), data.arrayOffset() + data.position(), savePMAddr, dataLength);
+                    if (dataLength <= 256){
+                        pool.copyFromByteArray(data.array(), data.arrayOffset() + data.position(), savePMAddr, dataLength);
+                    } else {
+                        pool.copyFromByteArrayNT(data.array(), data.arrayOffset() + data.position(), savePMAddr, dataLength);
+                    }
                     length++;
                     return true;
                 }
@@ -358,7 +362,12 @@ public class PMPrefetchBuffer {
                 msgsBlockAddr[tail] = saveBlockAddr;
                 msgsBlock[tail] = saveBlock;
                 msgsLength[tail] = dataLength;
-                pool.copyFromByteArray(data.array(), data.arrayOffset() + data.position(), savePMAddr, dataLength);
+
+                if (dataLength <= 256){
+                    pool.copyFromByteArray(data.array(), data.arrayOffset() + data.position(), savePMAddr, dataLength);
+                } else {
+                    pool.copyFromByteArrayNT(data.array(), data.arrayOffset() + data.position(), savePMAddr, dataLength);
+                }
                 length++;
                 return true;
             } finally {

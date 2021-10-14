@@ -414,7 +414,7 @@ public class LSMessageQueue extends MessageQueue {
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
 
-        // // 未知队列同步双写
+        // // // 未知队列同步双写
         if ((q.type == 0) && (!q.prefetchBuffer.ringBuffer.isFull())){
             final MQQueue finalQ = q;
             data.reset();
