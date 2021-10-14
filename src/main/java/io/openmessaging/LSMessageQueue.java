@@ -398,7 +398,7 @@ public class LSMessageQueue extends MessageQueue {
         long ret = q.maxOffset;
         q.maxOffset++;
 
-        // // // 未知队列双写
+        // // // 未知队列异步双写
         // if ((q.type == 0) && (!q.prefetchBuffer.ringBuffer.isFull())){
         //     final MQQueue finalQ = q;
         //     ByteBuffer doubleWriteData = data.duplicate();
@@ -438,6 +438,7 @@ public class LSMessageQueue extends MessageQueue {
         // }
 
         // // 冷队列异步预取
+        // if (q.type == 1 && q.type == 2){
         if (q.type == 2){
             if (!q.prefetchBuffer.ringBuffer.isFull()){
                 final MQQueue finalQ = q;
@@ -580,6 +581,7 @@ public class LSMessageQueue extends MessageQueue {
         q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
         if (!isCrash){
+            // if ( q.type == 1 && q.type == 2){
             if (q.type == 2){
                 if (!q.prefetchBuffer.ringBuffer.isFull()){
                     final MQQueue finalQ = q;
@@ -985,8 +987,8 @@ public class LSMessageQueue extends MessageQueue {
                 threadLocalReadMetaBuf = new ThreadLocal<>();
 
                 // prefetchThread = Executors.newSingleThreadExecutor();
-                prefetchThread = Executors.newFixedThreadPool(10);
-                // prefetchThread = Executors.newCachedThreadPool();
+                // prefetchThread = Executors.newFixedThreadPool(10);
+                prefetchThread = Executors.newCachedThreadPool();
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
