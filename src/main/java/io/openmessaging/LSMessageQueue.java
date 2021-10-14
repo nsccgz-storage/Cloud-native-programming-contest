@@ -373,13 +373,13 @@ public class LSMessageQueue extends MessageQueue {
         // // 确保和这个queue相关的异步任务已完成
         if (q.prefetchFuture != null){
             q.prefetchFuture.cancel(false);
-            while (!q.prefetchFuture.isDone()){
-                try {
-                    Thread.sleep(0, 10000);
-                } catch (Throwable ie){
-                    ie.printStackTrace();
-                }
-            }
+            // while (!q.prefetchFuture.isDone()){
+            //     try {
+            //         Thread.sleep(0, 10000);
+            //     } catch (Throwable ie){
+            //         ie.printStackTrace();
+            //     }
+            // }
             q.prefetchFuture = null;
         }
 
@@ -504,7 +504,7 @@ public class LSMessageQueue extends MessageQueue {
         //            ie.printStackTrace();
         //        }
         //    }
-        //    q.prefetchFuture = null;
+           q.prefetchFuture = null;
         }
 
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
