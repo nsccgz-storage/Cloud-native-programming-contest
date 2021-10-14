@@ -428,23 +428,28 @@ public class LSMessageQueue extends MessageQueue {
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
 
-        // // // // 未知队列同步双写
+        // // // // // 未知队列同步双写
         if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
-            final MQQueue finalQ = q;
             data.reset();
             ByteBuffer doubleWriteData = data.duplicate();
-            if (!finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData)){
-                // 如果不能双写，就开异步预取，如果能双写就不用预取了
-                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-                    @Override
-                    public Integer call() throws Exception {
-                        finalQ.prefetchBuffer.prefetch();
-                        return 0;
-                    }
-                });
-            }
+            q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData);
         }
+        // if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
+        //     final MQQueue finalQ = q;
+        //     data.reset();
+        //     ByteBuffer doubleWriteData = data.duplicate();
+        //     if (!finalQ.prefetchBuffer.directAddData(finalQ.maxOffset-1, doubleWriteData)){
+        //         // 如果不能双写，就开异步预取，如果能双写就不用预取了
+        //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //         q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //             @Override
+        //             public Integer call() throws Exception {
+        //                 finalQ.prefetchBuffer.prefetch();
+        //                 return 0;
+        //             }
+        //         });
+        //     }
+        // }
 
 
 
@@ -606,23 +611,23 @@ public class LSMessageQueue extends MessageQueue {
         // q.consumeOffset += fetchNum-fetchStartIndex;
         q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
-        // 异步预取
-        if (!isCrash){
-            if ( q.type == 1 || q.type == 2){
-                if (!q.prefetchBuffer.ringBuffer.isFull()){
-                    final MQQueue finalQ = q;
-                    // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-                    q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-                        @Override
-                        public Integer call() throws Exception {
-                            finalQ.prefetchBuffer.prefetch();
-                            return 0;
-                        }
-                    });
+        // // 异步预取
+        // if (!isCrash){
+        //     if ( q.type == 1 || q.type == 2){
+        //         if (!q.prefetchBuffer.ringBuffer.isFull()){
+        //             final MQQueue finalQ = q;
+        //             // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+        //             q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+        //                 @Override
+        //                 public Integer call() throws Exception {
+        //                     finalQ.prefetchBuffer.prefetch();
+        //                     return 0;
+        //                 }
+        //             });
 
-                }
-            }
-        }
+        //         }
+        //     }
+        // }
 
         long pos = 0;
         for (int i = fetchStartIndex; i < fetchNum; i++){
