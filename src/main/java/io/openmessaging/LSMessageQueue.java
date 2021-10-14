@@ -429,11 +429,11 @@ public class LSMessageQueue extends MessageQueue {
         q.offset2position.add(position);
 
         // // // // // 未知队列同步双写
-        if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
-            data.reset();
-            ByteBuffer doubleWriteData = data.duplicate();
-            q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData);
-        }
+        // if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
+        //     data.reset();
+        //     ByteBuffer doubleWriteData = data.duplicate();
+        //     q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData);
+        // }
         // if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
         //     final MQQueue finalQ = q;
         //     data.reset();
