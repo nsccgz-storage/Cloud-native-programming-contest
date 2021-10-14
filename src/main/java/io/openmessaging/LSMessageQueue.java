@@ -372,6 +372,7 @@ public class LSMessageQueue extends MessageQueue {
 
         // // 确保和这个queue相关的异步任务已完成
         if (q.prefetchFuture != null){
+            q.prefetchFuture.cancel(false);
             while (!q.prefetchFuture.isDone()){
                 try {
                     Thread.sleep(0, 10000);
@@ -437,20 +438,20 @@ public class LSMessageQueue extends MessageQueue {
         // }
 
         // // 冷队列异步预取
-        // if (q.type == 2){
-        //     if (!q.prefetchBuffer.ringBuffer.isFull()){
-        //         final MQQueue finalQ = q;
-        //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //         q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //             @Override
-        //             public Integer call() throws Exception {
-        //                 finalQ.prefetchBuffer.prefetch();
-        //                 return 0;
-        //             }
-        //         });
+        if (q.type == 2){
+            if (!q.prefetchBuffer.ringBuffer.isFull()){
+                final MQQueue finalQ = q;
+                // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+                    @Override
+                    public Integer call() throws Exception {
+                        finalQ.prefetchBuffer.prefetch();
+                        return 0;
+                    }
+                });
 
-        //     }
-        // }
+            }
+        }
 
 
 
@@ -494,14 +495,15 @@ public class LSMessageQueue extends MessageQueue {
         int fetchStartIndex = 0;
         // // 确保和这个queue相关的异步任务已完成
         if (q.prefetchFuture != null){
-           while (!q.prefetchFuture.isDone()){
-               try {
-                   Thread.sleep(0, 10000);
-               } catch (Throwable ie){
-                   ie.printStackTrace();
-               }
-           }
-           q.prefetchFuture = null;
+            q.prefetchFuture.cancel(false);
+        //    while (!q.prefetchFuture.isDone()){
+        //        try {
+        //            Thread.sleep(0, 10000);
+        //        } catch (Throwable ie){
+        //            ie.printStackTrace();
+        //        }
+        //    }
+        //    q.prefetchFuture = null;
         }
 
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
@@ -564,7 +566,7 @@ public class LSMessageQueue extends MessageQueue {
         // TODO
         // if (q.type == 2){
         //     // 冷队列会变热吗？
-        //     if (offset >= q.maxOffset - 5){
+        //     if (offset >= q.maxOffset - 3){
         //         q.type = 3;
         //         // 3 代表从冷变热后的队列，要怎么用呢，可能没什么用，就是不用触发预取了，另外方便统计
         //         // 冷队列变热后，就不触发预取了
@@ -577,22 +579,22 @@ public class LSMessageQueue extends MessageQueue {
         // q.consumeOffset += fetchNum-fetchStartIndex;
         q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
-        // if (!isCrash){
-        //     if (q.type == 2){
-        //         if (!q.prefetchBuffer.ringBuffer.isFull()){
-        //             final MQQueue finalQ = q;
-        //             // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //             q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
-        //                 @Override
-        //                 public Integer call() throws Exception {
-        //                     finalQ.prefetchBuffer.prefetch();
-        //                     return 0;
-        //                 }
-        //             });
+        if (!isCrash){
+            if (q.type == 2){
+                if (!q.prefetchBuffer.ringBuffer.isFull()){
+                    final MQQueue finalQ = q;
+                    // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
+                    q.prefetchFuture = df.prefetchThread.submit(new Callable<Integer>(){
+                        @Override
+                        public Integer call() throws Exception {
+                            finalQ.prefetchBuffer.prefetch();
+                            return 0;
+                        }
+                    });
 
-        //         }
-        //     }
-        // }
+                }
+            }
+        }
 
         long pos = 0;
         for (int i = fetchStartIndex; i < fetchNum; i++){
