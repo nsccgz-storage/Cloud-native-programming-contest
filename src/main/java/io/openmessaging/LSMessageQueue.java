@@ -414,6 +414,21 @@ public class LSMessageQueue extends MessageQueue {
                 testStat.incQueueCount();
             }
         }
+
+        // // 确保和这个queue相关的异步任务已完成
+        if (q.prefetchFuture != null){
+            // q.prefetchFuture.cancel(false); // TODO: 好像会导致问题
+            while (!q.prefetchFuture.isDone()){
+                try {
+                    Thread.sleep(0, 10000);
+                } catch (Throwable ie){
+                    ie.printStackTrace();
+                }
+            }
+            q.prefetchFuture = null;
+        }
+
+
         long ret = q.maxOffset;
         q.maxOffset++;
 
@@ -772,9 +787,10 @@ public class LSMessageQueue extends MessageQueue {
         // q.consumeOffset += fetchNum-fetchStartIndex;
         q.consumeOffset = offset + fetchNum ; // 下一个被消费的位置
 
-        // // 异步预取
+        // // // 异步预取
         // if (!isCrash){
-        //     if ( q.type == 1 || q.type == 2){
+        //     // 冷队列异步预取
+        //     if ( q.type == 2){
         //         if (!q.prefetchBuffer.ringBuffer.isFull()){
         //             final MQQueue finalQ = q;
         //             // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
