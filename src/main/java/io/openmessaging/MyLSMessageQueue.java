@@ -371,7 +371,7 @@ public class MyLSMessageQueue extends MessageQueue {
             return q.block.put(data);
         }
     }
-    boolean isWritePmem = false;
+    boolean isWritePmem = true;
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
         log.debug("append : "+topic+","+queueId + data);
@@ -472,6 +472,8 @@ public class MyLSMessageQueue extends MessageQueue {
         testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
         // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
+//        if(mqConfig.useStats)
+//            testStat.updateChunkUsage(q.block.chunkList.getUsage(), q.block.chunkList.getTotalPageNum());
         return ret;
     }
 
@@ -546,6 +548,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 // ByteBuffer buf = ByteBuffer.allocate(size);
                 ByteBuffer buf = ByteBuffer.wrap(q.block.get(handle, size));
                 // buf.flip(); // TODO: check wrap meaning
+                log.debug("read from pmem");
                 ret.put(i, buf);
                 testStat.incColdReadPmemCount(1);
             }
@@ -557,6 +560,7 @@ public class MyLSMessageQueue extends MessageQueue {
                     // buf.limit(buf.capacity());
                     buf.flip();
                     ret.put(i, buf);
+                    log.debug("read from SSD");
                     testStat.incColdReadSSDCount(1);
                 }
             }
@@ -1047,7 +1051,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
             }
             ByteBuffer readMeta = threadLocalReadMetaBuf.get();
-        
+
             readMeta.clear();
             try {
                 int ret;
@@ -1294,10 +1298,11 @@ public class MyLSMessageQueue extends MessageQueue {
 
             int coldReadPmemCount;
             int coldReadSSDCount;
-            
+            int chunkUsage;
+            int totalPageNum;
+
             long writeSSDTime;
             long asyncWritePmemTime;
-
 
             public int[] bucketBound;
             public int[] bucketCount;
@@ -1320,6 +1325,8 @@ public class MyLSMessageQueue extends MessageQueue {
 
                 coldReadPmemCount = 0;
                 coldReadSSDCount = 0;
+                chunkUsage = 0;
+                totalPageNum = 0;
 
                 writeSSDTime = 0L;
                 asyncWritePmemTime = 0L;
@@ -1421,6 +1428,11 @@ public class MyLSMessageQueue extends MessageQueue {
         void incColdReadSSDCount(int fetchNum){
             int id = threadId.get();
             stats[id].coldReadSSDCount += fetchNum;
+        }
+        void updateChunkUsage(int usage, int total){
+            int id = threadId.get();
+            stats[id].chunkUsage = usage;
+            stats[id].totalPageNum = total;
         }
         void addAsycWriteTime(long writeSSDTime, long asyncWritePmemTime){
             int id = threadId.get();
@@ -1723,17 +1735,19 @@ public class MyLSMessageQueue extends MessageQueue {
             log.info(coldQueueCountReport);
             log.info(asyWriteTimeReport);
             log.info(otherQueueCountReport);
-            
+
 
             StringBuilder coldReadPmemCountReport = new StringBuilder("[cold read pmem count]");
             StringBuilder coldReadSSDCountReport = new StringBuilder("[cold read SSD count]");
+            StringBuilder chunkUsageReport = new StringBuilder("[pmem usage]");
             for(int i = 0;i < getNumOfThreads;i++){
                 coldReadPmemCountReport.append(String.format("%d,",stats[i].coldReadPmemCount));
                 coldReadSSDCountReport.append(String.format("%d,", stats[i].coldReadSSDCount));
-
+                chunkUsageReport.append(String.format("%d/%d,", stats[i].chunkUsage, stats[i].totalPageNum));
             }
             log.info(coldReadPmemCountReport);
             log.info(coldReadSSDCountReport);
+            log.info(chunkUsageReport);
 
 
 
