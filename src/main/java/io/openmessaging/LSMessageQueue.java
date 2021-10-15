@@ -428,30 +428,25 @@ public class LSMessageQueue extends MessageQueue {
             q.prefetchFuture = null;
         }
 
-
-        long ret = q.maxOffset;
-        q.maxOffset++;
-
         log.debug("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
         // if (localThreadId.get() == 1){
         //     log.info("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
         // }
 
 
-        // 同步双写或预取，目前有bug，maxOffset处没东西（offset2position在后面才加上的）
-        // if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
-        //     if (!q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData)){
-        //         // 如果不能双写，就开异步预取，如果能双写就不用预取了
-        //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
-        //         q.prefetchBuffer.prefetch();
-        //     }
-        // }
-
-
-        // 仅双写
-        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.ringBuffer.isFull())){
-            q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData);
+        // 同步双写或预取
+        if (!q.prefetchBuffer.ringBuffer.isFull()){
+            if (q.type == 0 || q.type == 1){
+                q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData);
+            }
+            if (q.type == 2){
+                if (!q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData)){
+                    // 如果不能双写，就开预取，如果能双写就不用预取了
+                    q.prefetchBuffer.prefetch();
+                }
+            }
         }
+
 
         // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
         try {
@@ -489,6 +484,9 @@ public class LSMessageQueue extends MessageQueue {
         } catch (Exception ie){
             ie.printStackTrace();
         }
+
+        long ret = q.maxOffset;
+        q.maxOffset++;
 
 
 
@@ -821,7 +819,8 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         // // 同步预取
-        // if (q.type == 1 || q.type == 2){
+        // if (q.type == 2){
+        // // if (q.type == 1 || q.type == 2){
         //     if (!q.prefetchBuffer.ringBuffer.isFull()){
         //         // 不管如何，先去尝试预取一下内容，如果需要就从SSD读
         //         q.prefetchBuffer.prefetch();
