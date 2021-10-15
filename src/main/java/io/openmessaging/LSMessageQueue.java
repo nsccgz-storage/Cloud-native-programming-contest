@@ -458,11 +458,6 @@ public class LSMessageQueue extends MessageQueue {
             } catch (Exception ie){
                 ie.printStackTrace();
             }
-            // 对齐 4K
-            bufLength = bufLength + (4096 - bufLength % 4096);
-            df.curPosition += bufLength;
-            log.debug("df.curPosition : " + df.curPosition);
-
             // TODO: 得找办法通知那些已经完成了的writer，让他们不要阻塞
 
             for (int i = 0; i < numOfSlot; i++){
@@ -478,6 +473,11 @@ public class LSMessageQueue extends MessageQueue {
             if (mqConfig.useStats){
                 df.writeStat.addSample(bufLength);
             }
+            // 对齐 4K
+            bufLength = bufLength + (4096 - bufLength % 4096);
+            df.curPosition += bufLength;
+            log.debug("df.curPosition : " + df.curPosition);
+
 
 
 
