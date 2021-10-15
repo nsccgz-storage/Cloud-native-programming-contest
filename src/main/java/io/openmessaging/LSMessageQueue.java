@@ -530,8 +530,8 @@ public class LSMessageQueue extends MessageQueue {
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
-        return append2(topic, queueId, data);
-        // return append1(topic, queueId, data);
+        // return append2(topic, queueId, data);
+        return append1(topic, queueId, data);
 
     }
 
