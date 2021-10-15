@@ -174,7 +174,7 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public void init(String dbDirPath, String pmDirPath) {
-        // SSDBench.runStandardBench(dbDirPath);
+        SSDBench.runStandardBench(dbDirPath);
         // PMBench.runStandardBench(pmDirPath);
 
         try {
@@ -225,8 +225,8 @@ public class LSMessageQueue extends MessageQueue {
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             if (crash) {
                 log.info("recover !!");
-                System.exit(-1);
-                // recover();
+                // System.exit(-1);
+                recover();
             }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
@@ -383,6 +383,7 @@ public class LSMessageQueue extends MessageQueue {
         }
 
  
+        log.debug("the init sema is " + threadLocalSemaphore.get().availablePermits());
         Writer w = new Writer(mqTopic.topicId, queueId, data, threadLocalSemaphore.get());
         
         DataFile df = mqTopic.df;
@@ -413,6 +414,12 @@ public class LSMessageQueue extends MessageQueue {
         long ret = q.maxOffset;
         q.maxOffset++;
 
+        log.debug("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
+        // if (localThreadId.get() == 1){
+        //     log.info("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
+        // }
+
+
         // 同步双写或预取，目前有bug
         // if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
         //     if (!q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData)){
@@ -438,13 +445,19 @@ public class LSMessageQueue extends MessageQueue {
                 //     // log.info("sleeping");
                 // }
             log.debug("wait to acquire the sema");
-            w.sema.acquire(1);
-            // if (!w.sema.tryAcquire(1, 100*1000, TimeUnit.MICROSECONDS)){
-            //     // 如果已经没有新的线程需要写入了，这个时候这个线程就会无限卡死，此时需要有一个超时自救的机制
-            //     if (w.done != 1){
-            //         df.syncSeqWriteBatchLock();
-            //     }
-            // }
+
+            // w.sema.acquire(1);
+
+            if (!w.sema.tryAcquire(1, 100*1000, TimeUnit.MICROSECONDS)){
+                // 我插入的writer可能要等待下一个能获取锁的写入线程帮我写入
+                // 如果已经没有新的线程需要写入了，这个时候这个线程就会无限等待，此时需要有一个超时自救的机制
+                if (w.done != 1){
+                    log.debug("time out !");
+                    df.syncSeqWriteBatchLock();
+                    log.debug("my position result : " + w.position);
+                    w.sema.acquire();
+                }
+            }
         } catch (Exception ie){
             ie.printStackTrace();
         }
@@ -1201,6 +1214,7 @@ public class LSMessageQueue extends MessageQueue {
         public void syncSeqWriteBatchLock(){
             try {
                 dataFileLock.lock();
+                log.debug("I get the lock!");
                 syncSeqWriteBatchInLock();
             } finally {
                 dataFileLock.unlock();
@@ -1221,11 +1235,12 @@ public class LSMessageQueue extends MessageQueue {
 
             long writePosition = curPosition;
             writerBuffer.position(bufMetadataLength);
-
+            boolean needWrite = false;
             for (int i = 0; i < maxAppendWritersNum; i++){
                 Writer thisWriter = appendWriters[i*8];
-                if (thisWriter != null && thisWriter.needWrite == 0){
+                if (thisWriter != null && thisWriter.done == 0 && thisWriter.needWrite == 0){
                     log.debug("writer the index : " + i);
+                    needWrite = true;
                     writeLength = globalMetadataLength + thisWriter.length;
                     thisWriter.position = position;
                     thisWriter.needWrite = 1;
@@ -1252,6 +1267,9 @@ public class LSMessageQueue extends MessageQueue {
                     }
                 }
             }
+            if (needWrite == false){
+                return ;
+            }
             // log.info(writerBuffer);
             writerBuffer.flip();
             // log.info(writerBuffer);
@@ -1271,12 +1289,14 @@ public class LSMessageQueue extends MessageQueue {
 
             for (int i = 0; i < maxAppendWritersNum; i++){
                 Writer thisWriter = appendWriters[i*8];
-                if (thisWriter != null && thisWriter.needWrite == 1){
+                if (thisWriter != null && thisWriter.done == 0 && thisWriter.needWrite == 1){
                     log.debug("release the index : " + i);
                     appendWriters[i*8] = null;
-                    // thisWriter.done = 1;
+                    thisWriter.done = 1;
                     log.debug("release 1");
+                    log.debug("the sema is " + thisWriter.sema.availablePermits());
                     thisWriter.sema.release(1);
+                    log.debug("the sema is " + thisWriter.sema.availablePermits());
                 }
             }
             if (mqConfig.useStats){
