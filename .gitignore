@@ -18,4 +18,5 @@ log*
 tmpLog.txt
 JustForTest
 src/main/java/io/openmessaging/TestCorrect.java
+mylogs/
 mylogs.txt
