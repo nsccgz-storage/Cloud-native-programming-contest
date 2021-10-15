@@ -355,15 +355,9 @@ public class MQBench {
 				log.info("time of step 1: " + (double)(step1EndTime-step1StartTime)/(1000*1000*1000));
 				log.info("time of step 2: " + (double)(step2EndTime-step2StartTime)/(1000*1000*1000));
 			}
-
 			if (threadId == 0){
 				log.info("pass !ok !!");
 			}
-
-
-
-
-
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
