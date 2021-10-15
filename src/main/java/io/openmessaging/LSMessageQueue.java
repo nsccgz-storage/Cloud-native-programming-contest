@@ -733,7 +733,7 @@ public class LSMessageQueue extends MessageQueue {
                         testStat.incColdQueueCount();
                     }
                     // TODO: 可以触发 prefetch buffer 扩容
-                    q.prefetchBuffer.ringBuffer.addBlock();
+                    // q.prefetchBuffer.ringBuffer.addBlock();
                 } else {
                     q.type = 1;
                     if (mqConfig.useStats) {
