@@ -166,7 +166,7 @@ public class LSMessageQueue extends MessageQueue {
 
 
     LSMessageQueue(String dbDirPath, String pmDirPath){
-        // SSDBench.runStandardBench(dbDirPath);
+        SSDBench.runStandardBench(dbDirPath);
         // PMBench.runStandardBench(pmDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath, pmDirPath);
