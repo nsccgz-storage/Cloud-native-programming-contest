@@ -111,7 +111,7 @@ public class MQBench {
 
 		log.info("pass the test, successfully !!!");
 		log.info("time: " + elapsedTimeS);
-
+		((MyLSMessageQueue)mq).shutdown();
 	}
 
 	public static void threadRunCorrectBenchByTrace(int threadId, MessageQueue mq, CyclicBarrier barrier) {
@@ -207,6 +207,7 @@ public class MQBench {
 							if (msg.results.get(j).compareTo(trueResult.get(j)) != 0){
 								log.error("data error");
 								log.error("j : "+ j);
+								log.error(String.format("topic=%s, queueId=%d, msg.offset=%d", msg.topic, msg.queueId, msg.offset+j));
 								log.error(msg.results.get(j));
 								log.error(trueResult.get(j));
 								System.exit(-1);

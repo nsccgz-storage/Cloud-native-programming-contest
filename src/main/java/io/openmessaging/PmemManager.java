@@ -150,7 +150,7 @@ public class PmemManager {
         }
     }
 
-    private class ChunkList{
+    public class ChunkList{
         Chunk head;
         Chunk lastAllocateChunk; // 上一次分配的chunk
         int chunkNum;
@@ -196,6 +196,10 @@ public class PmemManager {
                 c = c.next;
             }
             return ret;
+        }
+
+        public int getTotalPageNum(){
+            return chunkNum * (1 << maxDepth);
         }
 
         public long getAddress(Chunk c, int index, int size){

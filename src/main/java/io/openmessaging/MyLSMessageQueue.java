@@ -5,75 +5,41 @@ package io.openmessaging;
 import java.io.IOException;
 
 import java.nio.channels.FileChannel;
-import java.sql.Time;
 import java.nio.ByteBuffer;
 import java.io.RandomAccessFile;
 import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
 
-import javax.print.DocFlavor;
-
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
-import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-
-import org.apache.log4j.spi.LoggerFactory;
-
-import io.openmessaging.SSDqueue.HotData;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
-import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.Math;
-import java.text.Format;
-import java.util.concurrent.TimeoutException;
-
-import java.util.concurrent.locks.Condition;
-import java.nio.MappedByteBuffer;
-import java.util.Deque;
 
 
 import com.intel.pmem.llpl.Heap;
-import com.intel.pmem.llpl.MemoryBlock;
-import com.intel.pmem.llpl.Util;
-
-import java.util.Comparator;
 
 
 public class MyLSMessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(LSMessageQueue.class);
-    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocate(17 * 1024 * 40); //17kB * 40 线程
+    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocate(17 * 1024 * 40 * 100); //17kB * 40 线程 // TODO: 后期可能不止40个线程
     // private static final ByteBuffer globalDirByteBuffer = ByteBuffer.allocateDirect(17 * 1024 * 40);
 
     public class MQConfig {
@@ -366,13 +332,14 @@ public class MyLSMessageQueue extends MessageQueue {
         }
         @Override
         public Integer call() throws Exception{
-            return q.block.put(data);
+            Integer ret = q.block.put(data);
+            return ret;
         }
     }
     boolean isWritePmem = true;
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
-        log.debug("append : "+topic+","+queueId + data);
+//        log.debug("append : "+topic+","+queueId + data);
         if (mqConfig.useStats){
             testStat.appendStart();
             testStat.appendUpdateStat(topic, queueId, data);
@@ -469,12 +436,14 @@ public class MyLSMessageQueue extends MessageQueue {
         
         // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
+//        if(mqConfig.useStats)
+//            testStat.updateChunkUsage(q.block.chunkList.getUsage(), q.block.chunkList.getTotalPageNum());
         return ret;
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
+//        log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
         if (mqConfig.useStats){
             testStat.getRangeStart();
             testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
@@ -543,16 +512,19 @@ public class MyLSMessageQueue extends MessageQueue {
                 // ByteBuffer buf = ByteBuffer.allocate(size);
                 ByteBuffer buf = ByteBuffer.wrap(q.block.get(handle, size));
                 // buf.flip(); // TODO: check wrap meaning
+                log.debug("read from pmem");
                 ret.put(i, buf);
                 testStat.incColdReadPmemCount(1);
             }
             // 判断是否在 PMEM 中，若是，则从 PMEM 中读
             else{
-                ByteBuffer buf = df.read(pos);
+                ByteBuffer buf = df.read(pos, i);
                 if (buf != null){
-                    buf.position(0);
-                    buf.limit(buf.capacity());
+                    buf.flip();
+//                    buf.position(0);
+//                    buf.limit(buf.capacity());
                     ret.put(i, buf);
+                    log.debug("read from SSD");
                     testStat.incColdReadSSDCount(1);
                 }
             }
@@ -1040,6 +1012,36 @@ public class MyLSMessageQueue extends MessageQueue {
             return null;
         }
 
+        public ByteBuffer read(long position, int index) {
+            if (threadLocalReadMetaBuf.get() == null) {
+                threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
+            }
+            ByteBuffer readMeta = threadLocalReadMetaBuf.get();
+
+            readMeta.clear();
+            try {
+                int ret;
+                ret = dataFileChannel.read(readMeta, position);
+                readMeta.position(6);
+                int dataLength = readMeta.getShort();
+
+                // 获取线程的 id
+                // int threadId;
+                ByteBuffer tmp = globalByteBuffer.duplicate();
+                int threadId = localThreadId.get(); // threadId 怎么搞？可以使用 ThreadLocal<Integer> 来记录，每次递增的设置
+                tmp.position(threadId * (17 * 1024 * 100) + index * (17*1024));
+                tmp.limit(threadId * (17 * 1024 * 100) + index * (17*1024) + dataLength);
+                tmp = tmp.slice();
+                // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
+                ret = dataFileChannel.read(tmp, position + globalMetadataLength);
+                // log.debug(ret);
+                return tmp;
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            }
+            return null;
+        }
+
         public class WriteStat{
             public int[] bucketBound;
             public int[] bucketCount;
@@ -1260,7 +1262,8 @@ public class MyLSMessageQueue extends MessageQueue {
 
             int coldReadPmemCount;
             int coldReadSSDCount;
-            
+            int chunkUsage;
+            int totalPageNum;
 
 
             public int[] bucketBound;
@@ -1284,6 +1287,8 @@ public class MyLSMessageQueue extends MessageQueue {
 
                 coldReadPmemCount = 0;
                 coldReadSSDCount = 0;
+                chunkUsage = 0;
+                totalPageNum = 0;
 
                 bucketBound = new int[19];
                 bucketBound[0] = 100;
@@ -1374,6 +1379,11 @@ public class MyLSMessageQueue extends MessageQueue {
         void incColdReadSSDCount(int fetchNum){
             int id = threadId.get();
             stats[id].coldReadSSDCount += fetchNum;
+        }
+        void updateChunkUsage(int usage, int total){
+            int id = threadId.get();
+            stats[id].chunkUsage = usage;
+            stats[id].totalPageNum = total;
         }
 
 
@@ -1670,13 +1680,15 @@ public class MyLSMessageQueue extends MessageQueue {
 
             StringBuilder coldReadPmemCountReport = new StringBuilder("[cold read pmem count]");
             StringBuilder coldReadSSDCountReport = new StringBuilder("[cold read SSD count]");
+            StringBuilder chunkUsageReport = new StringBuilder("[pmem usage]");
             for(int i = 0;i < getNumOfThreads;i++){
                 coldReadPmemCountReport.append(String.format("%d,",stats[i].coldReadPmemCount));
                 coldReadSSDCountReport.append(String.format("%d,", stats[i].coldReadSSDCount));
-
+                chunkUsageReport.append(String.format("%d/%d,", stats[i].chunkUsage, stats[i].totalPageNum));
             }
             log.info(coldReadPmemCountReport);
             log.info(coldReadSSDCountReport);
+            log.info(chunkUsageReport);
 
 
 
