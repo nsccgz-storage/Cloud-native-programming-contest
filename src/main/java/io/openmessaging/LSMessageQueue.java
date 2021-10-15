@@ -436,15 +436,16 @@ public class LSMessageQueue extends MessageQueue {
 
         // 同步双写或预取
         if (!q.prefetchBuffer.ringBuffer.isFull()){
-            if (q.type == 0 || q.type == 1){
+            // if (q.type == 0 || q.type == 1 ){
+            if (q.type == 0 || q.type == 1 ||q.type == 2 ){
                 q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData);
             }
-            if (q.type == 2){
-                if (!q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData)){
+            // if (q.type == 2){
+                // if (!q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData)){
                     // 如果不能双写，就开预取，如果能双写就不用预取了
-                    q.prefetchBuffer.prefetch();
-                }
-            }
+                    // q.prefetchBuffer.prefetch();
+                // }
+            // }
         }
 
 
