@@ -174,7 +174,7 @@ public class LSMessageQueue extends MessageQueue {
 
     public void init(String dbDirPath, String pmDirPath) {
         SSDBench.runStandardBench(dbDirPath);
-        PMBench.runStandardBench(pmDirPath);
+        // PMBench.runStandardBench(pmDirPath);
 
         try {
             new Timer("timer").schedule(new TimerTask() {
