@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -129,6 +130,8 @@ public class LSMessageQueue extends MessageQueue {
         public String topicName;
         public HashMap<Integer, MQQueue> id2queue;
         public DataFile df;
+        public int dataFileId;
+        public int threadId;
 
         MQTopic(short myTopicId, String name, DataFile dataFile){
             topicId = myTopicId;
@@ -147,8 +150,10 @@ public class LSMessageQueue extends MessageQueue {
     ThreadLocal<MyByteBufferPool> threadLocalByteBufferPool;
     ThreadLocal<MyDirectBufferPool> threadLocalDirectBufferPool;
     public ThreadLocal<ExecutorService> threadLocalPrefetchThread;
+    public ThreadLocal<Semaphore> threadLocalSemaphore;
     boolean isCrash;
     public PMPrefetchBuffer pmRingBuffer;
+    public Writer[] appendWriterBuffer;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         // SSDBench.runStandardBench(dbDirPath);
@@ -221,6 +226,8 @@ public class LSMessageQueue extends MessageQueue {
             threadLocalDirectBufferPool = new ThreadLocal<>();
             threadLocalPrefetchThread = new ThreadLocal<>();
             threadLocalTopic2object = new ThreadLocal<>();
+            threadLocalSemaphore = new ThreadLocal<>();
+            appendWriterBuffer = new Writer[400];
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
@@ -334,9 +341,172 @@ public class LSMessageQueue extends MessageQueue {
         return ret;
     }
 
+    public long append2(String topic, int queueId, ByteBuffer data){
+        // 放数据
+        log.debug("append : "+topic+","+queueId + data);
+        if (mqConfig.useStats){
+            testStat.appendStart();
+            testStat.appendUpdateStat(topic, queueId, data);
+        }
+        // FIXME: 申请内存需要占用额外时间，因为这段内存不能被重复使用，生命周期较短，还可能频繁触发GC
+        MQTopic mqTopic;
+        if (threadLocalTopic2object.get() == null){
+            threadLocalTopic2object.set(new HashMap<>());
+            threadLocalSemaphore.set(new Semaphore(0));
+        }
+        HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
+        mqTopic = topic2object.get(topic);
+        if (mqTopic == null) {
+            int threadId = updateThreadId();
+            int dataFileId = threadId % numOfDataFiles; 
+            short topicId = getAndUpdateTopicId(topic);
+            // int dataFileId = Math.floorMod(topic.hashCode(), numOfDataFiles);
+            // mqTopic = new MQTopic(topic, dataFileId);
+            mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
+            mqTopic.threadId = threadId;
+            mqTopic.dataFileId = dataFileId;
+            topic2object.put(topic, mqTopic);
+        }
 
+ 
+        Writer w = new Writer(mqTopic.topicId, queueId, data, threadLocalSemaphore.get());
+        appendWriterBuffer[mqTopic.threadId*8] = w;
+        
+        DataFile df = mqTopic.df;
+        boolean isGetLock = false;
+       
+        if (df.dataFileLock.tryLock() == true){
+            isGetLock = true;
+            // 如果能拿到，就聚合写
+            log.debug("get lock ok!");
+            long position = df.curPosition;
+            position += df.bufMetadataLength;
+ 
+            // 聚合 [dataFileId * 10 , (dataFileId+1) * 10)
+            int dataFileId = mqTopic.dataFileId;
+            ByteBuffer writerBuffer = df.commonWriteBuffer;
+            writerBuffer.clear();
+            int writeLength = 0;
+            int bufNum = 0;
+            int bufLength = df.bufMetadataLength;
+            long writePosition = df.curPosition;
+            writerBuffer.position(df.bufMetadataLength);
+
+            int numOfSlot = 40 / numOfDataFiles;
+
+            for (int i = 0; i < numOfSlot; i++){
+                int thisThreadId = dataFileId + i * numOfDataFiles;
+                Writer thisWriter = appendWriterBuffer[thisThreadId*8];
+                if (thisWriter != null && thisWriter.done == 0){
+                    log.debug("this ThreadId : " + thisThreadId);
+                    writeLength = df.globalMetadataLength + thisWriter.length;
+                    thisWriter.position = position;
+                    thisWriter.done = 1;
+                    log.debug("save position : " + position);
+                    position += writeLength;
+                    log.debug("update position to : " + position);
+                    bufLength += writeLength;
+                    bufNum += 1;
+                    writerBuffer.putShort(thisWriter.topicIndex);
+                    writerBuffer.putInt(thisWriter.queueId);
+                    writerBuffer.putShort(thisWriter.length);
+                    writerBuffer.put(thisWriter.data);
+                }
+            }
+            // log.info(writerBuffer);
+            writerBuffer.flip();
+            // log.info(writerBuffer);
+            writerBuffer.putInt(bufLength);
+            writerBuffer.putInt(bufNum);
+            // log.info(writerBuffer);
+            writerBuffer.position(0);
+            // log.info(writerBuffer);
+            // writerBuffer.position(0);
+            try {
+                df.dataFileChannel.write(writerBuffer, writePosition);
+                df.dataFileChannel.force(true);
+            } catch (Exception ie){
+                ie.printStackTrace();
+            }
+            df.curPosition += bufLength;
+            log.debug("df.curPosition : " + df.curPosition);
+
+            // TODO: 得找办法通知那些已经完成了的writer，让他们不要阻塞
+
+            for (int i = 0; i < numOfSlot; i++){
+                int thisThreadId = dataFileId + i * numOfDataFiles;
+                Writer thisWriter = appendWriterBuffer[thisThreadId*8];
+                if (thisWriter != null && thisWriter.done == 1){
+                    appendWriterBuffer[thisThreadId*8] = null;
+                    if (!thisWriter.equals(w)){
+                        thisWriter.sema.release(1);
+                    }
+                }
+            }
+            if (mqConfig.useStats){
+                df.writeStat.addSample(bufLength);
+            }
+
+
+
+
+            log.debug("release the lock !");
+            df.dataFileLock.unlock();
+
+        }
+        // 不管拿不拿得到锁，都先做别的事情，然后等待完成
+
+        // 双写
+        // 预取
+        MQQueue q;
+        q = mqTopic.id2queue.get(queueId);
+        if (q == null){
+            Integer queueIdObject = queueId;
+            // int dataFileId = Math.floorMod(topic.hashCode()+queueIdObject.hashCode(), numOfDataFiles);
+            // q = new MQQueue(dataFileId);
+            // q = new MQQueue(dataFiles[dataFileId]);
+            q = new MQQueue(mqTopic.df); // 要和topic用一样的df
+            q.bbPool = threadLocalByteBufferPool.get();
+            q.dbPool = threadLocalDirectBufferPool.get();
+            // q.prefetchThread = threadLocalPrefetchThread.get();
+            
+            q.initPrefetchBuffer();
+            mqTopic.id2queue.put(queueId, q);
+            if (mqConfig.useStats){
+                testStat.incQueueCount();
+            }
+        }
+        long ret = q.maxOffset;
+        q.maxOffset++;
+
+
+        // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
+        try {
+            if (!isGetLock){
+                w.sema.acquire(1);
+            }
+        } catch (InterruptedException ie){
+            ie.printStackTrace();
+        }
+        log.debug("add position " + w.position);
+        q.offset2position.add(w.position);
+
+
+        return ret;
+
+
+    }
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
+        return append2(topic, queueId, data);
+        // return append1(topic, queueId, data);
+
+    }
+
+
+
+    // @Override
+    public long append1(String topic, int queueId, ByteBuffer data) {
 
         log.debug("append : "+topic+","+queueId + data);
         if (mqConfig.useStats){
@@ -635,6 +805,7 @@ public class LSMessageQueue extends MessageQueue {
             long curOffset = offset + i;
             int intCurOffset = (int)curOffset;
             pos = q.offset2position.get(intCurOffset);
+            log.debug("read position : " + pos);
             ByteBuffer buf = df.read(pos);
             if (buf != null){
                 //buf.position(0);
@@ -954,22 +1125,6 @@ public class LSMessageQueue extends MessageQueue {
         }
     }
 
-
-
-    public class DataFile {
-        public FileChannel dataFileChannel;
-        public long curPosition;
-        public ByteBuffer commonWriteBuffer;
-        public int writerQueueBufferCapacity;
-        public Queue<Writer> writerConcurrentQueue;
-
-        public int bufMetadataLength; // 8B
-        public int globalMetadataLength; // 8B
-
-
-        private ExecutorService prefetchThread;
-        public WriteStat writeStat;
-
         private class Writer {
             short topicIndex;
             int queueId;
@@ -979,6 +1134,7 @@ public class LSMessageQueue extends MessageQueue {
             long position;
             Thread currentThread;
             MQQueue q;
+            Semaphore sema;
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Thread t){
                 topicIndex = myTopicIndex;
                 queueId = myQueueId;
@@ -998,7 +1154,34 @@ public class LSMessageQueue extends MessageQueue {
                 position = 0L;
                 q = myQ;
             }
+            Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Semaphore s){
+                topicIndex = myTopicIndex;
+                queueId = myQueueId;
+                length = (short)myData.remaining();
+                data = myData;
+                sema = s;
+                done = 0;
+                position = 0L;
+            }
+
         }
+
+    public class DataFile {
+        public FileChannel dataFileChannel;
+        public long curPosition;
+        public ByteBuffer commonWriteBuffer;
+        public int writerQueueBufferCapacity;
+        public Queue<Writer> writerConcurrentQueue;
+
+        public int bufMetadataLength; // 8B
+        public int globalMetadataLength; // 8B
+
+
+        private ExecutorService prefetchThread;
+        public WriteStat writeStat;
+        public Lock dataFileLock;
+
+
         DataFile(String dataFileName){
             try {
                 File dataFile = new File(dataFileName);
@@ -1025,6 +1208,7 @@ public class LSMessageQueue extends MessageQueue {
                 // prefetchThread = Executors.newSingleThreadExecutor();
                 prefetchThread = Executors.newFixedThreadPool(10);
                 // prefetchThread = Executors.newCachedThreadPool();
+                dataFileLock = new ReentrantLock();
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
