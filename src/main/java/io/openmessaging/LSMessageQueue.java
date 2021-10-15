@@ -396,8 +396,8 @@ public class LSMessageQueue extends MessageQueue {
  
             // 聚合 [dataFileId * 10 , (dataFileId+1) * 10)
             int dataFileId = mqTopic.dataFileId;
-            // ByteBuffer writerBuffer = df.commonWriteBuffer;
-            ByteBuffer writerBuffer = threadLocalWriterBuffer.get();
+            ByteBuffer writerBuffer = df.commonWriteBuffer;
+            // ByteBuffer writerBuffer = threadLocalWriterBuffer.get();
             writerBuffer.clear();
             int writeLength = 0;
             int bufNum = 0;
@@ -458,6 +458,8 @@ public class LSMessageQueue extends MessageQueue {
             } catch (Exception ie){
                 ie.printStackTrace();
             }
+            // 对齐 4K
+            bufLength = bufLength + (4096 - bufLength % 4096);
             df.curPosition += bufLength;
             log.debug("df.curPosition : " + df.curPosition);
 
