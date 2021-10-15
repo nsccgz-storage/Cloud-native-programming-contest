@@ -76,7 +76,9 @@ import java.util.Comparator;
 public class MyLSMessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(LSMessageQueue.class);
     private static final ByteBuffer globalByteBuffer = ByteBuffer.allocate(17 * 1024 * 40 * 100); //17kB * 40 * 100 线程
+    private static final ByteBuffer globalPmemByteBuffer = ByteBuffer.allocate(17 * 1024 * 40 * 12); // 40 个线程，或许不需要
     // private static final ByteBuffer globalDirByteBuffer = ByteBuffer.allocateDirect(17 * 1024 * 40);
+    // ThreadLocal<ByteBuffer> threadBuffers;
 
     public class MQConfig {
         Level logLevel = Level.INFO;
@@ -233,9 +235,7 @@ public class MyLSMessageQueue extends MessageQueue {
             numOfThreads = new AtomicInteger();
             numOfThreads.set(0);
             numOfTopics = new AtomicInteger();
-            numOfTopics.set(1);
-
-            
+            numOfTopics.set(1);        
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
@@ -1019,7 +1019,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
         public ThreadLocal<ByteBuffer> threadLocalReadMetaBuf;
 
-        public ByteBuffer read(long position) {
+        public ByteBuffer preFetchRead(long position, long index, int threadId) {
             if (threadLocalReadMetaBuf.get() == null) {
                 threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
             }
@@ -1034,10 +1034,9 @@ public class MyLSMessageQueue extends MessageQueue {
 
                 // 获取线程的 id
                 // int threadId;
-                ByteBuffer tmp = globalByteBuffer.duplicate();
-                int threadId = localThreadId.get(); // threadId 怎么搞？可以使用 ThreadLocal<Integer> 来记录，每次递增的设置
-                tmp.position(threadId * (17 * 1024));
-                tmp.limit(threadId * (17 * 1024) + dataLength);
+                ByteBuffer tmp = globalPmemByteBuffer.duplicate();
+                tmp.position(threadId * (17 * 1024 * 12)); // TODO: 这里只设了 12 个，后续调整预取个数时，需要调整这个写法
+                tmp.limit(threadId * (17 * 1024 *12) +  ((int)index%12) * 1024 * 17 + dataLength);
                 tmp = tmp.slice();
                 // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
@@ -1154,12 +1153,13 @@ public class MyLSMessageQueue extends MessageQueue {
         }
     }
     ExecutorService executor;
+    AtomicInteger prefetchThreadNums = new AtomicInteger(0);
     //ExecutorService executor = Executors.newFixedThreadPool(2);
     public class PrefetchTask{
         Queue<WritePmemTask> wPmemTaskConcurrentQueue; //
         Thread t;
-
         int numOfThrowTask = 0;
+        int threadId;
 
         public PrefetchTask(){
             wPmemTaskConcurrentQueue = new ConcurrentLinkedQueue<>();
@@ -1176,6 +1176,7 @@ public class MyLSMessageQueue extends MessageQueue {
             @Override
             public void run(){
                 t = Thread.currentThread();
+                threadId = prefetchThreadNums.getAndIncrement();
                 try {
                     // 往 PMEM 写入一些数据。
                     while(!Thread.currentThread().isInterrupted()){
@@ -1199,7 +1200,7 @@ public class MyLSMessageQueue extends MessageQueue {
                                 long offset = curTask.q.offset2info.get(k).offset;
                                 int dataSize = curTask.q.offset2info.get(k).dataSize;
                                 
-                                ByteBuffer byteBuffer = curTask.df.read(offset);
+                                ByteBuffer byteBuffer = curTask.df.preFetchRead(offset, k , threadId);
                                 byteBuffer.flip();
                                 
                                 // 可以多次判断 uselessIdx 和 k 的值
