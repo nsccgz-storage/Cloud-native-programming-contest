@@ -107,7 +107,7 @@ public class LSMessageQueue extends MessageQueue {
             consumeOffset = 0L;
             type = 0;
             maxOffset = 0L;
-            offset2position = new ArrayList<>(512);
+            offset2position = new ArrayList<>(256);
             df = dataFile;
             prefetchFuture = null;
         }
@@ -115,7 +115,7 @@ public class LSMessageQueue extends MessageQueue {
             consumeOffset = 0L;
             type = 0;
             maxOffset = 0L;
-            offset2position = new ArrayList<>(512);
+            offset2position = new ArrayList<>(256);
             prefetchFuture = null;
         }
         public void initPrefetchBuffer(){
@@ -364,6 +364,9 @@ public class LSMessageQueue extends MessageQueue {
         }
         // data = data.slice();
         data.mark();
+        DataFile df = mqTopic.df;
+        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
+
 
         q = mqTopic.id2queue.get(queueId);
         if (q == null){
@@ -403,7 +406,6 @@ public class LSMessageQueue extends MessageQueue {
 
         log.debug("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
 
-        DataFile df = mqTopic.df;
 
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(mqTopic.topicId, queueId, data, q);
 
@@ -424,7 +426,6 @@ public class LSMessageQueue extends MessageQueue {
         //     });
         // }
 
-        long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
         // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
 
