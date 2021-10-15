@@ -5,6 +5,7 @@ package io.openmessaging;
 import java.io.IOException;
 
 import java.nio.channels.FileChannel;
+import java.sql.Time;
 import java.nio.ByteBuffer;
 import java.io.RandomAccessFile;
 import java.io.File;
@@ -49,6 +50,8 @@ import io.openmessaging.SSDqueue.HotData;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.apache.log4j.net.SyslogAppender;
+
 import java.lang.ThreadLocal;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
@@ -65,14 +68,14 @@ import java.util.Deque;
 
 import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
-
+import com.intel.pmem.llpl.Util;
 
 import java.util.Comparator;
 
 
 public class MyLSMessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(LSMessageQueue.class);
-    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocate(17 * 1024 * 40); //17kB * 40 线程
+    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocate(17 * 1024 * 40 * 100); //17kB * 40 * 100 线程
     // private static final ByteBuffer globalDirByteBuffer = ByteBuffer.allocateDirect(17 * 1024 * 40);
 
     public class MQConfig {
@@ -172,7 +175,7 @@ public class MyLSMessageQueue extends MessageQueue {
     int numOfPrefetchThreads;
     PrefetchTask[] prefetchTasks;
     PmemManager pmemManager;
-    ExecutorService exec = Executors.newFixedThreadPool(16);
+    ExecutorService exec = Executors.newFixedThreadPool(16); // 这个线程数会不会太多？
 
     public void shutdown(){
         for(int i=0; i<numOfPrefetchThreads; i++){
@@ -368,7 +371,7 @@ public class MyLSMessageQueue extends MessageQueue {
             return q.block.put(data);
         }
     }
-    boolean writeOver = false;
+    boolean isWritePmem = false;
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
         log.debug("append : "+topic+","+queueId + data);
@@ -412,52 +415,35 @@ public class MyLSMessageQueue extends MessageQueue {
         DataFile df = mqTopic.df; // 
         int size = data.remaining();
         // 先双写
+
+        long time0 = System.nanoTime();
+
         ByteBuffer tmpData = data.duplicate();
         // 写 PMEM 的异步任务设计
         AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        if(false){
-        //if(q.type != 2){// 不是冷队列，开启双写
+        if(isWritePmem && q.type != 2){
+            // 不是冷队列，开启双写
             exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         }
          // 发起一个异步任务表示写 pmem
         data.mark();
-        
-        //int handle = q.block.put(data);
-        // exec.shutdown();
 
-        data.reset();
+        // 记录写磁盘的时间
+        long time1 = System.nanoTime();
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
 
-        // byte[] writePmemData = new byte[data.remaining()];
-        // data.get(writePmemData);
-        // long handle = pmemManager.write(writePmemData);
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
 
+        // 
+        long writeSSDTime = System.nanoTime() - time1;
+
         long ret = q.maxOffset;
-
-        // 热读方案1：需要时才分配内存
-        // 只有20%的getRange能够命中这个cache
-
-        // if (q.type == 1){
-        //     // is hot queue
-        //     if (q.maxOffsetData == null){
-        //         q.maxOffsetData = ByteBuffer.allocate(17408);
-        //     }
-        //     q.maxOffsetData.clear();
-        //     data.rewind();
-        //     q.maxOffsetData.put(data);
-        //     q.maxOffsetData.flip();
-        // }
-
-        // 热读方案2：每次append都留一个热读区，如果上次申请的空间够用就不重新分配，否则重新分配
-        // （TODO:如果后期发现不热了，就把空间释放出来？）
-        // 有40%的getRange能够命中这个cache
-        // 估计要采用这种方案
         data.reset();
         int dataSize = data.remaining();
+        // hotDataBuf 也会频繁创建 ByteBuffer
+        // TODO: 使用全局的 HotByteBuffer 来避免这个问题:
+        // 17KB * 5000 * 100 = ? 好像不够，那 HotBuffer 不是不可行吗？
         ByteBuffer hotDataBuf;
         if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
             hotDataBuf = ByteBuffer.allocate(dataSize);
@@ -472,7 +458,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
         // 等待异步任务的结束
         // if(q.type != 2){
-        if(false){
+        if(isWritePmem && q.type != 2){
             try{
                 q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
             }catch(Exception e){
@@ -481,13 +467,18 @@ public class MyLSMessageQueue extends MessageQueue {
         }else{
             q.offset2info.put(q.maxOffset, new IndexInfo(position, size , -1));
         }
+        long asyncWritePmemTime = System.nanoTime() - time0;
+        
+        if(mqConfig.useStats){
+            testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
+        }
+        // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
         return ret;
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        writeOver = true;
         log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
         if (mqConfig.useStats){
             testStat.getRangeStart();
@@ -562,10 +553,11 @@ public class MyLSMessageQueue extends MessageQueue {
             }
             // 判断是否在 PMEM 中，若是，则从 PMEM 中读
             else{
-                ByteBuffer buf = df.read(pos);
+                ByteBuffer buf = df.read(pos, i);
                 if (buf != null){
-                    buf.position(0);
-                    buf.limit(buf.capacity());
+                    // buf.position(0);
+                    // buf.limit(buf.capacity());
+                    buf.flip();
                     ret.put(i, buf);
                     testStat.incColdReadSSDCount(1);
                 }
@@ -756,7 +748,6 @@ public class MyLSMessageQueue extends MessageQueue {
                     dataFileChannel.write(writerBuffer, writePosition);
                     dataFileChannel.force(true);
                 }
-
                 while(true){
                     Writer ready = writerConcurrentQueue.poll();
                     if (!ready.equals(w)){
@@ -1054,6 +1045,35 @@ public class MyLSMessageQueue extends MessageQueue {
             }
             return null;
         }
+        public ByteBuffer read(long position, int index) {
+            if (threadLocalReadMetaBuf.get() == null) {
+                threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
+            }
+            ByteBuffer readMeta = threadLocalReadMetaBuf.get();
+        
+            readMeta.clear();
+            try {
+                int ret;
+                ret = dataFileChannel.read(readMeta, position);
+                readMeta.position(6);
+                int dataLength = readMeta.getShort();
+
+                // 获取线程的 id
+                // int threadId;
+                ByteBuffer tmp = globalByteBuffer.duplicate();
+                int threadId = localThreadId.get(); // threadId 怎么搞？可以使用 ThreadLocal<Integer> 来记录，每次递增的设置
+                tmp.position( threadId * (17 * 1024 *100) + index * 17 * 1024);
+                tmp.limit(threadId * (17 * 1024 *100) + index * 17 * 1024 + dataLength);
+                tmp = tmp.slice();
+                // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
+                ret = dataFileChannel.read(tmp, position + globalMetadataLength);
+                // log.debug(ret);
+                return tmp;
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            }
+            return null;
+        }
 
         public class WriteStat{
             public int[] bucketBound;
@@ -1135,6 +1155,9 @@ public class MyLSMessageQueue extends MessageQueue {
     public class PrefetchTask{
         Queue<WritePmemTask> wPmemTaskConcurrentQueue; //
         Thread t;
+
+        int numOfThrowTask = 0;
+
         public PrefetchTask(){
             wPmemTaskConcurrentQueue = new ConcurrentLinkedQueue<>();
             // 放全局
@@ -1163,7 +1186,12 @@ public class MyLSMessageQueue extends MessageQueue {
                                 // useless task:
                                 long uselessIdx = curTask.q.uselessIdx;
                                 
-                                if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L) continue; // 丢弃任务不执行
+                                // 统计到底发生多少次丢弃任务的操作
+                                // 
+                                if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L){
+                                    numOfThreads.incrementAndGet();
+                                    continue; // 丢弃任务不执行
+                                } 
     
                                 long offset = curTask.q.offset2info.get(k).offset;
                                 int dataSize = curTask.q.offset2info.get(k).dataSize;
@@ -1268,6 +1296,8 @@ public class MyLSMessageQueue extends MessageQueue {
             int coldReadPmemCount;
             int coldReadSSDCount;
             
+            long writeSSDTime;
+            long asyncWritePmemTime;
 
 
             public int[] bucketBound;
@@ -1292,6 +1322,9 @@ public class MyLSMessageQueue extends MessageQueue {
                 coldReadPmemCount = 0;
                 coldReadSSDCount = 0;
 
+                writeSSDTime = 0L;
+                asyncWritePmemTime = 0L;
+
                 bucketBound = new int[19];
                 bucketBound[0] = 100;
                 bucketBound[1] = 512;
@@ -1315,6 +1348,14 @@ public class MyLSMessageQueue extends MessageQueue {
                 ret.getRangeEndTime = this.getRangeEndTime;
                 ret.getRangeCount = this.getRangeCount;
                 ret.writeBytes = this.writeBytes;
+
+                ret.coldQueueCount = this.coldQueueCount;
+                ret.coldReadPmemCount = this.coldReadPmemCount;
+                ret.hitHotDataCount = this.hitHotDataCount;
+                ret.coldReadSSDCount = this.coldReadSSDCount;
+                ret.writeSSDTime = this.writeSSDTime;
+                ret.asyncWritePmemTime = this.asyncWritePmemTime;
+
                 ret.bucketBound = this.bucketBound.clone();
                 ret.bucketCount = this.bucketCount.clone();
                 return ret;
@@ -1382,7 +1423,11 @@ public class MyLSMessageQueue extends MessageQueue {
             int id = threadId.get();
             stats[id].coldReadSSDCount += fetchNum;
         }
-
+        void addAsycWriteTime(long writeSSDTime, long asyncWritePmemTime){
+            int id = threadId.get();
+            stats[id].writeSSDTime = writeSSDTime;
+            stats[id].asyncWritePmemTime = asyncWritePmemTime;
+        }
 
 
         void appendStart() {
@@ -1660,20 +1705,26 @@ public class MyLSMessageQueue extends MessageQueue {
             StringBuilder hotQueueCountReport = new StringBuilder();
             StringBuilder coldQueueCountReport = new StringBuilder();
             StringBuilder otherQueueCountReport = new StringBuilder();
+            StringBuilder asyWriteTimeReport = new StringBuilder();
+
             queueCountReport.append("[queueCount report]");
             hotQueueCountReport.append("[hot queueCount report]");
             coldQueueCountReport.append("[cold queueCount report]");
+            asyWriteTimeReport.append("[wirte SSD and asy write report]");
             otherQueueCountReport.append("[other queueCount report]");
             for (int i = 0; i < getNumOfThreads; i++){
                 queueCountReport.append(String.format("%d,",stats[i].queueCount));
                 hotQueueCountReport.append(String.format("%d,",stats[i].hotQueueCount));
                 coldQueueCountReport.append(String.format("%d,",stats[i].coldQueueCount));
+                asyWriteTimeReport.append(String.format("{%d, + %d}, ", stats[i].writeSSDTime, stats[i].asyncWritePmemTime-stats[i].writeSSDTime));
                 otherQueueCountReport.append(String.format("%d,",stats[i].queueCount-stats[i].hotQueueCount-stats[i].coldQueueCount));
             }
             log.info(queueCountReport);
             log.info(hotQueueCountReport);
             log.info(coldQueueCountReport);
+            log.info(asyWriteTimeReport);
             log.info(otherQueueCountReport);
+            
 
             StringBuilder coldReadPmemCountReport = new StringBuilder("[cold read pmem count]");
             StringBuilder coldReadSSDCountReport = new StringBuilder("[cold read SSD count]");
