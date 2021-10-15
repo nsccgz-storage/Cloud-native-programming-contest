@@ -5,6 +5,7 @@ package io.openmessaging;
 import java.io.IOException;
 
 import java.nio.channels.FileChannel;
+import java.sql.Time;
 import java.nio.ByteBuffer;
 import java.io.RandomAccessFile;
 import java.io.File;
@@ -65,7 +66,7 @@ import java.util.Deque;
 
 import com.intel.pmem.llpl.Heap;
 import com.intel.pmem.llpl.MemoryBlock;
-
+import com.intel.pmem.llpl.Util;
 
 import java.util.Comparator;
 
@@ -172,7 +173,7 @@ public class MyLSMessageQueue extends MessageQueue {
     int numOfPrefetchThreads;
     PrefetchTask[] prefetchTasks;
     PmemManager pmemManager;
-    ExecutorService exec = Executors.newFixedThreadPool(16);
+    ExecutorService exec = Executors.newFixedThreadPool(16); // 这个线程数会不会太多？
 
     public void shutdown(){
         for(int i=0; i<numOfPrefetchThreads; i++){
@@ -368,7 +369,7 @@ public class MyLSMessageQueue extends MessageQueue {
             return q.block.put(data);
         }
     }
-    boolean writeOver = false;
+    boolean isWritePmem = true;
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
         log.debug("append : "+topic+","+queueId + data);
@@ -412,52 +413,35 @@ public class MyLSMessageQueue extends MessageQueue {
         DataFile df = mqTopic.df; // 
         int size = data.remaining();
         // 先双写
+
+        long time0 = System.nanoTime();
+
         ByteBuffer tmpData = data.duplicate();
         // 写 PMEM 的异步任务设计
         AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        if(false){
-        //if(q.type != 2){// 不是冷队列，开启双写
+        if(isWritePmem && q.type != 2){
+            // 不是冷队列，开启双写
             exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         }
          // 发起一个异步任务表示写 pmem
         data.mark();
-        
-        //int handle = q.block.put(data);
-        // exec.shutdown();
 
-        data.reset();
+        // 记录写磁盘的时间
+        long time1 = System.nanoTime();
         long position = df.syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(mqTopic.topicId, queueId, data, q);
 
-        // byte[] writePmemData = new byte[data.remaining()];
-        // data.get(writePmemData);
-        // long handle = pmemManager.write(writePmemData);
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer(mqTopic.topicId, queueId, data);
-        // long position = df.syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(mqTopic.topicId, queueId, data);
         q.offset2position.add(position);
 
+        // 
+        long writeSSDTime = System.nanoTime() - time1;
+
         long ret = q.maxOffset;
-
-        // 热读方案1：需要时才分配内存
-        // 只有20%的getRange能够命中这个cache
-
-        // if (q.type == 1){
-        //     // is hot queue
-        //     if (q.maxOffsetData == null){
-        //         q.maxOffsetData = ByteBuffer.allocate(17408);
-        //     }
-        //     q.maxOffsetData.clear();
-        //     data.rewind();
-        //     q.maxOffsetData.put(data);
-        //     q.maxOffsetData.flip();
-        // }
-
-        // 热读方案2：每次append都留一个热读区，如果上次申请的空间够用就不重新分配，否则重新分配
-        // （TODO:如果后期发现不热了，就把空间释放出来？）
-        // 有40%的getRange能够命中这个cache
-        // 估计要采用这种方案
         data.reset();
         int dataSize = data.remaining();
+        // hotDataBuf 也会频繁创建 ByteBuffer
+        // TODO: 使用全局的 HotByteBuffer 来避免这个问题:
+        // 17KB * 5000 * 100 = ? 好像不够，那 HotBuffer 不是不可行吗？
         ByteBuffer hotDataBuf;
         if (q.maxOffsetData == null || q.maxOffsetData.capacity() < dataSize){
             hotDataBuf = ByteBuffer.allocate(dataSize);
@@ -472,7 +456,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
         // 等待异步任务的结束
         // if(q.type != 2){
-        if(false){
+        if(isWritePmem && q.type != 2){
             try{
                 q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
             }catch(Exception e){
@@ -481,13 +465,15 @@ public class MyLSMessageQueue extends MessageQueue {
         }else{
             q.offset2info.put(q.maxOffset, new IndexInfo(position, size , -1));
         }
+        long asyncWritePmemTime = System.nanoTime() - time0;
+        
+        // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
         return ret;
     }
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-        writeOver = true;
         log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
         if (mqConfig.useStats){
             testStat.getRangeStart();
@@ -756,7 +742,6 @@ public class MyLSMessageQueue extends MessageQueue {
                     dataFileChannel.write(writerBuffer, writePosition);
                     dataFileChannel.force(true);
                 }
-
                 while(true){
                     Writer ready = writerConcurrentQueue.poll();
                     if (!ready.equals(w)){
@@ -1135,6 +1120,9 @@ public class MyLSMessageQueue extends MessageQueue {
     public class PrefetchTask{
         Queue<WritePmemTask> wPmemTaskConcurrentQueue; //
         Thread t;
+
+        int numOfThrowTask = 0;
+
         public PrefetchTask(){
             wPmemTaskConcurrentQueue = new ConcurrentLinkedQueue<>();
             // 放全局
@@ -1163,7 +1151,12 @@ public class MyLSMessageQueue extends MessageQueue {
                                 // useless task:
                                 long uselessIdx = curTask.q.uselessIdx;
                                 
-                                if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L) continue; // 丢弃任务不执行
+                                // 统计到底发生多少次丢弃任务的操作
+                                // 
+                                if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L){
+                                    numOfThreads.incrementAndGet();
+                                    continue; // 丢弃任务不执行
+                                } 
     
                                 long offset = curTask.q.offset2info.get(k).offset;
                                 int dataSize = curTask.q.offset2info.get(k).dataSize;
