@@ -328,8 +328,14 @@ public class MQBench {
 
 			long step1EndTime = System.nanoTime();
 			long step2StartTime = System.nanoTime();
+
 			if (threadId == 0){
 				log.info("step 1 ok");
+			}
+			barrier.await();
+			// Thread.sleep(20000,0);
+			barrier.await();
+			if (threadId == 0){
 				log.info("start step 2");
 			}
 
@@ -346,8 +352,8 @@ public class MQBench {
 			long step2EndTime = System.nanoTime();
 			if (threadId == 0){
 				log.info("step 2 ok");
-				log.info("time of step 1: " + (step1EndTime-step1StartTime)/(1000*1000*1000));
-				log.info("time of step 2: " + (step2EndTime-step2StartTime)/(1000*1000*1000));
+				log.info("time of step 1: " + (double)(step1EndTime-step1StartTime)/(1000*1000*1000));
+				log.info("time of step 2: " + (double)(step2EndTime-step2StartTime)/(1000*1000*1000));
 			}
 
 			if (threadId == 0){

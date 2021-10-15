@@ -6,11 +6,13 @@ import org.apache.log4j.Logger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class PmemManager {
     final long MAX_PMEM_SIZE = 60*1024L*1024L*1024L; // 60GB
-    final long CHUNK_SIZE = 1024L*1024L*1024L; // 1GiB 每个线程1个chunk?
-    final long PAGE_SIZE = 64*1024L; // 64KiB
+    final long CHUNK_SIZE = 512L*1024L*1024L; // 512MiB 每个线程1个chunk?
+    final long PAGE_SIZE = 128*1024L; // 128KiB // 暂定128K， 为了让本地的测试程序可以触发申请chunk的操作
+    final int MAX_CHUNK_PER_BLOCK = 8;
     private static final Logger logger = Logger.getLogger(SSDBench.class);
 
     static int[] depthArray;
@@ -18,14 +20,16 @@ public class PmemManager {
     short maxDepth = (short) (Math.log(CHUNK_SIZE/PAGE_SIZE)/Math.log(2)); // TODO:Depth从0开始计数，max_depth = log2(CHUNK_SIZE/PAGE_SIZE)
 
     MemoryPool pool;
-    Chunk[] chunkList;
+    Chunk[] chunks;
+    AtomicInteger allocatedChunkNum;
+    ThreadLocal<ChunkList> threadChunkList;
 
     public PmemManager(String pmemPath){
         pool = MemoryPool.createPool(pmemPath, MAX_PMEM_SIZE);
         int chunkNum = (int) (MAX_PMEM_SIZE/CHUNK_SIZE);
-        chunkList = new Chunk[chunkNum];
+        chunks = new Chunk[chunkNum];
         for(int i = 0;i < chunkNum;i++){
-            chunkList[i] = new Chunk(i);
+            chunks[i] = new Chunk(i);
         }
         size2Depth = new HashMap<>();
         depthArray = new int[maxDepth+1];
@@ -35,22 +39,32 @@ public class PmemManager {
             size2Depth.put(tmp, i);
             tmp /= 2;
         }
+        allocatedChunkNum = new AtomicInteger(0);
+        threadChunkList = new ThreadLocal<>();
         logger.info(String.format("max depth = %d",maxDepth));
     }
 
+    public Chunk allocateChunk(){
+        int id = allocatedChunkNum.getAndIncrement();
+        if(id < chunks.length){
+            return chunks[id];
+        }
+        logger.info(String.format("allocate chunk failed"));
+        return null; //
+    }
 
-    public MyBlock createBlock(int id){
-        MyBlock block = new MyBlock((int)PAGE_SIZE, chunkList[id]);
+    public MyBlock createBlock(){
+        MyBlock block = new MyBlock((int)PAGE_SIZE);
 //        if(block.index == -1)return null;
         return block; // ensure always allocate successfully?
     }
 
 
-    
-
     private class Chunk{
         ArrayList<Short> memoryMap; // Vector是线程安全的，而ArrayList不是线程安全的 // 或许可用short来储存
         long handle;
+        int usage; // log 输出信息
+        Chunk next; // 链式结构
 
         // 考虑初始化带来的开销
         public Chunk(int id){
@@ -64,13 +78,14 @@ public class PmemManager {
             }
 //            logger.info(String.format("max depth = %d, memoryMap size = %d",maxDepth,memoryMap.size()));
             handle = id * CHUNK_SIZE;
+            next = null;
         }
 
         /**
          * @param size 需要保证 size 不会小于 page_size
          * @return -1 分配失败, 地址 = res * PAGE_SIZE
          **/
-        public int allocate(int size){
+        private int allocate(int size){
 //            size = normalizeCapacity(size);
 //            if(size > depthArray.get(0)){} // TODO：分配的空间过大与过小的情形
 
@@ -83,7 +98,7 @@ public class PmemManager {
             int index = 0, curDepth = 0;
             while(curDepth <= depth){
                 if(memoryMap.get(index) > depth){
-                    logger.error(String.format("Now index = %d, memory at index = %d, depth = %d",index,memoryMap.get(index),depth));
+//                    logger.error(String.format("Now index = %d, memory at index = %d, depth = %d",index,memoryMap.get(index),depth));
                     return -1;
                 }
 
@@ -95,6 +110,7 @@ public class PmemManager {
                         index = (index - 1)/2;
                         memoryMap.set(index, min(memoryMap.get(index*2+1), memoryMap.get(index*2+2))); // 左右子节点的最小值
                     }
+                    usage += 1 << (maxDepth - depth);
                     return res; // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
                 }
 //                if(curDepth == depth)break;
@@ -110,7 +126,7 @@ public class PmemManager {
             return -1;
         }
 
-        public void free(int index, int size){
+        private void free(int index, int size){
 //            size = normalizeCapacity(size);
 //            memoryMap.set(index, );
 //            int depth = 0, tmp = index+1;
@@ -127,30 +143,70 @@ public class PmemManager {
             }
         }
 
-        public long getAddress(int index, int size){
-            long tmp = (index + 1 - (1L << size2Depth.get(size)))*size + handle;
-            if(tmp < 0){
-                // index = -1 !!!
-                logger.info(String.format("index = %d, size = %d depth = %d handle of chunk = %d", index, size, size2Depth.get(size), handle));
-            }
-            return (index + 1 - (1L << size2Depth.get(size)))*size + handle; // FIXME: check size is normalized
-        }
+
 
         private short min(short var1, short var2){
             return var1 <= var2 ? var1 : var2;
         }
     }
 
-//    public void write(byte[] bytes, long handle, int dataSize){
-//        pool.copyFromByteArray(bytes, 0, handle, dataSize);
-////        pool.flush(handle, dataSize); // just write to page cache
-//    }
-//
-//    public byte[] read(long handle, int dataSize){
-//        byte[] bytes = new byte[dataSize];
-//        pool.copyToByteArray(handle, bytes, 0, dataSize);
-//        return bytes;
-//    }
+    private class ChunkList{
+        Chunk head;
+        Chunk lastAllocateChunk; // 上一次分配的chunk
+        int chunkNum;
+        public ChunkList(Chunk c){ // 初始化时保证有一个chunk
+            chunkNum = 1;
+            head = c;
+        }
+        public int allocate(int size){
+            Chunk c = head;
+
+            int index;
+            while(c != null){
+                index = c.allocate(size);
+                if(index != -1){
+                    lastAllocateChunk = c;
+                    return index;
+                }else{
+                    lastAllocateChunk = c;
+                    c = c.next;
+                }
+            }
+            if(chunkNum < MAX_CHUNK_PER_BLOCK){
+                c = allocateChunk();
+                if(c != null){
+                    lastAllocateChunk.next = c;
+                    lastAllocateChunk = c;
+                    chunkNum++;
+                    logger.info(String.format("allocate success, now chunkNum = %d",chunkNum));
+                    return c.allocate(size);
+                }
+            }
+            return -1; // 空间已满且申请新的chunk失败
+        }
+        public void free(Chunk c, int index, int size){
+            c.free(index, size);
+        }
+
+        public int getUsage(){
+            Chunk c = head;
+            int ret = 0;
+            while(c != null){
+                ret += c.usage;
+                c = c.next;
+            }
+            return ret;
+        }
+
+        public long getAddress(Chunk c, int index, int size){
+            long tmp = (index + 1 - (1L << size2Depth.get(size)))*size + c.handle;
+            if(tmp < 0){
+                // index = -1 !!!
+                logger.info(String.format("index = %d, size = %d depth = %d handle of chunk = %d", index, size, size2Depth.get(size), c.handle));
+            }
+            return (index + 1 - (1L << size2Depth.get(size)))*size + c.handle;
+        }
+    }
 
     // 将一个数向上取值2为最接近的2的整数幂
     public int normalizeCapacity(int num){
@@ -171,20 +227,25 @@ public class PmemManager {
         long handle; // pool中的地址
         int index;
         int size;
+        ChunkList chunkList;
         Chunk chunk;
 
         // head == tail empty
         // tail + 1 == head full
         // 假定传进来的size就是normalized的
-        public MyBlock(int size, Chunk c){
+        public MyBlock(int size){
             head = 0;
             tail = 0;
             this.size = size;
-            chunk = c;
-            index = chunk.allocate(size); // 具体地址表示为 (res - (1 << depth) + 1)*normalize_size
+            if(threadChunkList.get() == null){
+                threadChunkList.set(new ChunkList(allocateChunk()));
+            }
+            chunkList = threadChunkList.get();
+            index = chunkList.allocate(size); // 具体地址表示为 (index - (1 << depth) + 1)*normalize_size
 
             if(index != -1) {
-                handle = chunk.getAddress(index, size);
+                chunk = chunkList.lastAllocateChunk;
+                handle = chunkList.getAddress(chunk, index, size);
             }
             else {
                 logger.info(String.format("allocate space failed")); // handle < 0 !!!
@@ -192,6 +253,7 @@ public class PmemManager {
             }
         }
 
+        /*
         public boolean doubleCapacity(){
             if(index == 0)return false;
             // 检查相邻的结点是否可以分配
@@ -209,7 +271,7 @@ public class PmemManager {
 //                    return index;
 //                }
 //            } else{
-                int newIndex = chunk.allocate(size*2);
+                int newIndex = chunkList.allocate(size*2);
                 if(newIndex == -1)return false;
                 long srcOffset = chunk.getAddress(index, size);
                 long dstOffset = chunk.getAddress(newIndex, size*2);
@@ -232,14 +294,14 @@ public class PmemManager {
             handle = chunk.getAddress(index, size);
             return true;
         }
-
+        */
         public void headForward(int length){
             head = (head + length)%size;
             // check head ?
         }
 
         public void freeSpace(){
-            chunk.free(index, size);
+            chunkList.free(chunk, index, size);
         }
 
         public void reset(){

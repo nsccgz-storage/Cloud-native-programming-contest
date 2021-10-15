@@ -515,6 +515,30 @@ public class WYFTest {
 		// 	}
 
 
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 10);
+		// 	for (int i = 0; i < 10; i++){
+		// 		if (msgs.get(i).checkBuf.compareTo(msgs.get(i).buf) != 0) {
+		// 			log.error("bug1");
+		// 		}
+		// 		if (ret.get(i).compareTo(msgs.get(i).checkBuf) != 0) {
+		// 			log.error(msgs.get(i).buf);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(i).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// } 
+
+		// {
+		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		// 	long currentGetRangeOffset = 0L;
+		// 	for (int i = 0; i < 10; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+
+
 		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
 		// 	for (int i = 0; i < 4; i++){
 		// 		if (msgs.get(i).checkBuf.compareTo(msgs.get(i).buf) != 0) {
@@ -548,18 +572,134 @@ public class WYFTest {
 
 		// 	}
 		// } 
+		// {
+		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		// 	long currentGetRangeOffset = 0L;
+		// 	for (int i = 0; i < 15; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+
+		// 	// 预取了6个，9个没预取
+
+
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 8);
+		// 	for (int i = 0; i < 8; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(i);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(msgId).buf);
+		// 			log.error(msgs.get(msgId).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+
+		// 	for (int i = 15; i < 30; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+		// 	// 写一次，触发预取，把后面的6个预取过来了
+		// 	currentGetRangeOffset += 8;
+
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 8);
+		// 	for (int i = 0; i < 8; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(i);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(msgId).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// 	log.info("pass the test");
+		// 	((LSMessageQueue)mq).close();
+		// }
+		// {
+		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		// 	for (int i = 0; i < 12; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+
+		// 	// 预取了8个，此时读是热读，可能从中间开始直接读
+
+		// 	long currentGetRangeOffset = 2L;
+
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 2);
+		// 	for (int i = 0; i < 2; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(i);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(msgId).buf);
+		// 			log.error(msgs.get(msgId).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// 	currentGetRangeOffset += 2;
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 2);
+		// 	for (int i = 0; i < 2; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(i);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(msgId).buf);
+		// 			log.error(msgs.get(msgId).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// 	log.info("pass the test");
+		// 	((LSMessageQueue)mq).close();
+		// } 
 		{
 			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
-			long currentGetRangeOffset = 0L;
-			for (int i = 0; i < 15; i++){
+			for (int i = 0; i < 30; i++){
 				mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
 			}
 
-			// 预取了6个，9个没预取
+			// 预取了8个，此时读是热读，可能从中间开始直接读
 
+			long currentGetRangeOffset = 15L;
 
-			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 8);
-			for (int i = 0; i < 8; i++){
+			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+			for (int i = 0; i < 4; i++){
+				int msgId = (int)currentGetRangeOffset + i;
+				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+					log.error(i);
+					log.error(ret.get(i));
+					log.error(msgs.get(msgId).buf);
+					log.error(msgs.get(msgId).checkBuf);
+					log.error("data error !");
+					System.exit(0);
+				}
+
+			}
+			currentGetRangeOffset += 4;
+			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+			for (int i = 0; i < 4; i++){
+				int msgId = (int)currentGetRangeOffset + i;
+				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+					log.error(i);
+					log.error(ret.get(i));
+					log.error(msgs.get(msgId).buf);
+					log.error(msgs.get(msgId).checkBuf);
+					log.error("data error !");
+					System.exit(0);
+				}
+
+			}
+			for (int i = 30; i < 31; i++){
+				mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+			}
+			currentGetRangeOffset += 4;
+			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+			for (int i = 0; i < 4; i++){
 				int msgId = (int)currentGetRangeOffset + i;
 				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
 					log.error(i);
@@ -572,26 +712,11 @@ public class WYFTest {
 
 			}
 
-			for (int i = 15; i < 30; i++){
-				mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
-			}
-			// 写一次，触发预取，把后面的6个预取过来了
-			currentGetRangeOffset += 8;
 
-			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 8);
-			for (int i = 0; i < 8; i++){
-				int msgId = (int)currentGetRangeOffset + i;
-				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
-					log.error(i);
-					log.error(ret.get(i));
-					log.error(msgs.get(msgId).checkBuf);
-					log.error("data error !");
-					System.exit(0);
-				}
 
-			}
 			log.info("pass the test");
 			((LSMessageQueue)mq).close();
+
 		}
 
 		return ;
@@ -621,10 +746,10 @@ public class WYFTest {
 		String pmDirPath = args[1] ;
 
 		try {
-			// testPrefetch(dbPath, pmDirPath);
+			testPrefetch(dbPath, pmDirPath);
 			// writePerformanceTest(dbPath, pmDirPath);
 			// testThreadPool(dbPath, pmDirPath);
-			testRecover(dbPath, pmDirPath);
+			// testRecover(dbPath, pmDirPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();

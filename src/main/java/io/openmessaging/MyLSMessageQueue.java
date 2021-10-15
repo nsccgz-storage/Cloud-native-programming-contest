@@ -132,7 +132,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
             uselessIdx = 0L;
 
-            block = pmemManager.createBlock(localThreadId.get());
+            block = pmemManager.createBlock();
         }
         MQQueue(){
             type = 0;
@@ -142,7 +142,7 @@ public class MyLSMessageQueue extends MessageQueue {
             offset2info = new HashMap<>();
 
             uselessIdx = 0L;
-            block = pmemManager.createBlock(localThreadId.get());
+            block = pmemManager.createBlock();
         }
 
     }
@@ -469,9 +469,7 @@ public class MyLSMessageQueue extends MessageQueue {
         }
         long asyncWritePmemTime = System.nanoTime() - time0;
         
-        if(mqConfig.useStats){
-            testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
-        }
+        testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
         // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
         return ret;
