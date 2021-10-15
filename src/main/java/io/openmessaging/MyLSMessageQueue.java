@@ -5,41 +5,77 @@ package io.openmessaging;
 import java.io.IOException;
 
 import java.nio.channels.FileChannel;
+import java.sql.Time;
 import java.nio.ByteBuffer;
 import java.io.RandomAccessFile;
 import java.io.File;
+import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 
+import javax.print.DocFlavor;
+
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
+import java.util.TreeMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+
+import org.apache.log4j.spi.LoggerFactory;
+
+import io.openmessaging.SSDqueue.HotData;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.apache.log4j.net.SyslogAppender;
+
 import java.lang.ThreadLocal;
+import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.Math;
+import java.text.Format;
+import java.util.concurrent.TimeoutException;
+
+import java.util.concurrent.locks.Condition;
+import java.nio.MappedByteBuffer;
+import java.util.Deque;
 
 
 import com.intel.pmem.llpl.Heap;
+import com.intel.pmem.llpl.MemoryBlock;
+import com.intel.pmem.llpl.Util;
+
+import java.util.Comparator;
 
 
 public class MyLSMessageQueue extends MessageQueue {
     private static final Logger log = Logger.getLogger(LSMessageQueue.class);
-    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocate(17 * 1024 * 40 * 100); //17kB * 40 线程 // TODO: 后期可能不止40个线程
+    private static final ByteBuffer globalByteBuffer = ByteBuffer.allocate(17 * 1024 * 40 * 100); //17kB * 40 * 100 线程
     // private static final ByteBuffer globalDirByteBuffer = ByteBuffer.allocateDirect(17 * 1024 * 40);
 
     public class MQConfig {
@@ -332,14 +368,13 @@ public class MyLSMessageQueue extends MessageQueue {
         }
         @Override
         public Integer call() throws Exception{
-            Integer ret = q.block.put(data);
-            return ret;
+            return q.block.put(data);
         }
     }
     boolean isWritePmem = true;
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
-//        log.debug("append : "+topic+","+queueId + data);
+        log.debug("append : "+topic+","+queueId + data);
         if (mqConfig.useStats){
             testStat.appendStart();
             testStat.appendUpdateStat(topic, queueId, data);
@@ -434,6 +469,7 @@ public class MyLSMessageQueue extends MessageQueue {
         }
         long asyncWritePmemTime = System.nanoTime() - time0;
         
+        testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
         // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
 //        if(mqConfig.useStats)
@@ -443,7 +479,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-//        log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
+        log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum);
         if (mqConfig.useStats){
             testStat.getRangeStart();
             testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
@@ -520,9 +556,9 @@ public class MyLSMessageQueue extends MessageQueue {
             else{
                 ByteBuffer buf = df.read(pos, i);
                 if (buf != null){
+                    // buf.position(0);
+                    // buf.limit(buf.capacity());
                     buf.flip();
-//                    buf.position(0);
-//                    buf.limit(buf.capacity());
                     ret.put(i, buf);
                     log.debug("read from SSD");
                     testStat.incColdReadSSDCount(1);
@@ -1011,7 +1047,6 @@ public class MyLSMessageQueue extends MessageQueue {
             }
             return null;
         }
-
         public ByteBuffer read(long position, int index) {
             if (threadLocalReadMetaBuf.get() == null) {
                 threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
@@ -1029,8 +1064,8 @@ public class MyLSMessageQueue extends MessageQueue {
                 // int threadId;
                 ByteBuffer tmp = globalByteBuffer.duplicate();
                 int threadId = localThreadId.get(); // threadId 怎么搞？可以使用 ThreadLocal<Integer> 来记录，每次递增的设置
-                tmp.position(threadId * (17 * 1024 * 100) + index * (17*1024));
-                tmp.limit(threadId * (17 * 1024 * 100) + index * (17*1024) + dataLength);
+                tmp.position( threadId * (17 * 1024 *100) + index * 17 * 1024);
+                tmp.limit(threadId * (17 * 1024 *100) + index * 17 * 1024 + dataLength);
                 tmp = tmp.slice();
                 // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
@@ -1265,6 +1300,8 @@ public class MyLSMessageQueue extends MessageQueue {
             int chunkUsage;
             int totalPageNum;
 
+            long writeSSDTime;
+            long asyncWritePmemTime;
 
             public int[] bucketBound;
             public int[] bucketCount;
@@ -1290,6 +1327,9 @@ public class MyLSMessageQueue extends MessageQueue {
                 chunkUsage = 0;
                 totalPageNum = 0;
 
+                writeSSDTime = 0L;
+                asyncWritePmemTime = 0L;
+
                 bucketBound = new int[19];
                 bucketBound[0] = 100;
                 bucketBound[1] = 512;
@@ -1313,6 +1353,14 @@ public class MyLSMessageQueue extends MessageQueue {
                 ret.getRangeEndTime = this.getRangeEndTime;
                 ret.getRangeCount = this.getRangeCount;
                 ret.writeBytes = this.writeBytes;
+
+                ret.coldQueueCount = this.coldQueueCount;
+                ret.coldReadPmemCount = this.coldReadPmemCount;
+                ret.hitHotDataCount = this.hitHotDataCount;
+                ret.coldReadSSDCount = this.coldReadSSDCount;
+                ret.writeSSDTime = this.writeSSDTime;
+                ret.asyncWritePmemTime = this.asyncWritePmemTime;
+
                 ret.bucketBound = this.bucketBound.clone();
                 ret.bucketCount = this.bucketCount.clone();
                 return ret;
@@ -1385,7 +1433,11 @@ public class MyLSMessageQueue extends MessageQueue {
             stats[id].chunkUsage = usage;
             stats[id].totalPageNum = total;
         }
-
+        void addAsycWriteTime(long writeSSDTime, long asyncWritePmemTime){
+            int id = threadId.get();
+            stats[id].writeSSDTime = writeSSDTime;
+            stats[id].asyncWritePmemTime = asyncWritePmemTime;
+        }
 
 
         void appendStart() {
@@ -1663,20 +1715,26 @@ public class MyLSMessageQueue extends MessageQueue {
             StringBuilder hotQueueCountReport = new StringBuilder();
             StringBuilder coldQueueCountReport = new StringBuilder();
             StringBuilder otherQueueCountReport = new StringBuilder();
+            StringBuilder asyWriteTimeReport = new StringBuilder();
+
             queueCountReport.append("[queueCount report]");
             hotQueueCountReport.append("[hot queueCount report]");
             coldQueueCountReport.append("[cold queueCount report]");
+            asyWriteTimeReport.append("[wirte SSD and asy write report]");
             otherQueueCountReport.append("[other queueCount report]");
             for (int i = 0; i < getNumOfThreads; i++){
                 queueCountReport.append(String.format("%d,",stats[i].queueCount));
                 hotQueueCountReport.append(String.format("%d,",stats[i].hotQueueCount));
                 coldQueueCountReport.append(String.format("%d,",stats[i].coldQueueCount));
+                asyWriteTimeReport.append(String.format("{%d, + %d}, ", stats[i].writeSSDTime, stats[i].asyncWritePmemTime-stats[i].writeSSDTime));
                 otherQueueCountReport.append(String.format("%d,",stats[i].queueCount-stats[i].hotQueueCount-stats[i].coldQueueCount));
             }
             log.info(queueCountReport);
             log.info(hotQueueCountReport);
             log.info(coldQueueCountReport);
+            log.info(asyWriteTimeReport);
             log.info(otherQueueCountReport);
+
 
             StringBuilder coldReadPmemCountReport = new StringBuilder("[cold read pmem count]");
             StringBuilder coldReadSSDCountReport = new StringBuilder("[cold read SSD count]");
