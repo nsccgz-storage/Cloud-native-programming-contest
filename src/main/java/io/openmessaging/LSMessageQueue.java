@@ -184,7 +184,7 @@ public class LSMessageQueue extends MessageQueue {
                     log.info(Thread.currentThread().getName() + " Exit !");
                     System.exit(-1);
                 }
-            }, 500000);
+            }, 400000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
@@ -530,8 +530,8 @@ public class LSMessageQueue extends MessageQueue {
     }
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
-        // return append2(topic, queueId, data);
-        return append1(topic, queueId, data);
+        return append2(topic, queueId, data);
+        // return append1(topic, queueId, data);
 
     }
 
