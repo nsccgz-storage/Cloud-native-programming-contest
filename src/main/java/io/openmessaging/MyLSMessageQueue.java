@@ -472,8 +472,8 @@ public class MyLSMessageQueue extends MessageQueue {
         testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
         // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
-//        if(mqConfig.useStats)
-//            testStat.updateChunkUsage(q.block.chunkList.getUsage(), q.block.chunkList.getTotalPageNum());
+        if(mqConfig.useStats)
+            testStat.updateChunkUsage(q.block.chunkList.getUsage());
         return ret;
     }
 
@@ -506,6 +506,7 @@ public class MyLSMessageQueue extends MessageQueue {
         if (offset == q.maxOffset-1){
             if (q.type == 0){
                 q.type = 1; // hot
+                q.block.freeSpace();
                 if (mqConfig.useStats){
                     testStat.incHotQueueCount();
                 }
@@ -1297,8 +1298,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
             int coldReadPmemCount;
             int coldReadSSDCount;
-            int chunkUsage;
-            int totalPageNum;
+            double chunkUsage;
 
             long writeSSDTime;
             long asyncWritePmemTime;
@@ -1325,7 +1325,6 @@ public class MyLSMessageQueue extends MessageQueue {
                 coldReadPmemCount = 0;
                 coldReadSSDCount = 0;
                 chunkUsage = 0;
-                totalPageNum = 0;
 
                 writeSSDTime = 0L;
                 asyncWritePmemTime = 0L;
@@ -1428,10 +1427,9 @@ public class MyLSMessageQueue extends MessageQueue {
             int id = threadId.get();
             stats[id].coldReadSSDCount += fetchNum;
         }
-        void updateChunkUsage(int usage, int total){
+        void updateChunkUsage(double usage){
             int id = threadId.get();
             stats[id].chunkUsage = usage;
-            stats[id].totalPageNum = total;
         }
         void addAsycWriteTime(long writeSSDTime, long asyncWritePmemTime){
             int id = threadId.get();
@@ -1742,7 +1740,7 @@ public class MyLSMessageQueue extends MessageQueue {
             for(int i = 0;i < getNumOfThreads;i++){
                 coldReadPmemCountReport.append(String.format("%d,",stats[i].coldReadPmemCount));
                 coldReadSSDCountReport.append(String.format("%d,", stats[i].coldReadSSDCount));
-                chunkUsageReport.append(String.format("%d/%d,", stats[i].chunkUsage, stats[i].totalPageNum));
+                chunkUsageReport.append(String.format("%.2f,", stats[i].chunkUsage));
             }
             log.info(coldReadPmemCountReport);
             log.info(coldReadSSDCountReport);

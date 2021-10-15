@@ -178,7 +178,7 @@ public class PmemManager {
                     lastAllocateChunk.next = c;
                     lastAllocateChunk = c;
                     chunkNum++;
-                    logger.info(String.format("allocate success, now chunkNum = %d",chunkNum));
+                    logger.debug(String.format("allocate success, now chunkNum = %d",chunkNum));
                     return c.allocate(size);
                 }
             }
@@ -188,19 +188,17 @@ public class PmemManager {
             c.free(index, size);
         }
 
-        public int getUsage(){
+        public double getUsage(){
             Chunk c = head;
             int ret = 0;
             while(c != null){
                 ret += c.usage;
                 c = c.next;
             }
-            return ret;
+            return (double)ret/(chunkNum * (1 << maxDepth));
         }
 
-        public int getTotalPageNum(){
-            return chunkNum * (1 << maxDepth);
-        }
+
 
         public long getAddress(Chunk c, int index, int size){
             long tmp = (index + 1 - (1L << size2Depth.get(size)))*size + c.handle;
