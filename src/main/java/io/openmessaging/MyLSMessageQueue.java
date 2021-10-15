@@ -129,7 +129,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
             uselessIdx = 0L;
 
-            block = pmemManager.createBlock(localThreadId.get());
+            block = pmemManager.createBlock();
         }
         MQQueue(){
             type = 0;
@@ -139,7 +139,7 @@ public class MyLSMessageQueue extends MessageQueue {
             offset2info = new HashMap<>();
 
             uselessIdx = 0L;
-            block = pmemManager.createBlock(localThreadId.get());
+            block = pmemManager.createBlock();
         }
 
     }
