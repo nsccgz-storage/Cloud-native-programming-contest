@@ -469,11 +469,12 @@ public class MyLSMessageQueue extends MessageQueue {
         }
         long asyncWritePmemTime = System.nanoTime() - time0;
         
-        testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
+        if(mqConfig.useStats)
+            testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
         // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
-//        if(mqConfig.useStats)
-//            testStat.updateChunkUsage(q.block.chunkList.getUsage(), q.block.chunkList.getTotalPageNum());
+       if(mqConfig.useStats)
+           testStat.updateChunkUsage(q.block.chunkList.getUsage(), q.block.chunkList.getTotalPageNum());
         return ret;
     }
 
@@ -1190,9 +1191,9 @@ public class MyLSMessageQueue extends MessageQueue {
                                 long uselessIdx = curTask.q.uselessIdx;
                                 
                                 // 统计到底发生多少次丢弃任务的操作
-                                // 
+                                
                                 if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L){
-                                    numOfThreads.incrementAndGet();
+                                    testStat.incNumOfThrowTask();
                                     continue; // 丢弃任务不执行
                                 } 
     
@@ -1282,6 +1283,8 @@ public class MyLSMessageQueue extends MessageQueue {
         int[] oldTotalWriteBucketCount;
         MemoryUsage memoryUsage;
 
+        AtomicLong numOfThrowTask;
+
         private class ThreadStat {
             Long appendStartTime;
             Long appendEndTime;
@@ -1308,6 +1311,7 @@ public class MyLSMessageQueue extends MessageQueue {
             public int[] bucketCount;
 
             ThreadStat() {
+                
                 appendStartTime = 0L;
                 appendEndTime = 0L;
                 appendCount = 0;
@@ -1397,6 +1401,7 @@ public class MyLSMessageQueue extends MessageQueue {
             endTime = 0L;
             oldEndTime = 0L;
             opCount = 0L;
+            numOfThrowTask = new AtomicLong(0L);
             myDataFiles = dataFiles;
             oldWriteStats = new DataFile.WriteStat[myDataFiles.length];
         }
@@ -1407,6 +1412,9 @@ public class MyLSMessageQueue extends MessageQueue {
                 threadId.set(thisNumOfThread);
                 log.info("init thread id : " + thisNumOfThread);
             }
+        }
+        void incNumOfThrowTask(){
+            numOfThrowTask.incrementAndGet();
         }
 
         void incQueueCount(){
@@ -1659,6 +1667,7 @@ public class MyLSMessageQueue extends MessageQueue {
             log.info("getRangeStat :"+getRangeStat);
             log.info("total appendStat   :"+ totalAppendStat);
             log.info("total getRangeStat :"+totalGetRangeStat);
+            
 
             // report hit hot data ratio
             StringBuilder hotDataHitCountReport = new StringBuilder();
@@ -1735,7 +1744,7 @@ public class MyLSMessageQueue extends MessageQueue {
             log.info(coldQueueCountReport);
             log.info(asyWriteTimeReport);
             log.info(otherQueueCountReport);
-
+            log.info("[throw task nums]  " + numOfThrowTask.get());
 
             StringBuilder coldReadPmemCountReport = new StringBuilder("[cold read pmem count]");
             StringBuilder coldReadSSDCountReport = new StringBuilder("[cold read SSD count]");
