@@ -153,6 +153,7 @@ public class LSMessageQueue extends MessageQueue {
     ThreadLocal<MyDirectBufferPool> threadLocalDirectBufferPool;
     public ThreadLocal<ExecutorService> threadLocalPrefetchThread;
     public ThreadLocal<Semaphore> threadLocalSemaphore;
+    public ThreadLocal<ByteBuffer> threadLocalWriterBuffer;
     boolean isCrash;
     public PMPrefetchBuffer pmRingBuffer;
     public Writer[] appendWriterBuffer;
@@ -237,6 +238,7 @@ public class LSMessageQueue extends MessageQueue {
             threadLocalPrefetchThread = new ThreadLocal<>();
             threadLocalTopic2object = new ThreadLocal<>();
             threadLocalSemaphore = new ThreadLocal<>();
+            threadLocalWriterBuffer = new ThreadLocal<>();
             appendWriterBuffer = new Writer[400];
 
             if (mqConfig.useStats) {
@@ -363,6 +365,7 @@ public class LSMessageQueue extends MessageQueue {
         if (threadLocalTopic2object.get() == null){
             threadLocalTopic2object.set(new HashMap<>());
             threadLocalSemaphore.set(new Semaphore(0));
+            threadLocalWriterBuffer.set(ByteBuffer.allocateDirect(512*1024));
         }
         HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
         mqTopic = topic2object.get(topic);
@@ -394,7 +397,8 @@ public class LSMessageQueue extends MessageQueue {
  
             // 聚合 [dataFileId * 10 , (dataFileId+1) * 10)
             int dataFileId = mqTopic.dataFileId;
-            ByteBuffer writerBuffer = df.commonWriteBuffer;
+            // ByteBuffer writerBuffer = df.commonWriteBuffer;
+            ByteBuffer writerBuffer = threadLocalWriterBuffer.get();
             writerBuffer.clear();
             int writeLength = 0;
             int bufNum = 0;
