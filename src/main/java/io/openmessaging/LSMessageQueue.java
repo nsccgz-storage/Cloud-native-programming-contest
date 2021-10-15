@@ -158,8 +158,6 @@ public class LSMessageQueue extends MessageQueue {
     public Writer[] appendWriterBuffer;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
-        // SSDBench.runStandardBench(dbDirPath);
-        // PMBench.runStandardBench(pmDirPath);
         mqConfig = config;
         init(dbDirPath, pmDirPath);
 
@@ -175,6 +173,9 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public void init(String dbDirPath, String pmDirPath) {
+        SSDBench.runStandardBench(dbDirPath);
+        PMBench.runStandardBench(pmDirPath);
+
         try {
             new Timer("timer").schedule(new TimerTask() {
                 @Override
