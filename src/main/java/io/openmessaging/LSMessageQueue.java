@@ -32,6 +32,8 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -174,6 +176,13 @@ public class LSMessageQueue extends MessageQueue {
 
     public void init(String dbDirPath, String pmDirPath) {
         try {
+            new Timer("timer").schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    log.info(Thread.currentThread().getName() + " Exit !");
+                    System.exit(-1);
+                }
+            }, 500000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
