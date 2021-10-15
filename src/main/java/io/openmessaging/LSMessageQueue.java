@@ -360,7 +360,6 @@ public class LSMessageQueue extends MessageQueue {
             testStat.appendStart();
             testStat.appendUpdateStat(topic, queueId, data);
         }
-        // FIXME: 申请内存需要占用额外时间，因为这段内存不能被重复使用，生命周期较短，还可能频繁触发GC
         MQTopic mqTopic;
         if (threadLocalTopic2object.get() == null){
             threadLocalTopic2object.set(new HashMap<>());
@@ -403,6 +402,10 @@ public class LSMessageQueue extends MessageQueue {
             int writeLength = 0;
             int bufNum = 0;
             int bufLength = df.bufMetadataLength;
+            int maxBufLength = mqConfig.maxBufLength;
+            int maxBufNum = mqConfig.maxBufNum;
+
+
             long writePosition = df.curPosition;
             writerBuffer.position(df.bufMetadataLength);
 
@@ -425,6 +428,19 @@ public class LSMessageQueue extends MessageQueue {
                     writerBuffer.putInt(thisWriter.queueId);
                     writerBuffer.putShort(thisWriter.length);
                     writerBuffer.put(thisWriter.data);
+                    if (bufNum >= maxBufNum){
+                        if (mqConfig.useStats){
+                            df.writeStat.incExceedBufNumCount();
+                        }
+                        break;
+                    }
+                    if (bufLength >= maxBufLength){
+                        if (mqConfig.useStats){
+                            df.writeStat.incExceedBufLengthCount();
+                        }
+                        break;
+                    }
+
                 }
             }
             // log.info(writerBuffer);
