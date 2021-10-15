@@ -434,9 +434,9 @@ public class LSMessageQueue extends MessageQueue {
 
 
         // 仅双写
-        // if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
-        //     q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData);
-        // }
+        if ((q.type == 0 || q.type == 1) && (!q.prefetchBuffer.ringBuffer.isFull())){
+            q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData);
+        }
 
         // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
         try {
