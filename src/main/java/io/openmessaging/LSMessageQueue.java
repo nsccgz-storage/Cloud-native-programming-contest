@@ -147,7 +147,7 @@ public class LSMessageQueue extends MessageQueue {
     private FileChannel metadataFileChannel;
     DataFile[] dataFiles;
     int numOfDataFiles;
-    // ConcurrentHashMap<String, MQTopic> topic2object;
+    ConcurrentHashMap<String, MQTopic> topic2object;
     ThreadLocal< HashMap<String, MQTopic> > threadLocalTopic2object;
     ThreadLocal<MyByteBufferPool> threadLocalByteBufferPool;
     ThreadLocal<MyDirectBufferPool> threadLocalDirectBufferPool;
@@ -174,7 +174,7 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public void init(String dbDirPath, String pmDirPath) {
-        SSDBench.runStandardBench(dbDirPath);
+        // SSDBench.runStandardBench(dbDirPath);
         // PMBench.runStandardBench(pmDirPath);
 
         try {
@@ -200,7 +200,7 @@ public class LSMessageQueue extends MessageQueue {
             }
 
 
-            // topic2object = new ConcurrentHashMap<String, MQTopic>();
+            topic2object = new ConcurrentHashMap<String, MQTopic>();
             log.info("Initializing on PM : " + pmDataFile);
 
             pmRingBuffer = new PMPrefetchBuffer(pmDataFile);
@@ -223,11 +223,6 @@ public class LSMessageQueue extends MessageQueue {
 
             log.info("Initializing metadata file");
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
-            if (crash) {
-                log.info("recover !!");
-                // System.exit(-1);
-                recover();
-            }
             localThreadId = new ThreadLocal<>();
             numOfThreads = new AtomicInteger();
             numOfThreads.set(0);
@@ -244,6 +239,12 @@ public class LSMessageQueue extends MessageQueue {
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
             }
+            if (crash) {
+                log.info("recover !!");
+                // System.exit(-1);
+                recover();
+            }
+
 
         } catch (IOException ie) {
             ie.printStackTrace();
@@ -323,13 +324,13 @@ public class LSMessageQueue extends MessageQueue {
 
     public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position) {
 
-        log.debug("append : " + topic + "," + queueId + "," + position);
+        log.debug("replay append : " + topic + "," + queueId + "," + position);
         MQTopic mqTopic;
         MQQueue q;
-        if (threadLocalTopic2object.get() == null){
-            threadLocalTopic2object.set(new HashMap<>());
-        }
-        HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
+        // if (threadLocalTopic2object.get() == null){
+        //     threadLocalTopic2object.set(new HashMap<>());
+        // }
+        // HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
 
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
@@ -350,6 +351,7 @@ public class LSMessageQueue extends MessageQueue {
         q.offset2position.add(position);
         long ret = q.maxOffset;
         q.maxOffset++;
+        log.debug("replay ok");
         return ret;
     }
 
@@ -363,12 +365,13 @@ public class LSMessageQueue extends MessageQueue {
             testStat.appendUpdateStat(topic, queueId, data);
         }
         MQTopic mqTopic;
+        // TODO: maybe useless
         if (threadLocalTopic2object.get() == null){
             threadLocalTopic2object.set(new HashMap<>());
             threadLocalSemaphore.set(new Semaphore(0));
             threadLocalWriterBuffer.set(ByteBuffer.allocateDirect(512*1024));
         }
-        HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
+        // HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             int threadId = updateThreadId();
@@ -420,7 +423,7 @@ public class LSMessageQueue extends MessageQueue {
         // }
 
 
-        // 同步双写或预取，目前有bug
+        // 同步双写或预取，目前有bug，maxOffset处没东西（offset2position在后面才加上的）
         // if ((q.type == 0 || q.type == 1 || q.type == 2) && (!q.prefetchBuffer.ringBuffer.isFull())){
         //     if (!q.prefetchBuffer.directAddData(q.maxOffset-1, doubleWriteData)){
         //         // 如果不能双写，就开异步预取，如果能双写就不用预取了
@@ -446,8 +449,10 @@ public class LSMessageQueue extends MessageQueue {
                 // }
             log.debug("wait to acquire the sema");
 
+            // 有bug
             // w.sema.acquire(1);
 
+            // 修好bug了
             if (!w.sema.tryAcquire(1, 100*1000, TimeUnit.MICROSECONDS)){
                 // 我插入的writer可能要等待下一个能获取锁的写入线程帮我写入
                 // 如果已经没有新的线程需要写入了，这个时候这个线程就会无限等待，此时需要有一个超时自救的机制
@@ -455,9 +460,17 @@ public class LSMessageQueue extends MessageQueue {
                     log.debug("time out !");
                     df.syncSeqWriteBatchLock();
                     log.debug("my position result : " + w.position);
-                    w.sema.acquire();
                 }
+                w.sema.acquire();
             }
+
+            // 原子变量，忙等待
+            // while (w.done != 1){
+            // // while (w.isDone.get() == false){
+            //     // Thread.sleep(0);
+            //     // Thread.yield();
+            //     LockSupport.parkNanos(200*1000);
+            // }
         } catch (Exception ie){
             ie.printStackTrace();
         }
@@ -495,10 +508,10 @@ public class LSMessageQueue extends MessageQueue {
 
         MQTopic mqTopic;
         MQQueue q;
-        if (threadLocalTopic2object.get() == null){
-            threadLocalTopic2object.set(new HashMap<>());
-        }
-        HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
+        // if (threadLocalTopic2object.get() == null){
+        //     threadLocalTopic2object.set(new HashMap<>());
+        // }
+        // HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             int threadId = updateThreadId();
@@ -645,10 +658,10 @@ public class LSMessageQueue extends MessageQueue {
         Map<Integer, ByteBuffer> ret = new HashMap<>();
         MQTopic mqTopic;
         MQQueue q;
-        if (threadLocalTopic2object.get() == null){
-            threadLocalTopic2object.set(new HashMap<>());
-        }
-        HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
+        // if (threadLocalTopic2object.get() == null){
+        //     threadLocalTopic2object.set(new HashMap<>());
+        // }
+        // HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
         mqTopic = topic2object.get(topic);
         if (mqTopic == null) {
             return ret;
@@ -1113,6 +1126,7 @@ public class LSMessageQueue extends MessageQueue {
             Thread currentThread;
             MQQueue q;
             Semaphore sema;
+            AtomicBoolean isDone;
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Thread t){
                 topicIndex = myTopicIndex;
                 queueId = myQueueId;
@@ -1142,6 +1156,8 @@ public class LSMessageQueue extends MessageQueue {
                 sema = s;
                 done = 0;
                 position = 0L;
+                isDone = new AtomicBoolean();
+                isDone.set(false);
             }
 
         }
@@ -1270,6 +1286,9 @@ public class LSMessageQueue extends MessageQueue {
             if (needWrite == false){
                 return ;
             }
+            // 对齐 4K
+            bufLength = bufLength + (4096 - bufLength % 4096);
+
             // log.info(writerBuffer);
             writerBuffer.flip();
             // log.info(writerBuffer);
@@ -1293,18 +1312,18 @@ public class LSMessageQueue extends MessageQueue {
                     log.debug("release the index : " + i);
                     appendWriters[i*8] = null;
                     thisWriter.done = 1;
-                    log.debug("release 1");
-                    log.debug("the sema is " + thisWriter.sema.availablePermits());
+                    // thisWriter.isDone.set(true);
+                    // log.debug("release 1");
+                    // log.debug("the sema is " + thisWriter.sema.availablePermits());
                     thisWriter.sema.release(1);
-                    log.debug("the sema is " + thisWriter.sema.availablePermits());
+                    // log.debug("the sema is " + thisWriter.sema.availablePermits());
                 }
             }
+
+            curPosition += bufLength;
             if (mqConfig.useStats){
                 writeStat.addSample(bufLength);
             }
-            // 对齐 4K
-            bufLength = bufLength + (4096 - bufLength % 4096);
-            curPosition += bufLength;
             log.debug("df.curPosition : " + curPosition);
         }
 
