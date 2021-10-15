@@ -151,7 +151,7 @@ public class PMPrefetchBuffer {
         PMBlockPool(long capacity) {
             totalCapacity = capacity;
 
-            blockSize = 160 * 1024;
+            blockSize = 128 * 1024;
             // blockSize = 170;
             threadLocalBlockNum = 2000;
             bigBlockSize = threadLocalBlockNum * blockSize; // 250MiB
@@ -278,7 +278,7 @@ public class PMPrefetchBuffer {
             curBlockNum = 1;
             // NOTE: 暂时先最多放4个块
             maxBlockNum = 8;
-            maxLength = 20; // 限制一下每个ringBuffer存放的消息数
+            maxLength = 30; // 限制一下每个ringBuffer存放的消息数
             // 总体上，由两个来共同限制，一个是ringBuffer存放的消息数，另一个是ringbuffer的空间大小
             blocks = new PMBlock[maxBlockNum];
             for (int i = 0; i < curBlockNum; i++) {
