@@ -166,24 +166,24 @@ public class PMDoubleWrite {
                 td.backgroundDoubleWriteFuture = null;
             }
             // 触发刷盘任务，异步调用block的刷盘函数
-            final PMBlock backgroundBlock = td.block;
-            final int flushBuf = td.curBuf;
-            td.backgroundDoubleWriteFuture = backgroundDoubleWriteThread.submit(new Callable<Integer>(){
-                @Override
-                public Integer call() throws Exception {
-                    pool.copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
-                    return 0;
-                }
-            });
+            // final PMBlock backgroundBlock = td.block;
+            // final int flushBuf = td.curBuf;
+            // td.backgroundDoubleWriteFuture = backgroundDoubleWriteThread.submit(new Callable<Integer>(){
+            //     @Override
+            //     public Integer call() throws Exception {
+            //         pool.copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+            //         return 0;
+            //     }
+            // });
 
-            // 申请新block
-            // 如果没法申请了，就停了，不双写了
-            td.block = pmBlockPool.allocate();
-            if (td.block == null){
-                td.isFinished = true;
-                log.info("the pm is full!!");
-                return -1;
-            }
+            // // 申请新block
+            // // 如果没法申请了，就停了，不双写了
+            // td.block = pmBlockPool.allocate();
+            // if (td.block == null){
+            //     td.isFinished = true;
+            //     log.info("the pm is full!!");
+            //     return -1;
+            // }
             // 切换缓冲区
             td.curBuf = (td.curBuf + 1 ) % 2; 
             td.buf[td.curBuf].clear();
