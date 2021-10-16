@@ -742,6 +742,7 @@ public class LSMessageQueue extends MessageQueue {
             // 我在测试程序里手动执行shutdown，将这些buffer刷下来
             // 也可以在这里监测有没有完成，如果没完成就现场刷下来
             // 可以从双写 的内容里读数据
+            // TODO: 需要释放前期双写所使用的内存buffer
             long fetchMaxOffset = offset + fetchNum - 1;
             long doubleWriteMaxOffset = q.offset2PMAddr.size()-1;
             long doubleWriteNum = Math.min(fetchMaxOffset, doubleWriteMaxOffset) - offset + 1;
@@ -751,6 +752,7 @@ public class LSMessageQueue extends MessageQueue {
                 log.debug("curOffset : " + curOffset);
                 int dataLength = q.offset2Length.get(curOffset);
                 log.debug("get from double buffer datLength " + dataLength);
+                // TODO: 需要修复
                 ByteBuffer buf = ByteBuffer.allocate(dataLength);
                 long readPMAddr = q.offset2PMAddr.get(curOffset);
                 log.debug("read from pm Addr " + readPMAddr);
