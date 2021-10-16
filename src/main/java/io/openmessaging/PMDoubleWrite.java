@@ -134,7 +134,7 @@ public class PMDoubleWrite {
             threadDatas[i] = new ThreadData();
         }
         // backgroundDoubleWriteThread = Executors.newSingleThreadExecutor();
-        backgroundDoubleWriteThread = Executors.newFixedThreadPool(2);
+        backgroundDoubleWriteThread = Executors.newFixedThreadPool(4);
        
     }
 
