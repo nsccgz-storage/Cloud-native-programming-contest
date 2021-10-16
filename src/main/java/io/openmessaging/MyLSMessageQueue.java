@@ -177,12 +177,13 @@ public class MyLSMessageQueue extends MessageQueue {
     int numOfPrefetchThreads;
     PrefetchTask[] prefetchTasks;
     PmemManager pmemManager;
-    ExecutorService exec = Executors.newFixedThreadPool(16); // 这个线程数会不会太多？
+    ExecutorService exec = Executors.newFixedThreadPool(4); // 这个线程数会不会太多？
 
     public void shutdown(){
         for(int i=0; i<numOfPrefetchThreads; i++){
             prefetchTasks[i].t.interrupt();
         }
+        exec.shutdown();
     }
 
     MyLSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
@@ -371,7 +372,7 @@ public class MyLSMessageQueue extends MessageQueue {
             return q.block.put(data);
         }
     }
-    boolean isWritePmem = true;
+    boolean isWritePmem = false;
     @Override
     public long append(String topic, int queueId, ByteBuffer data) {
         log.debug("append : "+topic+","+queueId + data);
@@ -379,9 +380,7 @@ public class MyLSMessageQueue extends MessageQueue {
             testStat.appendStart();
             testStat.appendUpdateStat(topic, queueId, data);
         }
-    
         // FIXME: 申请内存需要占用额外时间，因为这段内存不能被重复使用，生命周期较短，还可能频繁触发GC
-
         MQTopic mqTopic;
         MQQueue q;
         mqTopic = topic2object.get(topic);
@@ -422,8 +421,8 @@ public class MyLSMessageQueue extends MessageQueue {
         // 写 PMEM 的异步任务设计
         AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        if(isWritePmem && q.type != 2){
-            // 不是冷队列，开启双写
+        if(isWritePmem && q.type == 0){
+            // 纯写阶段，开启双写
             exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         }
          // 发起一个异步任务表示写 pmem
@@ -458,14 +457,14 @@ public class MyLSMessageQueue extends MessageQueue {
 
         // 等待异步任务的结束
         // if(q.type != 2){
-        if(isWritePmem && q.type != 2){
+        if(isWritePmem && q.type == 0){
             try{
                 q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
             }catch(Exception e){
                 e.printStackTrace();
             }
         }else{
-            q.offset2info.put(q.maxOffset, new IndexInfo(position, size , -1));
+            q.offset2info.put(q.maxOffset, new IndexInfo(position, size , -1L));
         }
         long asyncWritePmemTime = System.nanoTime() - time0;
         
@@ -504,13 +503,15 @@ public class MyLSMessageQueue extends MessageQueue {
             fetchNum = (int)(q.maxOffset-offset);
         }
 
-        if (offset == q.maxOffset-1){
+        if (offset != 0){
             if (q.type == 0){
                 q.type = 1; // hot
                 if (mqConfig.useStats){
                     testStat.incHotQueueCount();
                 }
             }
+        }
+        if(offset >= q.maxOffset-1){
             if (q.maxOffsetData != null){
                 if (mqConfig.useStats){
                     testStat.hitHotData(topic, queueId);
@@ -534,7 +535,7 @@ public class MyLSMessageQueue extends MessageQueue {
         DataFile df = mqTopic.df;
 
         int loadNum = 12;
-        pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
+        //pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
 
         
         long pos = 0;
@@ -555,13 +556,12 @@ public class MyLSMessageQueue extends MessageQueue {
             }
             // 判断是否在 PMEM 中，若是，则从 PMEM 中读
             else{
+                // ByteBuffer buf = df.read(pos, i, size);
                 ByteBuffer buf = df.read(pos, i);
                 if (buf != null){
-                    // buf.position(0);
-                    // buf.limit(buf.capacity());
                     buf.flip();
                     ret.put(i, buf);
-                    log.debug("read from SSD");
+                    // log.debug("read from SSD");
                     testStat.incColdReadSSDCount(1);
                 }
             }
@@ -1034,11 +1034,11 @@ public class MyLSMessageQueue extends MessageQueue {
 
                 // 获取线程的 id
                 // int threadId;
-                ByteBuffer tmp = globalPmemByteBuffer.duplicate();
-                tmp.position(threadId * (17 * 1024 * 12)); // TODO: 这里只设了 12 个，后续调整预取个数时，需要调整这个写法
-                tmp.limit(threadId * (17 * 1024 *12) +  ((int)index%12) * 1024 * 17 + dataLength);
-                tmp = tmp.slice();
-                // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
+                // ByteBuffer tmp = globalPmemByteBuffer.duplicate();
+                // tmp.position(threadId * (17 * 1024 * 12) + ((int)index%12) * 1024 * 17); // TODO: 这里只设了 12 个，后续调整预取个数时，需要调整这个写法
+                // tmp.limit(threadId * (17 * 1024 *12) +  ((int)index%12) * 1024 * 17 + dataLength);
+                // tmp = tmp.slice();
+                ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
                 // log.debug(ret);
                 return tmp;
@@ -1067,8 +1067,33 @@ public class MyLSMessageQueue extends MessageQueue {
                 tmp.position( threadId * (17 * 1024 *100) + index * 17 * 1024);
                 tmp.limit(threadId * (17 * 1024 *100) + index * 17 * 1024 + dataLength);
                 tmp = tmp.slice();
-                // ByteBuffer tmp = ByteBuffer.allocate(dataLength);
+                //ByteBuffer tmp = ByteBuffer.allocate(dataLength);
                 ret = dataFileChannel.read(tmp, position + globalMetadataLength);
+                // log.debug(ret);
+                return tmp;
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            }
+            return null;
+        }
+        public ByteBuffer read(long position, int index, int dataLength) { // 直接从 DRAM 里面获取长度
+            if (threadLocalReadMetaBuf.get() == null) {
+                threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
+            }
+            ByteBuffer readMeta = threadLocalReadMetaBuf.get();
+
+            readMeta.clear();
+            try {
+              
+                // 获取线程的 id
+                // int threadId;
+                ByteBuffer tmp = globalByteBuffer.duplicate();
+                int threadId = localThreadId.get(); // 线程 ID 递增的设置
+                tmp.position( threadId * (17 * 1024 *100) + (index % 100) * 17 * 1024);
+                tmp.limit(threadId * (17 * 1024 *100) + (index % 100) * 17 * 1024 + dataLength);
+                tmp = tmp.slice();
+                //ByteBuffer tmp = ByteBuffer.allocate(dataLength);
+                int ret = dataFileChannel.read(tmp, position + globalMetadataLength);
                 // log.debug(ret);
                 return tmp;
             } catch (IOException ie) {
@@ -1184,19 +1209,16 @@ public class MyLSMessageQueue extends MessageQueue {
                         //logger.info("---- write pmem --- Quese size: " + size);
                         for(int i=0; i<size; ++i){
                             WritePmemTask curTask = wPmemTaskConcurrentQueue.poll();
-                            // 从 SSD 上读入数据并写入到 PMEM 上。               
-                            for(long k=curTask.startIdx; k<curTask.loadNum && k + curTask.startIdx <= curTask.q.maxOffset ; ++k){
-                              
+                            // 从 SSD 上读入数据并写入到 PMEM 上。       
+                            long maxOffset = curTask.q.maxOffset;        
+                            for(long k=curTask.startIdx; k - curTask.startIdx <curTask.loadNum && k < maxOffset ; k++){
                                 // useless task:
                                 long uselessIdx = curTask.q.uselessIdx;
-                                
                                 // 统计到底发生多少次丢弃任务的操作
-                                
-                                if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L){
+                                if(k < uselessIdx || curTask.q.offset2info.get(k).handle != -1L){
                                     testStat.incNumOfThrowTask();
                                     continue; // 丢弃任务不执行
                                 } 
-    
                                 long offset = curTask.q.offset2info.get(k).offset;
                                 int dataSize = curTask.q.offset2info.get(k).dataSize;
                                 
@@ -1204,13 +1226,9 @@ public class MyLSMessageQueue extends MessageQueue {
                                 byteBuffer.flip();
                                 
                                 // 可以多次判断 uselessIdx 和 k 的值
-                                // TODO: 写到 PMEM
+                             
                                 long handle = curTask.q.block.put(byteBuffer);
-                                // 更新 DRAM 中的 hashMap
-                                if(handle == -1L){
-                                    curTask.q.offset2info.get(k).handle = handle;
-                                }
-                                
+                                curTask.q.offset2info.get(k).handle = handle;
                                 //logger.info("test multithread!---- write pmem");
                             }
                             //logger.info("test multithread!---- write pmem");
