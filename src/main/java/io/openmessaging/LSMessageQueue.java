@@ -1960,10 +1960,10 @@ public class LSMessageQueue extends MessageQueue {
             try {
                 int ret;
                 ByteBuffer tmp;
-                if (bbPool != null){
-                    tmp = bbPool.allocate(dataLength);
-                // if (dbPool != null){
-                    // tmp = dbPool.allocate(dataLength);
+                // if (bbPool != null){
+                //     tmp = bbPool.allocate(dataLength);
+                if (dbPool != null){
+                    tmp = dbPool.allocate(dataLength);
                 } else {
                     tmp = ByteBuffer.allocate(dataLength);
                 }
