@@ -268,9 +268,9 @@ public class PMDoubleWrite {
         }
 
         public PMBlock allocate() {
-            if (threadLocalBigBlockStartAddr.get() == null || threadLocalBigBlockFreeOffset.get() == bigBlockSize) {
+            if (threadLocalBigBlockStartAddr.get() == null || threadLocalBigBlockFreeOffset.get() >= bigBlockSize) {
                 // 本地没有大块，或者大块满了
-                if (atomicGlobalFreeOffset.get() > totalCapacity) {
+                if (atomicGlobalFreeOffset.get() >= totalCapacity) {
                     // 阶段1可以结束了
                     return null;
                 }
