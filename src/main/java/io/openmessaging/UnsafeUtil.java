@@ -19,6 +19,7 @@ public class UnsafeUtil {
 	public static void main(String[] args) {
 		long addr = UNSAFE.allocateMemory(10);
 		System.out.println(addr);
+		UNSAFE.storeFence();
 	}
 }
 
