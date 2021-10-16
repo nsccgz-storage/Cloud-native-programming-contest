@@ -100,6 +100,7 @@ public class PMDoubleWrite {
         long curPMAddr; // TODO: 初始化
         PMBlock block;
         boolean isFinished;
+        Future<Integer> backgroundDoubleWriteFuture;
         ThreadData(){
             buf = new ByteBuffer[2];
             curBuf = 0;
@@ -112,7 +113,6 @@ public class PMDoubleWrite {
     ThreadData[]  threadDatas;
     int maxThreadNum;
     ExecutorService backgroundDoubleWriteThread;
-    Future<Integer> backgroundDoubleWriteFuture;
 
     public long totalCapacity;
     public MemoryPool pool;
@@ -147,20 +147,20 @@ public class PMDoubleWrite {
         // 判断是否有空位写，如果没有，触发刷盘任务并切换buf
         if (td.buf[td.curBuf].remaining() < data.remaining()){
             // 确认刷PM任务完成
-            if (backgroundDoubleWriteFuture != null){
-                while (backgroundDoubleWriteFuture.isDone() != true){
+            if (td.backgroundDoubleWriteFuture != null){
+                while (td.backgroundDoubleWriteFuture.isDone() != true){
                     try {
                         Thread.sleep(1);
                     } catch (Exception e){
                         e.printStackTrace();
                     }
                 }
-                backgroundDoubleWriteFuture = null;
+                td.backgroundDoubleWriteFuture = null;
             }
             // 触发刷盘任务，异步调用block的刷盘函数
             final PMBlock backgroundBlock = td.block;
             final int flushBuf = td.curBuf;
-            backgroundDoubleWriteFuture = backgroundDoubleWriteThread.submit(new Callable<Integer>(){
+            td.backgroundDoubleWriteFuture = backgroundDoubleWriteThread.submit(new Callable<Integer>(){
                 @Override
                 public Integer call() throws Exception {
                     pool.copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
@@ -177,10 +177,12 @@ public class PMDoubleWrite {
             }
             // 切换缓冲区
             td.curBuf = (td.curBuf + 1 ) % 2; 
+            td.buf[td.curBuf].clear();
         }
         // 获得当前地址
-        long pmAddr = td.curPMAddr + td.buf[td.curBuf].position();
-        td.buf[td.curBuf].put(data);
+        ByteBuffer buf = td.buf[td.curBuf];
+        long pmAddr = td.curPMAddr + buf.position();
+        buf.put(data);
         return pmAddr;
 
     }

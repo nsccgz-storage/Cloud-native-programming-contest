@@ -95,6 +95,7 @@ public class LSMessageQueue extends MessageQueue {
     public class MQQueue {
         public Long maxOffset = 0L;
         public ArrayList<Long> offset2position;
+        public ArrayList<Long> offset2PMAddr;
         public DataFile df;
         // public byte[] maxOffsetData;
         public ByteBuffer maxOffsetData;
@@ -155,7 +156,8 @@ public class LSMessageQueue extends MessageQueue {
     public ThreadLocal<Semaphore> threadLocalSemaphore;
     public ThreadLocal<ByteBuffer> threadLocalWriterBuffer;
     boolean isCrash;
-    public PMPrefetchBuffer pmRingBuffer;
+    // public PMPrefetchBuffer pmRingBuffer;
+    public PMDoubleWrite pmDoubleWrite;
     // public Writer[] appendWriterBuffer;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
@@ -203,7 +205,8 @@ public class LSMessageQueue extends MessageQueue {
             topic2object = new ConcurrentHashMap<String, MQTopic>();
             log.info("Initializing on PM : " + pmDataFile);
 
-            pmRingBuffer = new PMPrefetchBuffer(pmDataFile);
+            // pmRingBuffer = new PMPrefetchBuffer(pmDataFile);
+            pmDoubleWrite = new PMDoubleWrite(pmDataFile);
 
             // pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
             // if (!isCrash){
@@ -435,18 +438,19 @@ public class LSMessageQueue extends MessageQueue {
 
 
         // 同步双写或预取
-        if (!q.prefetchBuffer.ringBuffer.isFull()){
-            // if (q.type == 0 || q.type == 1 ){
-            if (q.type == 0 || q.type == 1 ||q.type == 2 ){
-                q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData);
-            }
-            // if (q.type == 2){
-                // if (!q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData)){
-                    // 如果不能双写，就开预取，如果能双写就不用预取了
-                    // q.prefetchBuffer.prefetch();
-                // }
-            // }
-        }
+        // if (!q.prefetchBuffer.ringBuffer.isFull()){
+        //     // if (q.type == 0 || q.type == 1 ){
+        //     if (q.type == 0 || q.type == 1 ||q.type == 2 ){
+        //         q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData);
+        //     }
+        //     // if (q.type == 2){
+        //         // if (!q.prefetchBuffer.directAddData(q.maxOffset, doubleWriteData)){
+        //             // 如果不能双写，就开预取，如果能双写就不用预取了
+        //             // q.prefetchBuffer.prefetch();
+        //         // }
+        //     // }
+        // }
+        pmDoubleWrite.doubleWrite(localThreadId.get(), doubleWriteData);
 
 
         // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
@@ -714,13 +718,13 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         // 把ret扔到prefetchBuffer过一圈，看看能读到哪些数据
-        q.consumeOffset = offset;
-        // 目前消费的offset刚好和我预取好的消息相匹配, 所以前面的消息都不用取了
-        int prefetchNum = 0;
-        if (!isCrash){
-            prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
-        }
-        fetchStartIndex += prefetchNum;
+        // q.consumeOffset = offset;
+        // // 目前消费的offset刚好和我预取好的消息相匹配, 所以前面的消息都不用取了
+        // int prefetchNum = 0;
+        // if (!isCrash){
+        //     prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
+        // }
+        // fetchStartIndex += prefetchNum;
 
 
         // 分类
@@ -907,7 +911,7 @@ public class LSMessageQueue extends MessageQueue {
             nextPrefetchOffset = 0;
             q = myQ;
             df = myDf;
-            ringBuffer = pmRingBuffer.newRingBuffer(myBBPool);
+            // ringBuffer = pmRingBuffer.newRingBuffer(myBBPool);
 
         }
 
