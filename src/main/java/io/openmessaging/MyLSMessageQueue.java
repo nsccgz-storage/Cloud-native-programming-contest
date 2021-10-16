@@ -445,7 +445,7 @@ public class MyLSMessageQueue extends MessageQueue {
         // 写 PMEM 的异步任务设计
         AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        if(isWritePmem && q.type == 0){ // 改为只在纯写阶段双写
+        if(isWritePmem && q.type != 2){
             // 不是冷队列，开启双写
             exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         }
@@ -481,7 +481,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
         // 等待异步任务的结束
         // if(q.type != 2){
-        if(isWritePmem && q.type == 0){
+        if(isWritePmem && q.type != 2){
             try{
                 q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
             }catch(Exception e){
@@ -492,11 +492,12 @@ public class MyLSMessageQueue extends MessageQueue {
         }
         long asyncWritePmemTime = System.nanoTime() - time0;
         
-        testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
+        if(mqConfig.useStats) {
+            testStat.updateChunkUsage(q.block.chunkList.getUsage());
+            testStat.addAsycWriteTime(writeSSDTime, asyncWritePmemTime);
+        }
         // 需要把这个时间添加进一个记录类里面去
         q.maxOffset++;
-        if(mqConfig.useStats)
-            testStat.updateChunkUsage(q.block.chunkList.getUsage());
         return ret;
     }
 
@@ -613,7 +614,7 @@ public class MyLSMessageQueue extends MessageQueue {
             //handle = -1L;
             if(handle != -1L){
                 // ByteBuffer buf = ByteBuffer.allocate(size);
-                ByteBuffer buf = ByteBuffer.wrap(q.block.get(size)); //
+                ByteBuffer buf = ByteBuffer.wrap(q.block.get(handle, size));
                 // buf.flip(); // TODO: check wrap meaning
                 log.debug("read from pmem");
                 ret.put(i, buf);
@@ -1257,9 +1258,9 @@ public class MyLSMessageQueue extends MessageQueue {
                                 long uselessIdx = curTask.q.uselessIdx;
                                 
                                 // 统计到底发生多少次丢弃任务的操作
-                                // 
+
                                 if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L){
-                                    numOfThreads.incrementAndGet();
+                                    testStat.incNumOfThrowTask();
                                     continue; // 丢弃任务不执行
                                 } 
     
@@ -1273,9 +1274,9 @@ public class MyLSMessageQueue extends MessageQueue {
                                 // TODO: 写到 PMEM
                                 long handle = curTask.q.block.put(byteBuffer);
                                 // 更新 DRAM 中的 hashMap
-//                                if(handle == -1L){
+                                if(handle == -1L){
                                     curTask.q.offset2info.get(k).handle = handle;
-//                                }
+                                }
                                 
                                 //logger.info("test multithread!---- write pmem");
                             }
@@ -1348,6 +1349,8 @@ public class MyLSMessageQueue extends MessageQueue {
         AtomicBoolean reported;
         int[] oldTotalWriteBucketCount;
         MemoryUsage memoryUsage;
+
+        AtomicLong numOfThrowTask;
 
         private class ThreadStat {
             Long appendStartTime;
@@ -1462,6 +1465,7 @@ public class MyLSMessageQueue extends MessageQueue {
             endTime = 0L;
             oldEndTime = 0L;
             opCount = 0L;
+            numOfThrowTask = new AtomicLong(0L);
             myDataFiles = dataFiles;
             oldWriteStats = new DataFile.WriteStat[myDataFiles.length];
         }
@@ -1472,6 +1476,9 @@ public class MyLSMessageQueue extends MessageQueue {
                 threadId.set(thisNumOfThread);
                 log.info("init thread id : " + thisNumOfThread);
             }
+        }
+        void incNumOfThrowTask(){
+            numOfThrowTask.incrementAndGet();
         }
 
         void incQueueCount(){
@@ -1799,7 +1806,7 @@ public class MyLSMessageQueue extends MessageQueue {
             log.info(coldQueueCountReport);
             log.info(asyWriteTimeReport);
             log.info(otherQueueCountReport);
-
+            log.info("[throw task nums]  " + numOfThrowTask.get());
 
             StringBuilder coldReadPmemCountReport = new StringBuilder("[cold read pmem count]");
             StringBuilder coldReadSSDCountReport = new StringBuilder("[cold read SSD count]");
