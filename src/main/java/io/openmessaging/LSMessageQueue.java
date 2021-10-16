@@ -192,7 +192,7 @@ public class LSMessageQueue extends MessageQueue {
                     log.info(Thread.currentThread().getName() + " Exit !");
                     System.exit(-1);
                 }
-            }, 900000);
+            }, 700000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
@@ -250,8 +250,8 @@ public class LSMessageQueue extends MessageQueue {
             }
             if (crash) {
                 log.info("recover !!");
-                // System.exit(-1);
-                recover();
+                System.exit(-1);
+                // recover();
             }
 
 
