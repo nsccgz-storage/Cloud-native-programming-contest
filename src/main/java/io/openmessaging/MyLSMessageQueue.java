@@ -147,6 +147,29 @@ public class MyLSMessageQueue extends MessageQueue {
             block = pmemManager.createBlock();
         }
 
+        public int readFromPmem(Map<Integer, ByteBuffer>ret, long offset, int fetchNum){
+            int totalSize = 0;
+            int i;
+            for(i = 0;i < fetchNum;i++) {
+                long curOffset = offset + i;
+                long handle = offset2info.get(curOffset).handle;
+                if (handle == -1) break;
+                totalSize += offset2info.get(curOffset).dataSize;
+            }
+            testStat.incColdReadPmemCount(i);
+            ByteBuffer buffer = ByteBuffer.wrap(block.get(totalSize));
+            totalSize = 0;
+            int curSize = 0;
+            for(int j = 0;j < i;j++){
+                long curOffset = offset + i;
+                totalSize += offset2info.get(curOffset).dataSize;
+                buffer.position(curSize);
+                buffer.limit(totalSize);
+                ret.put(j, buffer.duplicate());
+                curSize = totalSize;
+            }
+            return i;
+        }
     }
 
     public class MQTopic {
@@ -235,7 +258,7 @@ public class MyLSMessageQueue extends MessageQueue {
             numOfThreads = new AtomicInteger();
             numOfThreads.set(0);
             numOfTopics = new AtomicInteger();
-            numOfTopics.set(1);        
+            numOfTopics.set(1);
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
@@ -422,7 +445,7 @@ public class MyLSMessageQueue extends MessageQueue {
         // 写 PMEM 的异步任务设计
         AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        if(isWritePmem && q.type != 2){
+        if(isWritePmem && q.type == 0){ // 改为只在纯写阶段双写
             // 不是冷队列，开启双写
             exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         }
@@ -458,7 +481,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
         // 等待异步任务的结束
         // if(q.type != 2){
-        if(isWritePmem && q.type != 2){
+        if(isWritePmem && q.type == 0){
             try{
                 q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
             }catch(Exception e){
@@ -503,10 +526,53 @@ public class MyLSMessageQueue extends MessageQueue {
             fetchNum = (int)(q.maxOffset-offset);
         }
 
+        // new code /////////////////////////////////////////////////////
+//        DataFile df = mqTopic.df;
+//        if(q.type == 1){ // hot queue
+//            // TODO: 在DRAM中存储热队列的缓存数据
+//            if (offset == q.maxOffset-1 && q.maxOffsetData != null){
+//                if (mqConfig.useStats){
+//                    testStat.hitHotData(topic, queueId);
+//                }
+//                ret.put(0, q.maxOffsetData);
+//                return ret;
+//            }
+//        }
+//        else if(q.type == 2){ // cold queue
+//            PrefetchTask pTask =  mqTopic.prefetchTask;
+//
+//            int loadNum = 12;
+//            pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
+//        }
+//        else{ // unknown type queue
+//            if(offset == 0){
+//                q.type = 2; // cold
+//                // 标记冷队列，然后做一些事情
+////                q.block.doubleCapacity();
+//                if (mqConfig.useStats){
+//                    testStat.incColdQueueCount();
+//                }
+//            }
+//            else{
+////            else if (offset == q.maxOffset-1){
+//                q.type = 1; // hot
+////                q.block.freeSpace(); // 有没有可能在本线程还没释放空间就申请扩充空间？
+//                if (mqConfig.useStats){
+//                    testStat.incHotQueueCount();
+//                }
+//                if (offset == q.maxOffset-1 && q.maxOffsetData != null){
+//                    if (mqConfig.useStats){
+//                        testStat.hitHotData(topic, queueId);
+//                    }
+//                    ret.put(0, q.maxOffsetData);
+//                    return ret;
+//                }
+//            }
+//        }
+        // old code ///////////////////////////////////////////////////
         if (offset == q.maxOffset-1){
             if (q.type == 0){
                 q.type = 1; // hot
-                q.block.freeSpace();
                 if (mqConfig.useStats){
                     testStat.incHotQueueCount();
                 }
@@ -535,7 +601,7 @@ public class MyLSMessageQueue extends MessageQueue {
 
         int loadNum = 12;
         pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
-
+        /////////////////////////////////////////////////////
         
         long pos = 0;
         for (int i = 0; i < fetchNum; i++){
@@ -547,7 +613,7 @@ public class MyLSMessageQueue extends MessageQueue {
             //handle = -1L;
             if(handle != -1L){
                 // ByteBuffer buf = ByteBuffer.allocate(size);
-                ByteBuffer buf = ByteBuffer.wrap(q.block.get(handle, size));
+                ByteBuffer buf = ByteBuffer.wrap(q.block.get(size)); //
                 // buf.flip(); // TODO: check wrap meaning
                 log.debug("read from pmem");
                 ret.put(i, buf);
@@ -1207,9 +1273,9 @@ public class MyLSMessageQueue extends MessageQueue {
                                 // TODO: 写到 PMEM
                                 long handle = curTask.q.block.put(byteBuffer);
                                 // 更新 DRAM 中的 hashMap
-                                if(handle == -1L){
+//                                if(handle == -1L){
                                     curTask.q.offset2info.get(k).handle = handle;
-                                }
+//                                }
                                 
                                 //logger.info("test multithread!---- write pmem");
                             }

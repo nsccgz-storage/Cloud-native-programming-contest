@@ -255,7 +255,7 @@ public class PmemManager {
             }
         }
 
-        /*
+
         public boolean doubleCapacity(){
             if(index == 0)return false;
             // 检查相邻的结点是否可以分配
@@ -275,8 +275,8 @@ public class PmemManager {
 //            } else{
                 int newIndex = chunkList.allocate(size*2);
                 if(newIndex == -1)return false;
-                long srcOffset = chunk.getAddress(index, size);
-                long dstOffset = chunk.getAddress(newIndex, size*2);
+                long srcOffset = chunkList.getAddress(chunk, index, size);
+                long dstOffset = chunkList.getAddress(chunk, newIndex, size*2);
                 if(head <= tail){
                     pool.copyFromPool(srcOffset+head, srcOffset, tail-head);
                     tail = tail - head;
@@ -288,15 +288,15 @@ public class PmemManager {
                     tail = tail + tmp;
                     head = 0;
                 }
-                chunk.free(index, size);
+                chunkList.free(chunk, index, size);
 //                return newIndex;
 //            }
             index = newIndex;
             size *= 2;
-            handle = chunk.getAddress(index, size);
+            handle = chunkList.getAddress(chunk, index, size);
             return true;
         }
-        */
+
         public void headForward(int length){
             head = (head + length)%size;
             // check head ?
@@ -371,6 +371,7 @@ public class PmemManager {
 //                return null;
 //            }
         }
+
         public byte[] get(long offset, int length){
 //            if((head<=offset&&offset<tail)||!(tail<=offset&&offset<head)) { // check bound
                 byte[] bytes = new byte[length];
@@ -396,5 +397,8 @@ public class PmemManager {
         private void copyToArray(long srcOffset, byte[] dstArray, int dstOffset, int length){
             pool.copyToByteArray(srcOffset+handle, dstArray, dstOffset, length);
         }
+
+//        private void unsafeCopyFromArray(byte[] srcArray, int srcIndex, long dstOffset, int length){
+//        }
     }
 }

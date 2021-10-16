@@ -381,7 +381,7 @@ public class MQBench {
 
 		correctBenchByTrace(dbPath, pmDirPath);
 
-		// perfBenchByTrace(dbPath, pmDirPath);
+//		 perfBenchByTrace(dbPath, pmDirPath);
 
 		// log.setLevel(Level.INFO);
 		// try {
