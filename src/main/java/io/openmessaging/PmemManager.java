@@ -320,6 +320,8 @@ public class PmemManager {
 
             int bufLen = buffer.remaining();
             byte[] bytes = new byte[bufLen]; // TODO: 不可避免多一次拷贝，是否能优化
+            // 直接访问buffer.array, buffer.offset+buffer.position, buffer.remaining
+            // & update buffer position
             buffer.get(bytes);
             int position = (int) tail;
             if(size - tail >= bufLen) {
@@ -328,6 +330,7 @@ public class PmemManager {
                 }
                 copyFromArray(bytes, 0, tail, bytes.length);
                 tail += bufLen;
+                if(tail == size)tail = 0;
             }else{
                 int tmp = (int)(size - tail);
                 copyFromArray(bytes, 0, tail, tmp);

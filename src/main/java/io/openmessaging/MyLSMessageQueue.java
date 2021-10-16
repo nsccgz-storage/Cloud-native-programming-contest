@@ -122,6 +122,8 @@ public class MyLSMessageQueue extends MessageQueue {
 
         public Long uselessIdx;
         public PmemManager.MyBlock block;
+        public long headOffset; // block 中保存的第一个数据的offset
+        public long tailOffset; // block 中tail即将写入的数据的offset
         
 
         MQQueue(DataFile dataFile){
@@ -135,6 +137,8 @@ public class MyLSMessageQueue extends MessageQueue {
             uselessIdx = 0L;
 
             block = pmemManager.createBlock();
+            headOffset = 0;
+            tailOffset = 0;
         }
         MQQueue(){
             type = 0;
@@ -145,30 +149,70 @@ public class MyLSMessageQueue extends MessageQueue {
 
             uselessIdx = 0L;
             block = pmemManager.createBlock();
+            headOffset = 0;
+            tailOffset = 0;
         }
 
         public int readFromPmem(Map<Integer, ByteBuffer>ret, long offset, int fetchNum){
-            int totalSize = 0;
-            int i;
-            for(i = 0;i < fetchNum;i++) {
-                long curOffset = offset + i;
-                long handle = offset2info.get(curOffset).handle;
-                if (handle == -1) break;
-                totalSize += offset2info.get(curOffset).dataSize;
+            log.debug(String.format("offset = %d, fetchNum = %d, q.headOffset = %d, q.tailOffset = %d", offset, fetchNum, headOffset, tailOffset));
+            if(offset == headOffset){
+                if(offset < tailOffset){
+                    fetchNum = Math.min(fetchNum, (int) (tailOffset-headOffset));
+                    headOffset += fetchNum;
+                }else{ // offset == headOffset == tailOffset说明为空？
+                    return 0;
+                }
             }
-            testStat.incColdReadPmemCount(i);
-            ByteBuffer buffer = ByteBuffer.wrap(block.get(totalSize));
-            totalSize = 0;
-            int curSize = 0;
-            for(int j = 0;j < i;j++){
-                long curOffset = offset + i;
-                totalSize += offset2info.get(curOffset).dataSize;
-                buffer.position(curSize);
-                buffer.limit(totalSize);
-                ret.put(j, buffer.duplicate());
-                curSize = totalSize;
+            else if(offset > headOffset){
+                // head forward
+                if(offset < tailOffset){
+                    int size = 0;
+                    for(long i = headOffset; i < offset; i++){
+                        size += offset2info.get(i).dataSize;
+                    }
+                    block.headForward(size);
+                    headOffset = offset; // update headOffset
+                    log.info("head forward");
+
+                    fetchNum = Math.min(fetchNum, (int) (tailOffset-headOffset));
+                    headOffset += fetchNum;
+                    log.debug(String.format("head = %d, tail = %d, q.block.remain = %d", headOffset, tailOffset, block.getRemainSize()));
+                }
+                else{// offset >= tailOffset
+                    log.error("the offset to read increase to fast");
+                    headOffset = offset+fetchNum; // 语义不精准？or = -1 ?
+                    tailOffset = offset+fetchNum;
+                    // TODO: block.reset();
+                    log.debug(String.format("head = %d, tail = %d, q.block.remain = %d", headOffset, tailOffset, block.getRemainSize()));
+                    return 0; // 直接从 SSD 读
+                }
             }
-            return i;
+            else{ // offset < headOffset
+                log.error("headOffset error");
+                log.debug(String.format("head = %d, tail = %d, q.block.remain = %d", headOffset, tailOffset, block.getRemainSize()));
+                return 0; // 直接从 SSD 读
+            }
+            // 正式读 pmem
+            for(int i = 0;i < fetchNum;i++) {
+                long curOffset = offset + i;
+                log.debug("read from pmem");
+                log.debug(String.format("head = %d, tail = %d, q.block.remain = %d", headOffset, tailOffset, block.getRemainSize()));
+                ret.put(i, ByteBuffer.wrap(block.get(offset2info.get(curOffset).dataSize))); // for test
+            }
+            return fetchNum;
+//            testStat.incColdReadPmemCount(i);
+//            ByteBuffer buffer = ByteBuffer.wrap(block.get(totalSize));
+//            totalSize = 0;
+//            int curSize = 0;
+//            for(int j = 0;j < i;j++){
+//                long curOffset = offset + i;
+//                totalSize += offset2info.get(curOffset).dataSize;
+//                buffer.position(curSize);
+//                buffer.limit(totalSize);
+//                ret.put(j, buffer.duplicate());
+//                curSize = totalSize;
+//            }
+//            return i;
         }
     }
 
@@ -391,7 +435,8 @@ public class MyLSMessageQueue extends MessageQueue {
         }
         @Override
         public Integer call() throws Exception{
-            return q.block.put(data);
+            int ret = q.block.put(data);
+            return ret;
         }
     }
     boolean isWritePmem = true;
@@ -445,7 +490,7 @@ public class MyLSMessageQueue extends MessageQueue {
         // 写 PMEM 的异步任务设计
         AsyWritePmemTask task = new AsyWritePmemTask(q, tmpData);
         FutureTask<Integer> futureTask = new FutureTask<Integer>(task);
-        if(isWritePmem && q.type != 2){
+        if(isWritePmem && q.type != 2 && q.tailOffset == q.maxOffset){
             // 不是冷队列，开启双写
             exec.submit(futureTask); // 这里的 executor 要不要先申请好，还是直接申请一个？
         }
@@ -481,9 +526,13 @@ public class MyLSMessageQueue extends MessageQueue {
 
         // 等待异步任务的结束
         // if(q.type != 2){
-        if(isWritePmem && q.type != 2){
+        if(isWritePmem && q.type == 0 && q.tailOffset == q.maxOffset){
             try{
                 q.offset2info.put(q.maxOffset, new IndexInfo(position, size , futureTask.get()));
+                if(futureTask.get() != -1){
+                    q.tailOffset++;
+                    log.debug(String.format("topic = %s,queueId = %d,head = %d,tail = %d, q.block.remain = %d", topic, queueId, q.headOffset, q.tailOffset, q.block.getRemainSize()));
+                }
             }catch(Exception e){
                 e.printStackTrace();
             }
@@ -526,12 +575,102 @@ public class MyLSMessageQueue extends MessageQueue {
         if (offset + fetchNum-1 >= q.maxOffset){
             fetchNum = (int)(q.maxOffset-offset);
         }
+        q.uselessIdx = offset+fetchNum;
 
         // new code /////////////////////////////////////////////////////
-//        DataFile df = mqTopic.df;
-//        if(q.type == 1){ // hot queue
-//            // TODO: 在DRAM中存储热队列的缓存数据
-//            if (offset == q.maxOffset-1 && q.maxOffsetData != null){
+        DataFile df = mqTopic.df;
+        if(q.type == 1){ // hot queue
+            // TODO: 在DRAM中存储热队列的缓存数据
+            if(offset + fetchNum - 1 == q.maxOffset-1 && q.maxOffsetData != null){
+                if (mqConfig.useStats){
+                    testStat.hitHotData(topic, queueId);
+                }
+                ret.put(fetchNum - 1, q.maxOffsetData);
+                fetchNum--;
+            }
+//            int startIndex = 0; // q.readFromPmem(ret, offset, fetchNum);
+//            long pos = 0;
+//            for (int i = startIndex; i < fetchNum; i++){
+//                long curOffset = offset + i;
+//                pos = q.offset2position.get((int) curOffset);
+//                ByteBuffer buf = df.read(pos, i);
+//                if (buf != null){
+//                    // buf.position(0);
+//                    // buf.limit(buf.capacity());
+//                    buf.flip();
+//                    ret.put(i, buf);
+//                    log.debug("read from SSD");
+//                    testStat.incColdReadSSDCount(1);
+//                }
+//            }
+        }
+        else if(q.type == 2){ // cold queue
+//            PrefetchTask pTask =  mqTopic.prefetchTask;
+//
+//            int loadNum = 12;
+//            pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
+//            int startIndex = q.readFromPmem(ret, offset, fetchNum);
+//            long pos = 0;
+//            for (int i = startIndex; i < fetchNum; i++){
+//                long curOffset = offset + i;
+//                pos = q.offset2position.get((int) curOffset);
+//                ByteBuffer buf = df.read(pos, i);
+//                if (buf != null){
+//                    // buf.position(0);
+//                    // buf.limit(buf.capacity());
+//                    buf.flip();
+//                    ret.put(i, buf);
+//                    log.debug("read from SSD");
+//                    testStat.incColdReadSSDCount(1);
+//                }
+//            }
+        }
+        else{ // unknown type queue
+            if(offset == 0){
+                q.type = 2; // cold
+                // 标记冷队列，然后做一些事情
+//                q.block.doubleCapacity();
+                if (mqConfig.useStats){
+                    testStat.incColdQueueCount();
+                }
+            }
+            else{
+//            else if (offset == q.maxOffset-1){
+                q.type = 1; // hot
+//                q.block.freeSpace(); // 有没有可能在本线程还没释放空间就申请扩充空间？
+                if(offset + fetchNum - 1 == q.maxOffset-1 && q.maxOffsetData != null){
+                    if (mqConfig.useStats){
+                        testStat.hitHotData(topic, queueId);
+                    }
+                    ret.put(fetchNum - 1, q.maxOffsetData);
+                    fetchNum--;
+                }
+            }
+//            int startIndex = q.readFromPmem(ret, offset, fetchNum);
+//            long pos = 0;
+//            for (int i = startIndex; i < fetchNum; i++){
+//                long curOffset = offset + i;
+//                pos = q.offset2position.get((int) curOffset);
+//                ByteBuffer buf = df.read(pos, i);
+//                if (buf != null){
+//                    // buf.position(0);
+//                    // buf.limit(buf.capacity());
+//                    buf.flip();
+//                    ret.put(i, buf);
+//                    log.debug("read from SSD");
+//                    testStat.incColdReadSSDCount(1);
+//                }
+//            }
+        }
+        // old code ///////////////////////////////////////////////////
+//        if (offset == q.maxOffset-1){
+//            if (q.type == 0){
+//                q.type = 1; // hot
+//                if (mqConfig.useStats){
+//                    testStat.incHotQueueCount();
+//                }
+//            }
+//            if (q.maxOffsetData != null){
 //                if (mqConfig.useStats){
 //                    testStat.hitHotData(topic, queueId);
 //                }
@@ -539,89 +678,57 @@ public class MyLSMessageQueue extends MessageQueue {
 //                return ret;
 //            }
 //        }
-//        else if(q.type == 2){ // cold queue
-//            PrefetchTask pTask =  mqTopic.prefetchTask;
-//
-//            int loadNum = 12;
-//            pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
-//        }
-//        else{ // unknown type queue
-//            if(offset == 0){
+//        if (offset == 0){
+//            if (q.type == 0){
 //                q.type = 2; // cold
 //                // 标记冷队列，然后做一些事情
-////                q.block.doubleCapacity();
+//
 //                if (mqConfig.useStats){
 //                    testStat.incColdQueueCount();
 //                }
 //            }
-//            else{
-////            else if (offset == q.maxOffset-1){
-//                q.type = 1; // hot
-////                q.block.freeSpace(); // 有没有可能在本线程还没释放空间就申请扩充空间？
-//                if (mqConfig.useStats){
-//                    testStat.incHotQueueCount();
-//                }
-//                if (offset == q.maxOffset-1 && q.maxOffsetData != null){
-//                    if (mqConfig.useStats){
-//                        testStat.hitHotData(topic, queueId);
-//                    }
-//                    ret.put(0, q.maxOffsetData);
-//                    return ret;
-//                }
+//        }
+//        // 发起一个预取任务
+//        PrefetchTask pTask =  mqTopic.prefetchTask;
+//        DataFile df = mqTopic.df;
+//
+//        int loadNum = 12;
+//        pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
+        /////////////////////////////////////////////////////
+//        int startIndex = q.readFromPmem(ret, offset, fetchNum);
+//        long pos = 0;
+//        for (int i = startIndex; i < fetchNum; i++){
+//            long curOffset = offset + i;
+//            pos = q.offset2position.get((int) curOffset);
+//            ByteBuffer buf = df.read(pos, i);
+//            if (buf != null){
+//                // buf.position(0);
+//                // buf.limit(buf.capacity());
+//                buf.flip();
+//                ret.put(i, buf);
+//                log.debug("read from SSD");
+//                testStat.incColdReadSSDCount(1);
 //            }
 //        }
-        // old code ///////////////////////////////////////////////////
-        if (offset == q.maxOffset-1){
-            if (q.type == 0){
-                q.type = 1; // hot
-                if (mqConfig.useStats){
-                    testStat.incHotQueueCount();
-                }
-            }
-            if (q.maxOffsetData != null){
-                if (mqConfig.useStats){
-                    testStat.hitHotData(topic, queueId);
-                }
-                ret.put(0, q.maxOffsetData);
-                return ret;
-            }
-        }
-        if (offset == 0){
-            if (q.type == 0){
-                q.type = 2; // cold
-                // 标记冷队列，然后做一些事情
-
-                if (mqConfig.useStats){
-                    testStat.incColdQueueCount();
-                }
-            }
-        }
-        // 发起一个预取任务
-        PrefetchTask pTask =  mqTopic.prefetchTask;
-        DataFile df = mqTopic.df;
-
-        int loadNum = 12;
-        pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
-        /////////////////////////////////////////////////////
-        
+//        return ret;
+        int startIndex = q.readFromPmem(ret, offset, fetchNum);
         long pos = 0;
-        for (int i = 0; i < fetchNum; i++){
+        for (int i = startIndex; i < fetchNum; i++){
             long curOffset = offset + i;
             int intCurOffset = (int)curOffset;
             pos = q.offset2position.get(intCurOffset);
             long handle = q.offset2info.get(curOffset).handle;
             int size = q.offset2info.get(curOffset).dataSize;
             //handle = -1L;
-            if(handle != -1L){
-                // ByteBuffer buf = ByteBuffer.allocate(size);
-                ByteBuffer buf = ByteBuffer.wrap(q.block.get(handle, size));
-                // buf.flip(); // TODO: check wrap meaning
-                log.debug("read from pmem");
-                ret.put(i, buf);
-                testStat.incColdReadPmemCount(1);
-            }
+//            if(handle != -1L){
+//                ByteBuffer buf = ByteBuffer.wrap(q.block.get(handle, size));
+//                // buf.flip(); // TODO: check wrap meaning
+//                log.debug("read from pmem");
+//                ret.put(i, buf);
+//                testStat.incColdReadPmemCount(1);
+//            }
             // 判断是否在 PMEM 中，若是，则从 PMEM 中读
-            else{
+//            else{
                 ByteBuffer buf = df.read(pos, i);
                 if (buf != null){
                     // buf.position(0);
@@ -631,7 +738,7 @@ public class MyLSMessageQueue extends MessageQueue {
                     log.debug("read from SSD");
                     testStat.incColdReadSSDCount(1);
                 }
-            }
+//            }
         }
         return ret;
     }
@@ -1114,6 +1221,7 @@ public class MyLSMessageQueue extends MessageQueue {
             }
             return null;
         }
+        // TODO: 在写阶段保存size，在读阶段传入参数size，减少一次读SSD
         public ByteBuffer read(long position, int index) {
             if (threadLocalReadMetaBuf.get() == null) {
                 threadLocalReadMetaBuf.set(ByteBuffer.allocate(globalMetadataLength));
@@ -1251,18 +1359,19 @@ public class MyLSMessageQueue extends MessageQueue {
                         //logger.info("---- write pmem --- Quese size: " + size);
                         for(int i=0; i<size; ++i){
                             WritePmemTask curTask = wPmemTaskConcurrentQueue.poll();
-                            // 从 SSD 上读入数据并写入到 PMEM 上。               
-                            for(long k=curTask.startIdx; k<curTask.loadNum && k + curTask.startIdx <= curTask.q.maxOffset ; ++k){
-                              
+                            // 从 SSD 上读入数据并写入到 PMEM 上。
+                            long maxIdx = curTask.startIdx+curTask.loadNum <= curTask.q.maxOffset ? curTask.startIdx+curTask.loadNum : curTask.q.maxOffset;
+                            for(long k=curTask.startIdx; k<maxIdx; ++k){
+
                                 // useless task:
-                                long uselessIdx = curTask.q.uselessIdx;
+                                long uselessIdx = curTask.q.uselessIdx; // TODO: update useless task
                                 
                                 // 统计到底发生多少次丢弃任务的操作
 
-                                if(k < uselessIdx || curTask.q.offset2position.get((int) k) != -1L){
+                                if(k < uselessIdx){
                                     testStat.incNumOfThrowTask();
                                     continue; // 丢弃任务不执行
-                                } 
+                                }
     
                                 long offset = curTask.q.offset2info.get(k).offset;
                                 int dataSize = curTask.q.offset2info.get(k).dataSize;
@@ -1274,16 +1383,18 @@ public class MyLSMessageQueue extends MessageQueue {
                                 // TODO: 写到 PMEM
                                 long handle = curTask.q.block.put(byteBuffer);
                                 // 更新 DRAM 中的 hashMap
-                                if(handle == -1L){
+//                                if(handle == -1L){
                                     curTask.q.offset2info.get(k).handle = handle;
+//                                }
+                                if(handle != -1){
+                                    testStat.incNumOfFinishTask(); // 考虑是否写pmem成功
                                 }
-                                
-                                //logger.info("test multithread!---- write pmem");
+//                                log.info("test multithread!---- write pmem");
                             }
-                            //logger.info("test multithread!---- write pmem");
+//                            log.info("test multithread!---- write pmem");
                         } 
                         if(wPmemTaskConcurrentQueue.isEmpty()){
-                            //logger.info("---------------writeThread sleep!-------------------");
+//                            log.info("---------------writeThread sleep!-------------------");
                             LockSupport.park();
                         }
                     }
@@ -1351,6 +1462,7 @@ public class MyLSMessageQueue extends MessageQueue {
         MemoryUsage memoryUsage;
 
         AtomicLong numOfThrowTask;
+        AtomicLong numOfFinishTask;
 
         private class ThreadStat {
             Long appendStartTime;
@@ -1466,6 +1578,7 @@ public class MyLSMessageQueue extends MessageQueue {
             oldEndTime = 0L;
             opCount = 0L;
             numOfThrowTask = new AtomicLong(0L);
+            numOfFinishTask = new AtomicLong(0L);
             myDataFiles = dataFiles;
             oldWriteStats = new DataFile.WriteStat[myDataFiles.length];
         }
@@ -1480,6 +1593,10 @@ public class MyLSMessageQueue extends MessageQueue {
         void incNumOfThrowTask(){
             numOfThrowTask.incrementAndGet();
         }
+        void incNumOfFinishTask(){
+            numOfFinishTask.incrementAndGet();
+        }
+
 
         void incQueueCount(){
             int id = threadId.get();
@@ -1806,7 +1923,8 @@ public class MyLSMessageQueue extends MessageQueue {
             log.info(coldQueueCountReport);
             log.info(asyWriteTimeReport);
             log.info(otherQueueCountReport);
-            log.info("[throw task nums]  " + numOfThrowTask.get());
+            log.info("[throw  task nums]  " + numOfThrowTask.get());
+            log.info("[finish task nums]  " + numOfFinishTask.get());
 
             StringBuilder coldReadPmemCountReport = new StringBuilder("[cold read pmem count]");
             StringBuilder coldReadSSDCountReport = new StringBuilder("[cold read SSD count]");

@@ -131,8 +131,10 @@ public class MQBench {
 			Vector<Message> step2Msgs = new Vector<>();
 			Vector<Message> msgs = step1Msgs;
 
+//			int num = 0;
 			while ((line = reader.readLine()) != null) {
 				// log.debug(line);
+//				if(num++ % 5!= 0)continue;
 				String item[] = line.split(",");
 				// log.debug(item[0]);
 
