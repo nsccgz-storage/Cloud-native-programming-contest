@@ -5,6 +5,7 @@ import io.openmessaging.DefaultMessageQueueImpl;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.LongSummaryStatistics;
 import java.util.Map;
 import java.io.IOException;
 import java.lang.Integer;
@@ -51,6 +52,24 @@ public class WYFTest {
 			buf.put(sampleData.clone());
 			buf.position(size);
 			oriPosition = size;
+			// for check
+
+			checkBuf = buf.duplicate();
+			// checkBuf = ByteBuffer.allocate(17408);
+			// checkBuf.put(sampleData.clone());
+			// checkBuf.position(size);
+		}
+
+		Message(String msgTopic, int msgQueueId, long msgOffset, int length) {
+			topic = msgTopic;
+			queueId = msgQueueId;
+			offset = msgOffset;
+			getOffset = -1;
+			// get size between 100B to 17KiB (17408 B)
+			// size += 100; // [100-17408]
+			buf = ByteBuffer.allocate(17408);
+			buf.put(sampleData.clone());
+			buf.position(17408-length);
 			// for check
 
 			checkBuf = buf.duplicate();
@@ -337,6 +356,7 @@ public class WYFTest {
 		Vector<Message>[] msgss = new Vector[numOfThreads];
 
 		{
+			log.info("start");
 			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 			long startTime = System.nanoTime();
@@ -374,6 +394,7 @@ public class WYFTest {
 		File pmDataFile = new File("/mnt/pmem/mq/data");
 		pmDataFile.delete();
 		{
+			log.info("recover !!");
 			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 			// read
 			ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
@@ -422,16 +443,16 @@ public class WYFTest {
 						log.error("offset error !");
 						System.exit(0);
 					}
-					Map<Integer, ByteBuffer> result;
-					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-					msg.buf.position(msg.oriPosition);
-					if (result.get(0).compareTo(msg.checkBuf) != 0) {
-						log.error(result.get(0));
-						log.error(msg.checkBuf);
-						log.error("data error !");
-						barrier.await();
-						System.exit(0);
-					}
+					// Map<Integer, ByteBuffer> result;
+					// result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
+					// msg.buf.position(msg.oriPosition);
+					// if (result.get(0).compareTo(msg.checkBuf) != 0) {
+					// 	log.error(result.get(0));
+					// 	log.error(msg.checkBuf);
+					// 	log.error("data error !");
+					// 	barrier.await();
+					// 	System.exit(0);
+					// }
 
 
 				}
@@ -462,6 +483,9 @@ public class WYFTest {
 	
 					result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
 					msg.buf.position(msg.oriPosition);
+					if (result == null){
+						log.error("return null");
+					}
 					if (result.get(0).compareTo(msg.checkBuf) != 0) {
 						log.error(result.get(0));
 						log.error(msg.checkBuf);
@@ -493,6 +517,7 @@ public class WYFTest {
 		}
 		Map<Integer, ByteBuffer> ret;
 
+
 		// {
 		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 		// 	mq.append("topic1", 0, msgs.get(0).buf);
@@ -507,6 +532,48 @@ public class WYFTest {
 		// 		System.exit(0);
 		// 	}
 		// }
+		{
+			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+			LSMessageQueue.log.setLevel(Level.DEBUG);
+			PMPrefetchBuffer.log.setLevel(Level.DEBUG);
+			for (int i = 0; i < 40; i++){
+				mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+			}
+
+			long currentGetRangeOffset = 0L;
+
+			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 1);
+			for (int i = 0; i < 1; i++){
+				int msgId = (int)currentGetRangeOffset + i;
+				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+					log.error(i);
+					log.error(ret.get(i));
+					log.error(msgs.get(msgId).buf);
+					log.error(msgs.get(msgId).checkBuf);
+					log.error("data error !");
+					System.exit(0);
+				}
+
+			}
+			currentGetRangeOffset += 10;
+			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 10);
+			for (int i = 0; i < 10; i++){
+				int msgId = (int)currentGetRangeOffset + i;
+				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+					log.error(i);
+					log.error(ret.get(i));
+					log.error(msgs.get(msgId).buf);
+					log.error(msgs.get(msgId).checkBuf);
+					log.error("data error !");
+					System.exit(0);
+				}
+			}
+
+			log.info("pass the test");
+			((LSMessageQueue)mq).close();
+
+		}
+
 		// {
 		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 		// 	long currentGetRangeOffset = 0L;
@@ -657,15 +724,150 @@ public class WYFTest {
 		// 	log.info("pass the test");
 		// 	((LSMessageQueue)mq).close();
 		// } 
+		// {
+		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		// 	for (int i = 0; i < 30; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+
+		// 	// 预取了8个，此时读是热读，可能从中间开始直接读
+
+		// 	long currentGetRangeOffset = 15L;
+
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+		// 	for (int i = 0; i < 4; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(i);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(msgId).buf);
+		// 			log.error(msgs.get(msgId).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// 	currentGetRangeOffset += 4;
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+		// 	for (int i = 0; i < 4; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(i);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(msgId).buf);
+		// 			log.error(msgs.get(msgId).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// 	for (int i = 30; i < 31; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+		// 	currentGetRangeOffset += 4;
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+		// 	for (int i = 0; i < 4; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(i);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(msgId).buf);
+		// 			log.error(msgs.get(msgId).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+
+
+
+		// 	log.info("pass the test");
+		// 	((LSMessageQueue)mq).close();
+
+		// }
+		// {
+		// 	MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
+		// 	for (int i = 0; i < 40; i++){
+		// 		mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	}
+
+		// 	// 预取了8个，此时读是热读，可能从中间开始直接读
+
+		// 	long currentGetRangeOffset = 0L;
+
+		// 	ret = mq.getRange("topic1", 0, currentGetRangeOffset, 40);
+		// 	for (int i = 0; i < 40; i++){
+		// 		int msgId = (int)currentGetRangeOffset + i;
+		// 		if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 			log.error(i);
+		// 			log.error(ret.get(i));
+		// 			log.error(msgs.get(msgId).buf);
+		// 			log.error(msgs.get(msgId).checkBuf);
+		// 			log.error("data error !");
+		// 			System.exit(0);
+		// 		}
+
+		// 	}
+		// 	// currentGetRangeOffset += 4;
+		// 	// ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+		// 	// for (int i = 0; i < 4; i++){
+		// 	// 	int msgId = (int)currentGetRangeOffset + i;
+		// 	// 	if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 	// 		log.error(i);
+		// 	// 		log.error(ret.get(i));
+		// 	// 		log.error(msgs.get(msgId).buf);
+		// 	// 		log.error(msgs.get(msgId).checkBuf);
+		// 	// 		log.error("data error !");
+		// 	// 		System.exit(0);
+		// 	// 	}
+
+		// 	// }
+		// 	// for (int i = 30; i < 31; i++){
+		// 	// 	mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+		// 	// }
+		// 	// currentGetRangeOffset += 4;
+		// 	// ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+		// 	// for (int i = 0; i < 4; i++){
+		// 	// 	int msgId = (int)currentGetRangeOffset + i;
+		// 	// 	if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+		// 	// 		log.error(i);
+		// 	// 		log.error(ret.get(i));
+		// 	// 		log.error(msgs.get(msgId).buf);
+		// 	// 		log.error(msgs.get(msgId).checkBuf);
+		// 	// 		log.error("data error !");
+		// 	// 		System.exit(0);
+		// 	// 	}
+
+		// 	// }
+
+
+		// 	log.info("pass the test");
+		// 	((LSMessageQueue)mq).close();
+
+		// }
+
+		return ;
+	}
+
+	public static void testPrefetch2(String dbPath, String pmDirPath){
 		{
+			String topicName = "topic" + 1;
+			Vector<Message> msgs = new Vector<>();
+			for (long offset = 0; offset < 99; offset++) {
+				for (int queueId = 0; queueId < 1; queueId++) {
+					Message msg = new Message(topicName, queueId, offset, 40);
+					msgs.add(msg);
+				}
+			}
+			Map<Integer, ByteBuffer> ret;
+	
+			
 			MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
 			for (int i = 0; i < 30; i++){
 				mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
 			}
 
-			// 预取了8个，此时读是热读，可能从中间开始直接读
-
-			long currentGetRangeOffset = 15L;
+			long currentGetRangeOffset = 0L;
 
 			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
 			for (int i = 0; i < 4; i++){
@@ -692,25 +894,25 @@ public class WYFTest {
 					log.error("data error !");
 					System.exit(0);
 				}
+			}
 
-			}
-			for (int i = 30; i < 31; i++){
-				mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
-			}
-			currentGetRangeOffset += 4;
-			ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
-			for (int i = 0; i < 4; i++){
-				int msgId = (int)currentGetRangeOffset + i;
-				if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
-					log.error(i);
-					log.error(ret.get(i));
-					log.error(msgs.get(msgId).buf);
-					log.error(msgs.get(msgId).checkBuf);
-					log.error("data error !");
-					System.exit(0);
-				}
+			// for (int i = 30; i < 31; i++){
+			// 	mq.append(msgs.get(i).topic , msgs.get(i).queueId, msgs.get(i).buf);
+			// }
+			// currentGetRangeOffset += 4;
+			// ret = mq.getRange("topic1", 0, currentGetRangeOffset, 4);
+			// for (int i = 0; i < 4; i++){
+			// 	int msgId = (int)currentGetRangeOffset + i;
+			// 	if (ret.get(i).compareTo(msgs.get(msgId).checkBuf) != 0) {
+			// 		log.error(i);
+			// 		log.error(ret.get(i));
+			// 		log.error(msgs.get(msgId).buf);
+			// 		log.error(msgs.get(msgId).checkBuf);
+			// 		log.error("data error !");
+			// 		System.exit(0);
+			// 	}
 
-			}
+			// }
 
 
 
@@ -718,8 +920,6 @@ public class WYFTest {
 			((LSMessageQueue)mq).close();
 
 		}
-
-		return ;
 	}
 
 	public static void logByteBuffer(byte[] buf){
@@ -746,10 +946,11 @@ public class WYFTest {
 		String pmDirPath = args[1] ;
 
 		try {
-			testPrefetch(dbPath, pmDirPath);
+			// testPrefetch2(dbPath, pmDirPath);
+			// testPrefetch(dbPath, pmDirPath);
 			// writePerformanceTest(dbPath, pmDirPath);
 			// testThreadPool(dbPath, pmDirPath);
-			// testRecover(dbPath, pmDirPath);
+			testRecover(dbPath, pmDirPath);
 		} catch (Exception e) {
 			//TODO: handle exception
 			e.printStackTrace();

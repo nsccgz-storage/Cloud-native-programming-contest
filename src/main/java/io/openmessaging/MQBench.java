@@ -192,6 +192,8 @@ public class MQBench {
 			// PMPrefetchBuffer.log.setLevel(Level.DEBUG);
 		}
 
+		barrier.await();
+
 		for (int i = 0; i < step2Msgs.size(); i++) {
 			Message msg = step2Msgs.get(i);
 			if (msg.type == 1) {
