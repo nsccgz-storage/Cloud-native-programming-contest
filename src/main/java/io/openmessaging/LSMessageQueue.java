@@ -112,6 +112,7 @@ public class LSMessageQueue extends MessageQueue {
             type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(256);
+            offset2PMAddr = new ArrayList<>(256);
             df = dataFile;
             prefetchFuture = null;
         }
@@ -120,6 +121,7 @@ public class LSMessageQueue extends MessageQueue {
             type = 0;
             maxOffset = 0L;
             offset2position = new ArrayList<>(256);
+            offset2PMAddr = new ArrayList<>(256);
             prefetchFuture = null;
         }
         public void initPrefetchBuffer(){
@@ -168,7 +170,7 @@ public class LSMessageQueue extends MessageQueue {
 
 
     LSMessageQueue(String dbDirPath, String pmDirPath){
-        SSDBench.runStandardBench(dbDirPath);
+        // SSDBench.runStandardBench(dbDirPath);
         // PMBench.runStandardBench(pmDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath, pmDirPath);
@@ -450,7 +452,10 @@ public class LSMessageQueue extends MessageQueue {
         //         // }
         //     // }
         // }
-        pmDoubleWrite.doubleWrite(localThreadId.get(), doubleWriteData);
+        long pmAddr = pmDoubleWrite.doubleWrite(localThreadId.get(), doubleWriteData);
+        if (pmAddr != -1){
+            q.offset2PMAddr.add(pmAddr);
+        }
 
 
         // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
@@ -725,6 +730,12 @@ public class LSMessageQueue extends MessageQueue {
         //     prefetchNum = q.prefetchBuffer.consume(ret, offset, fetchNum);
         // }
         // fetchStartIndex += prefetchNum;
+        
+        // 尝试读双写的内容
+        // if (offset < q.offset2PMAddr.size()){
+            // 可以双写
+        // }
+
 
 
         // 分类

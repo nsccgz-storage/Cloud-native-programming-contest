@@ -97,15 +97,14 @@ public class PMDoubleWrite {
     public class ThreadData{
         ByteBuffer buf[];
         int curBuf;
-        long curPMAddr; // TODO: 初始化
         PMBlock block;
         boolean isFinished;
         Future<Integer> backgroundDoubleWriteFuture;
         ThreadData(){
             buf = new ByteBuffer[2];
             curBuf = 0;
-            buf[0] = ByteBuffer.allocate(1*1024*1024);
-            buf[1] = ByteBuffer.allocate(1*1024*1024);
+            buf[0] = ByteBuffer.allocate(4*1024*1024);
+            buf[1] = ByteBuffer.allocate(4*1024*1024);
             isFinished = false;
         }
 
@@ -134,7 +133,8 @@ public class PMDoubleWrite {
         for (int i = 0; i < maxThreadNum; i++){
             threadDatas[i] = new ThreadData();
         }
-        backgroundDoubleWriteThread = Executors.newSingleThreadExecutor();
+        // backgroundDoubleWriteThread = Executors.newSingleThreadExecutor();
+        backgroundDoubleWriteThread = Executors.newFixedThreadPool(2);
        
     }
 
@@ -143,6 +143,14 @@ public class PMDoubleWrite {
         ThreadData td = threadDatas[threadId];
         if (td.isFinished == true){
             return -1;
+        }
+        if (td.block == null){
+            td.block = pmBlockPool.allocate();
+            if (td.block == null){
+                td.isFinished = true;
+                log.info("the pm is full!!");
+                return -1;
+            }
         }
         // 判断是否有空位写，如果没有，触发刷盘任务并切换buf
         if (td.buf[td.curBuf].remaining() < data.remaining()){
@@ -173,6 +181,7 @@ public class PMDoubleWrite {
             td.block = pmBlockPool.allocate();
             if (td.block == null){
                 td.isFinished = true;
+                log.info("the pm is full!!");
                 return -1;
             }
             // 切换缓冲区
@@ -181,7 +190,7 @@ public class PMDoubleWrite {
         }
         // 获得当前地址
         ByteBuffer buf = td.buf[td.curBuf];
-        long pmAddr = td.curPMAddr + buf.position();
+        long pmAddr = td.block.addr + buf.position();
         buf.put(data);
         return pmAddr;
 
@@ -218,9 +227,9 @@ public class PMDoubleWrite {
         PMBlockPool(long capacity) {
             totalCapacity = capacity;
 
-            blockSize = 16*1024*1024; // 16MiB
-            threadLocalBlockNum = 16;
-            bigBlockSize = threadLocalBlockNum * blockSize; // 16*16MiB = 256MiB
+            blockSize = 4*1024*1024; // 16MiB
+            threadLocalBlockNum = 64;
+            bigBlockSize = threadLocalBlockNum * blockSize; // 64*4MiB = 256MiB
 
             // 初始化阶段1
             // 大池子
