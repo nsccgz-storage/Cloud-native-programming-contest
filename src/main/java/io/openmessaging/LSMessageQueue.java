@@ -753,10 +753,13 @@ public class LSMessageQueue extends MessageQueue {
                 int dataLength = q.offset2Length.get(curOffset);
                 log.debug("get from double buffer datLength " + dataLength);
                 // TODO: 需要修复
-                ByteBuffer buf = ByteBuffer.allocate(dataLength);
+                ByteBuffer buf = q.bbPool.allocate(dataLength);
+                // ByteBuffer buf = ByteBuffer.allocate(dataLength);
                 long readPMAddr = q.offset2PMAddr.get(curOffset);
                 log.debug("read from pm Addr " + readPMAddr);
-                pmDoubleWrite.pool.copyToByteArray(readPMAddr, buf.array(), 0, dataLength);
+                // log.info(buf);
+                pmDoubleWrite.pool.copyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
+                // log.info(buf);
                 ret.put(i, buf);
             }
             fetchStartIndex += intDoubleWriteNum;
