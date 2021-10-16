@@ -314,7 +314,7 @@ public class LSMessageQueue extends MessageQueue {
                         int queueId = msgMetadata.getInt();
                         short length = msgMetadata.getShort();
                         String topic = id2topic.get(topicId);
-                        replayAppend(i, topicId, topic, queueId, bufPosition);
+                        replayAppend(i, topicId, topic, queueId, bufPosition, length);
                         bufPosition += 8+length;
                     }
                     curPosition += bufLength;
@@ -330,7 +330,7 @@ public class LSMessageQueue extends MessageQueue {
 
     }
 
-    public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position) {
+    public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position,int dataLength) {
 
         log.debug("replay append : " + topic + "," + queueId + "," + position);
         MQTopic mqTopic;
@@ -357,6 +357,7 @@ public class LSMessageQueue extends MessageQueue {
         }
 
         q.offset2position.add(position);
+        q.offset2Length.add(dataLength);
         long ret = q.maxOffset;
         q.maxOffset++;
         log.debug("replay ok");
@@ -854,8 +855,9 @@ public class LSMessageQueue extends MessageQueue {
             long curOffset = offset + i;
             int intCurOffset = (int)curOffset;
             pos = q.offset2position.get(intCurOffset);
+            int dataLength = q.offset2Length.get(intCurOffset);
             log.debug("read position : " + pos);
-            ByteBuffer buf = df.read(pos);
+            ByteBuffer buf = df.readData(pos,dataLength);
             if (buf != null){
                 //buf.position(0);
                 //buf.limit(buf.capacity());
@@ -1950,6 +1952,34 @@ public class LSMessageQueue extends MessageQueue {
         
             return null;
         }
+        public ByteBuffer readData(long position, int dataLength) {
+            MyDirectBufferPool dbPool = threadLocalDirectBufferPool.get();
+            MyByteBufferPool bbPool = threadLocalByteBufferPool.get();
+        
+            try {
+                int ret;
+                ByteBuffer tmp;
+                if (bbPool != null){
+                    tmp = bbPool.allocate(dataLength);
+                // if (dbPool != null){
+                    // tmp = dbPool.allocate(dataLength);
+                } else {
+                    tmp = ByteBuffer.allocate(dataLength);
+                }
+                tmp.mark();
+                // log.info(tmp);
+                ret = dataFileChannel.read(tmp, position + globalMetadataLength);
+                // log.info(tmp);
+                tmp.reset();
+                // log.info(ret);
+                return tmp;
+            } catch (IOException ie) {
+                ie.printStackTrace();
+            }
+        
+            return null;
+        }
+
 
         public class WriteStat{
             public int[] bucketBound;
