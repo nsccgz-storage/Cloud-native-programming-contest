@@ -96,6 +96,7 @@ public class LSMessageQueue extends MessageQueue {
         public Long maxOffset = 0L;
         public ArrayList<Long> offset2position;
         public ArrayList<Long> offset2PMAddr;
+        public ArrayList<Integer> offset2Length;
         public DataFile df;
         // public byte[] maxOffsetData;
         public ByteBuffer maxOffsetData;
@@ -113,6 +114,7 @@ public class LSMessageQueue extends MessageQueue {
             maxOffset = 0L;
             offset2position = new ArrayList<>(256);
             offset2PMAddr = new ArrayList<>(256);
+            offset2Length = new ArrayList<>(256);
             df = dataFile;
             prefetchFuture = null;
         }
@@ -122,6 +124,7 @@ public class LSMessageQueue extends MessageQueue {
             maxOffset = 0L;
             offset2position = new ArrayList<>(256);
             offset2PMAddr = new ArrayList<>(256);
+            offset2Length = new ArrayList<>(256);
             prefetchFuture = null;
         }
         public void initPrefetchBuffer(){
@@ -452,12 +455,14 @@ public class LSMessageQueue extends MessageQueue {
         //         // }
         //     // }
         // }
+        int dataLength = doubleWriteData.remaining();
         long pmAddr = pmDoubleWrite.doubleWrite(localThreadId.get(), doubleWriteData);
         if (pmAddr != -1){
+            log.debug("get pm Addr : " + pmAddr);
             q.offset2PMAddr.add(pmAddr);
         }
 
-
+        q.offset2Length.add(dataLength);
         // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
         try {
                 // while(w.done != 1){
@@ -732,9 +737,28 @@ public class LSMessageQueue extends MessageQueue {
         // fetchStartIndex += prefetchNum;
         
         // 尝试读双写的内容
-        // if (offset < q.offset2PMAddr.size()){
-            // 可以双写
-        // }
+        if (offset < q.offset2PMAddr.size()){
+            // TODO: 需要处理一种情况：PM没写满就来读，这个怎么办？
+            // 我在测试程序里手动执行shutdown，将这些buffer刷下来
+            // 也可以在这里监测有没有完成，如果没完成就现场刷下来
+            // 可以从双写 的内容里读数据
+            long fetchMaxOffset = offset + fetchNum - 1;
+            long doubleWriteMaxOffset = q.offset2PMAddr.size()-1;
+            long doubleWriteNum = Math.min(fetchMaxOffset, doubleWriteMaxOffset) - offset + 1;
+            int intDoubleWriteNum =(int)doubleWriteNum;
+            for (int i = 0; i < intDoubleWriteNum; i++){
+                int curOffset = (int)offset+i;
+                log.debug("curOffset : " + curOffset);
+                int dataLength = q.offset2Length.get(curOffset);
+                log.debug("get from double buffer datLength " + dataLength);
+                ByteBuffer buf = ByteBuffer.allocate(dataLength);
+                long readPMAddr = q.offset2PMAddr.get(curOffset);
+                log.debug("read from pm Addr " + readPMAddr);
+                pmDoubleWrite.pool.copyToByteArray(readPMAddr, buf.array(), 0, dataLength);
+                ret.put(i, buf);
+            }
+            fetchStartIndex += intDoubleWriteNum;
+        }
 
 
 

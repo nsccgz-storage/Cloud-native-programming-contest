@@ -196,6 +196,33 @@ public class PMDoubleWrite {
 
     }
 
+    public void shutdown(){
+        // 把目前的buffer全部写到PM到，并且结束双写
+        for (int i = 0; i < maxThreadNum; i++){
+            ThreadData td = threadDatas[i];
+            if (td.block != null){
+                td.isFinished = true;
+                log.info("shutdown the double write for thread " + i);
+                // 确认刷PM任务完成
+                if (td.backgroundDoubleWriteFuture != null){
+                    while (td.backgroundDoubleWriteFuture.isDone() != true){
+                        try {
+                            Thread.sleep(1);
+                        } catch (Exception e){
+                            e.printStackTrace();
+                        }
+                    }
+                    td.backgroundDoubleWriteFuture = null;
+                }
+                // 触发刷盘任务，异步调用block的刷盘函数
+                final PMBlock backgroundBlock = td.block;
+                final ByteBuffer finalBuf = td.buf[td.curBuf];
+                pool.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+                td.block = null;
+            }
+        }
+    }
+
     public class PMBlock {
         public long addr;
         public int capacity;
@@ -227,7 +254,7 @@ public class PMDoubleWrite {
         PMBlockPool(long capacity) {
             totalCapacity = capacity;
 
-            blockSize = 4*1024*1024; // 16MiB
+            blockSize = 4*1024*1024; // 4MiB
             threadLocalBlockNum = 64;
             bigBlockSize = threadLocalBlockNum * blockSize; // 64*4MiB = 256MiB
 

@@ -186,6 +186,7 @@ public class MQBench {
 
 		if (threadId == 0){
 			log.info("step 1 ok");
+			((LSMessageQueue)mq).pmDoubleWrite.shutdown();
 			log.info("start step 2");
 			// LSMessageQueue.log.setLevel(Level.DEBUG);
 			// PMPrefetchBuffer.log.setLevel(Level.DEBUG);
@@ -284,11 +285,11 @@ public class MQBench {
 			Vector<Message> step1Msgs = new Vector<>();
 			Vector<Message> step2Msgs = new Vector<>();
 			Vector<Message> msgs = step1Msgs;
+			int lineCounter = 0;
 			while ((line = reader.readLine()) != null) {
 				// log.debug(line);
 				String item[] = line.split(",");
 				// log.debug(item[0]);
-
 				String topic = item[1]+"0"+threadId;
 				int queueId = Integer.parseInt(item[2]);
 				if (item[0].compareTo("append") == 0) {
@@ -306,6 +307,7 @@ public class MQBench {
 					// log.debug(msg);
 					msgs.add(msg);
 				}
+				lineCounter ++;
 			}
 			barrier.await();
 			long step1StartTime = System.nanoTime();
@@ -328,8 +330,10 @@ public class MQBench {
 
 			if (threadId == 0){
 				log.info("step 1 ok");
+				log.info("time of step 1: " + (double)(step1EndTime-step1StartTime)/(1000*1000*1000));
 			}
 			barrier.await();
+			// System.exit(0);
 			// Thread.sleep(20000,0);
 			barrier.await();
 			if (threadId == 0){
@@ -380,10 +384,17 @@ public class MQBench {
 		System.out.println("pmDIrPath : " + args[1]);
 		String dbPath = args[0] ;
 		String pmDirPath = args[1] ;
+		
+		// try {
+		// 	Thread.sleep(20000, 0);
+		// } catch (Exception e) {
+		// 	e.printStackTrace();
+		// }
 
-		// correctBenchByTrace(dbPath, pmDirPath);
 
-		perfBenchByTrace(dbPath, pmDirPath);
+		correctBenchByTrace(dbPath, pmDirPath);
+
+		// perfBenchByTrace(dbPath, pmDirPath);
 
 		// log.setLevel(Level.INFO);
 		// try {
