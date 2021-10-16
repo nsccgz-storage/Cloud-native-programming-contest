@@ -181,7 +181,7 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public void init(String dbDirPath, String pmDirPath) {
-        // SSDBench.runStandardBench(dbDirPath);
+        SSDBench.runStandardBench(dbDirPath);
         // PMBench.runStandardBench(pmDirPath);
 
         try {
