@@ -273,24 +273,24 @@ public class PmemManager {
 //                    return index;
 //                }
 //            } else{
-                int newIndex = chunkList.allocate(size*2);
-                if(newIndex == -1)return false;
-                long srcOffset = chunkList.getAddress(chunk, index, size);
-                long dstOffset = chunkList.getAddress(chunk, newIndex, size*2);
-                if(head <= tail){
-                    pool.copyFromPool(srcOffset+head, srcOffset, tail-head);
-                    tail = tail - head;
-                    head = 0;
-                }else{
-                    long tmp = size - head;
-                    pool.copyFromPool(srcOffset+head, srcOffset, tmp);
-                    pool.copyFromPool(srcOffset+tail, srcOffset+tmp, tail);
-                    tail = tail + tmp;
-                    head = 0;
-                }
-                chunkList.free(chunk, index, size);
-//                return newIndex;
-//            }
+            int newIndex = chunkList.allocate(size*2);
+            if(newIndex == -1)return false;
+
+            long srcOffset = chunkList.getAddress(chunk, index, size);
+            long dstOffset = chunkList.getAddress(chunkList.lastAllocateChunk, newIndex, size*2);
+            if(head <= tail){
+                pool.copyFromPool(srcOffset+head, dstOffset, tail-head);
+                tail = tail - head;
+                head = 0;
+            }else{
+                long tmp = size - head;
+                pool.copyFromPool(srcOffset+head, dstOffset, tmp);
+                pool.copyFromPool(srcOffset+tail, dstOffset+tmp, tail);
+                tail = tail + tmp;
+                head = 0;
+            }
+            chunkList.free(chunk, index, size);
+            chunk = chunkList.lastAllocateChunk;
             index = newIndex;
             size *= 2;
             handle = chunkList.getAddress(chunk, index, size);
