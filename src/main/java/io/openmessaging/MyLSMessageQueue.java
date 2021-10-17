@@ -535,7 +535,7 @@ public class MyLSMessageQueue extends MessageQueue {
         DataFile df = mqTopic.df;
 
         int loadNum = 12;
-        //pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
+        pTask.offer(new WritePmemTask(df, offset + fetchNum, loadNum, q));
 
         
         long pos = 0;
@@ -559,6 +559,7 @@ public class MyLSMessageQueue extends MessageQueue {
                 // ByteBuffer buf = df.read(pos, i, size);
                 ByteBuffer buf = df.read(pos, i);
                 if (buf != null){
+
                     buf.flip();
                     ret.put(i, buf);
                     // log.debug("read from SSD");

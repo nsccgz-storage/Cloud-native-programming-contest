@@ -6,6 +6,6 @@ package io.openmessaging;
 
 public class SimplePMmanager {
     public SimplePMmanager(String pmDirPath){
-
+        
     }
 }
