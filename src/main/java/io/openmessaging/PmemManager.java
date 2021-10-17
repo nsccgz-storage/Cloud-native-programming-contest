@@ -178,7 +178,7 @@ public class PmemManager {
                     lastAllocateChunk.next = c;
                     lastAllocateChunk = c;
                     chunkNum++;
-                    logger.info(String.format("allocate success, now chunkNum = %d",chunkNum));
+                    logger.debug(String.format("allocate success, now chunkNum = %d",chunkNum));
                     return c.allocate(size);
                 }
             }
@@ -188,19 +188,17 @@ public class PmemManager {
             c.free(index, size);
         }
 
-        public int getUsage(){
+        public double getUsage(){
             Chunk c = head;
             int ret = 0;
             while(c != null){
                 ret += c.usage;
                 c = c.next;
             }
-            return ret;
+            return (double)ret/(chunkNum * (1 << maxDepth));
         }
 
-        public int getTotalPageNum(){
-            return chunkNum * (1 << maxDepth);
-        }
+
 
         public long getAddress(Chunk c, int index, int size){
             long tmp = (index + 1 - (1L << size2Depth.get(size)))*size + c.handle;
@@ -257,7 +255,7 @@ public class PmemManager {
             }
         }
 
-        /*
+
         public boolean doubleCapacity(){
             if(index == 0)return false;
             // 检查相邻的结点是否可以分配
@@ -275,30 +273,30 @@ public class PmemManager {
 //                    return index;
 //                }
 //            } else{
-                int newIndex = chunkList.allocate(size*2);
-                if(newIndex == -1)return false;
-                long srcOffset = chunk.getAddress(index, size);
-                long dstOffset = chunk.getAddress(newIndex, size*2);
-                if(head <= tail){
-                    pool.copyFromPool(srcOffset+head, srcOffset, tail-head);
-                    tail = tail - head;
-                    head = 0;
-                }else{
-                    long tmp = size - head;
-                    pool.copyFromPool(srcOffset+head, srcOffset, tmp);
-                    pool.copyFromPool(srcOffset+tail, srcOffset+tmp, tail);
-                    tail = tail + tmp;
-                    head = 0;
-                }
-                chunk.free(index, size);
-//                return newIndex;
-//            }
+            int newIndex = chunkList.allocate(size*2);
+            if(newIndex == -1)return false;
+
+            long srcOffset = chunkList.getAddress(chunk, index, size);
+            long dstOffset = chunkList.getAddress(chunkList.lastAllocateChunk, newIndex, size*2);
+            if(head <= tail){
+                pool.copyFromPool(srcOffset+head, dstOffset, tail-head);
+                tail = tail - head;
+                head = 0;
+            }else{
+                long tmp = size - head;
+                pool.copyFromPool(srcOffset+head, dstOffset, tmp);
+                pool.copyFromPool(srcOffset+tail, dstOffset+tmp, tail);
+                tail = tail + tmp;
+                head = 0;
+            }
+            chunkList.free(chunk, index, size);
+            chunk = chunkList.lastAllocateChunk;
             index = newIndex;
             size *= 2;
-            handle = chunk.getAddress(index, size);
+            handle = chunkList.getAddress(chunk, index, size);
             return true;
         }
-        */
+
         public void headForward(int length){
             head = (head + length)%size;
             // check head ?
@@ -322,6 +320,8 @@ public class PmemManager {
 
             int bufLen = buffer.remaining();
             byte[] bytes = new byte[bufLen]; // TODO: 不可避免多一次拷贝，是否能优化
+            // 直接访问buffer.array, buffer.offset+buffer.position, buffer.remaining
+            // & update buffer position
             buffer.get(bytes);
             int position = (int) tail;
             if(size - tail >= bufLen) {
@@ -330,6 +330,7 @@ public class PmemManager {
                 }
                 copyFromArray(bytes, 0, tail, bytes.length);
                 tail += bufLen;
+                if(tail == size)tail = 0;
             }else{
                 int tmp = (int)(size - tail);
                 copyFromArray(bytes, 0, tail, tmp);
@@ -373,6 +374,7 @@ public class PmemManager {
 //                return null;
 //            }
         }
+
         public byte[] get(long offset, int length){
 //            if((head<=offset&&offset<tail)||!(tail<=offset&&offset<head)) { // check bound
                 byte[] bytes = new byte[length];
@@ -398,5 +400,8 @@ public class PmemManager {
         private void copyToArray(long srcOffset, byte[] dstArray, int dstOffset, int length){
             pool.copyToByteArray(srcOffset+handle, dstArray, dstOffset, length);
         }
+
+//        private void unsafeCopyFromArray(byte[] srcArray, int srcIndex, long dstOffset, int length){
+//        }
     }
 }
