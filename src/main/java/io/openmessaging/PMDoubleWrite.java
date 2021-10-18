@@ -144,7 +144,14 @@ public class PMDoubleWrite {
         if (td.isFinished == true){ 
             return -1;
         }
-        
+        if (td.block == null){
+            td.block = pmBlockPool.allocate();
+            if (td.block == null){ // 满了
+                td.isFinished = true;
+                log.info("the pm is full!!");
+                return -1;
+            }
+        }
         // 判断是否有空位写，如果没有，触发刷盘任务并切换buf
         if (td.buf[td.curBuf].remaining() < data.remaining()){
             // 确认刷PM任务完成
@@ -182,14 +189,6 @@ public class PMDoubleWrite {
             // td.curBuf = (td.curBuf + 1 ) % 2;
             td.curBuf = (td.curBuf + 1) & 1;
             td.buf[td.curBuf].clear();
-        }
-        if (td.block == null){
-            td.block = pmBlockPool.allocate();
-            if (td.block == null){ // 满了
-                td.isFinished = true;
-                log.info("the pm is full!!");
-                return -1;
-            }
         }
         // 获得当前地址
         ByteBuffer buf = td.buf[td.curBuf];
