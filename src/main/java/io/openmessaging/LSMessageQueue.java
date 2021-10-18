@@ -255,7 +255,7 @@ public class LSMessageQueue extends MessageQueue {
                 recover();
             }
 
-            draMbuffer = new DRAMbuffer();
+            // draMbuffer = new DRAMbuffer();
             
 
         } catch (IOException ie) {
