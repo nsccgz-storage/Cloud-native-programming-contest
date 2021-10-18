@@ -376,10 +376,11 @@ public class LSMessageQueue extends MessageQueue {
         }
         MQTopic mqTopic;
         // TODO: maybe useless
+        // 好家伙，全设成 localThread 变量
         if (threadLocalTopic2object.get() == null){
             threadLocalTopic2object.set(new HashMap<>());
             threadLocalSemaphore.set(new Semaphore(0));
-            threadLocalWriterBuffer.set(ByteBuffer.allocateDirect(512*1024));
+            threadLocalWriterBuffer.set(ByteBuffer.allocateDirect(512*1024));  //writeBuffer 只分配 512 KB 
         }
         // HashMap<String, MQTopic> topic2object = threadLocalTopic2object.get();
         mqTopic = topic2object.get(topic);
