@@ -426,6 +426,7 @@ public class LSMessageQueue extends MessageQueue {
             }
         }
 
+        // 下面代码不会执行，应该是历史遗留问题
         // // 确保和这个queue相关的异步任务已完成
         if (q.prefetchFuture != null){
             // q.prefetchFuture.cancel(false); // TODO: 好像会导致问题

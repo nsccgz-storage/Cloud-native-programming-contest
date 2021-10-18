@@ -103,7 +103,7 @@ public class PMDoubleWrite {
         ThreadData(){
             buf = new ByteBuffer[2];
             curBuf = 0;
-            buf[0] = ByteBuffer.allocate(4*1024*1024);
+            buf[0] = ByteBuffer.allocate(4*1024*1024);  // 4MB
             buf[1] = ByteBuffer.allocate(4*1024*1024);
             isFinished = false;
         }
@@ -140,18 +140,11 @@ public class PMDoubleWrite {
 
     public long doubleWrite(int threadId, ByteBuffer data){
         // 双写，返回PM地址
-        ThreadData td = threadDatas[threadId];
-        if (td.isFinished == true){
+        ThreadData td = threadDatas[threadId]; // 一个线程内的数据结构？
+        if (td.isFinished == true){ 
             return -1;
         }
-        if (td.block == null){
-            td.block = pmBlockPool.allocate();
-            if (td.block == null){
-                td.isFinished = true;
-                log.info("the pm is full!!");
-                return -1;
-            }
-        }
+        
         // 判断是否有空位写，如果没有，触发刷盘任务并切换buf
         if (td.buf[td.curBuf].remaining() < data.remaining()){
             // 确认刷PM任务完成
@@ -178,6 +171,7 @@ public class PMDoubleWrite {
 
             // 申请新block
             // 如果没法申请了，就停了，不双写了
+            // TODO: 没法申请了，那就直接粗暴地写入 DRAM 吧！反正 6G 的资源没用满
             td.block = pmBlockPool.allocate();
             if (td.block == null){
                 td.isFinished = true;
@@ -185,8 +179,17 @@ public class PMDoubleWrite {
                 return -1;
             }
             // 切换缓冲区
-            td.curBuf = (td.curBuf + 1 ) % 2; 
+            // td.curBuf = (td.curBuf + 1 ) % 2;
+            td.curBuf = (td.curBuf + 1) & 1;
             td.buf[td.curBuf].clear();
+        }
+        if (td.block == null){
+            td.block = pmBlockPool.allocate();
+            if (td.block == null){ // 满了
+                td.isFinished = true;
+                log.info("the pm is full!!");
+                return -1;
+            }
         }
         // 获得当前地址
         ByteBuffer buf = td.buf[td.curBuf];
