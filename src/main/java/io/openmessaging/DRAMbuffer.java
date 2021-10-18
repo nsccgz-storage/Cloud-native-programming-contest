@@ -10,7 +10,7 @@ public class DRAMbuffer {
     byte[] dramArray; 
     int capacity;
     public DRAMbuffer(){
-        int bufferSize = Integer.MAX_VALUE;
+        int bufferSize = Integer.MAX_VALUE - 3;
         dramArray = new byte[bufferSize];
         capacity = bufferSize;
         freeAddr = new AtomicInteger(0);
