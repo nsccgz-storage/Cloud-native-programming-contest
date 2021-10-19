@@ -48,21 +48,21 @@ public class Main {
         // }
 
 
-        // DRAMbuffer drmBuffer = new DRAMbuffer();
-        // String t = "1234567890123456789012345678901234567890";
-        // for(int i=0; i<10; i++){
-        //     DRAMbuffer.Block block = drmBuffer.allocate();
-        //     ByteBuffer tmp = ByteBuffer.wrap(t.getBytes()); 
-        //     int startAddr = block.put(tmp);
-        //     ByteBuffer tmp2 = ByteBuffer.allocate(t.length());
-        //     block.read(tmp2, t.length(), startAddr);
-        //     String t2 = new String(tmp2.array());
-        //     System.out.println(t2);
-        //     if(!t2.equals(t)){
-        //         System.out.println("error!");
-        //     }
+        DRAMbuffer drmBuffer = new DRAMbuffer();
+        String t = "1234567890123456789012345678901234567890";
+        for(int i=0; i<10; i++){
+            DRAMbuffer.Block block = drmBuffer.allocate();
+            ByteBuffer tmp = ByteBuffer.wrap(t.getBytes()); 
+            int startAddr = block.put(tmp);
+            ByteBuffer tmp2 = ByteBuffer.allocate(t.length());
+            block.read(tmp2, t.length(), startAddr);
+            String t2 = new String(tmp2.array());
+            System.out.println(t2);
+            if(!t2.equals(t)){
+                System.out.println("error!");
+            }
             
-        // }        
+        }        
     }
 
    
