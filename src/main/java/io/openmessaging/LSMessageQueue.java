@@ -236,7 +236,7 @@ public class LSMessageQueue extends MessageQueue {
             // appendWriterBuffer = new Writer[400];
 
             DRAMbufferList = new MyDRAMbuffer[45];
-            for(int i=45; i<45; i++){
+            for(int i=0; i<45; i++){
                 DRAMbufferList[i] = new MyDRAMbuffer();
             }
 
