@@ -164,7 +164,7 @@ public class LSMessageQueue extends MessageQueue {
     // public PMPrefetchBuffer pmRingBuffer;
     public PMDoubleWrite pmDoubleWrite;
     // public Writer[] appendWriterBuffer;
-    public DRAMbuffer draMbuffer;
+    public DRAMbuffer dramBuffer;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         mqConfig = config;
@@ -255,9 +255,8 @@ public class LSMessageQueue extends MessageQueue {
                 recover();
             }
 
-            draMbuffer = new DRAMbuffer();
+            dramBuffer = new DRAMbuffer();
             
-
         } catch (IOException ie) {
             ie.printStackTrace();
         }

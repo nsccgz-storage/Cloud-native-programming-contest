@@ -7,11 +7,15 @@ import java.util.concurrent.atomic.AtomicLong;
 // 所以只能先暂时实现小的
 public class DRAMbuffer {
     AtomicInteger freeAddr;
-    byte[] dramArray; 
+    // byte[] dramArray; 
+    ByteBuffer dirByteBuffer;
     int capacity;
     public DRAMbuffer(){
-        int bufferSize = 1 * 1024 * 1024 * 1024;
-        dramArray = new byte[bufferSize];
+        // 改用堆外内存分配
+        // 由于不允许使用 unsafe 的分配方式，只能使用 directoryBuffer
+        int bufferSize =  1 << 30 ; //  先分配 1 GiB
+        // dramArray = new byte[bufferSize];
+        dirByteBuffer = ByteBuffer.allocateDirect(bufferSize);
         capacity = bufferSize;
         freeAddr = new AtomicInteger(0);
     }
@@ -40,7 +44,7 @@ public class DRAMbuffer {
             // 把数据 data 写入进 dramArray 的从 startAddr, startAddr + dataSize
             byte[] tmp = data.array();
             for(int i=startAddr; i<startAddr + dataSize; i++){
-                dramArray[i] = tmp[i-startAddr];
+                // dramArray[i] = tmp[i-startAddr];
             }
             startAddr += dataSize;
             return startAddr - dataSize;
@@ -50,7 +54,7 @@ public class DRAMbuffer {
             int position = dst.position();
             byte[] tmp = dst.array();
             for(int i=position; i<dataSize; i++){
-                tmp[i] = dramArray[startAddr + i];
+               // tmp[i] = dramArray[startAddr + i];
             }
             return 0;
         }
