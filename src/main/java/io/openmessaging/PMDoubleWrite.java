@@ -107,7 +107,6 @@ public class PMDoubleWrite {
             buf[1] = ByteBuffer.allocate(4*1024*1024);
             isFinished = false;
         }
-
     }
     ThreadData[]  threadDatas;
     int maxThreadNum;

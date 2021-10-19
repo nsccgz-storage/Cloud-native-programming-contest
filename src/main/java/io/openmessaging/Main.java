@@ -6,6 +6,7 @@ import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Map;
+import java.util.Vector;
 
 public class Main {
     public static void main(String args[]) throws IOException{
@@ -48,21 +49,57 @@ public class Main {
         // }
 
 
-        DRAMbuffer drmBuffer = new DRAMbuffer();
+        MyDRAMbuffer dramBuffer = new MyDRAMbuffer();
+        
+        Vector<String> testData = new Vector<>();
+        Vector<Integer> testAddr = new Vector<>();
+
         String t = "1234567890123456789012345678901234567890";
+        ByteBuffer tmp0 = ByteBuffer.wrap(t.getBytes()); 
         for(int i=0; i<10; i++){
-            DRAMbuffer.Block block = drmBuffer.allocate();
+            
             ByteBuffer tmp = ByteBuffer.wrap(t.getBytes()); 
-            int startAddr = block.put(tmp);
+            int addr = dramBuffer.put(tmp);
+
+            if(addr == -1){
+                System.out.println("full!");
+                break;
+            }
+
+            testAddr.add(addr);
+            
+        }        
+        int i = 0;
+        for(i=0; i<10; i++){
             ByteBuffer tmp2 = ByteBuffer.allocate(t.length());
-            block.read(tmp2, t.length(), startAddr);
+            int addr = testAddr.get(i);
+            dramBuffer.read(tmp2, addr, t.length());
+            tmp2.flip();
+            ByteBuffer tmp = ByteBuffer.wrap(t.getBytes()); 
+            addr = dramBuffer.put(tmp);
+
+            testAddr.add(addr);
+
             String t2 = new String(tmp2.array());
             System.out.println(t2);
             if(!t2.equals(t)){
                 System.out.println("error!");
             }
-            
-        }        
+        }
+
+        System.out.println("---------------------------------");;
+
+        for(;i < 20; i++){
+            // ByteBuffer tmp2 = ByteBuffer.allocate(t.length());
+            int addr = testAddr.get(i);
+            ByteBuffer tmp2 = dramBuffer.read(addr, t.length());
+            // tmp2.flip();
+            //String t2 = new String(tmp2.array());
+            //System.out.println(t2);
+            if(tmp2.equals(tmp0)){
+                System.out.println("ok!");
+            }
+        }
     }
 
    
