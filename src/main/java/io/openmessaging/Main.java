@@ -55,6 +55,10 @@ public class Main {
         Vector<Integer> testAddr = new Vector<>();
 
         String t = "1234567890123456789012345678901234567890";
+        
+        byte[] data = new byte[10 * 1024];
+        for(int i=0; i<data.length; i++){}
+        
         ByteBuffer tmp0 = ByteBuffer.wrap(t.getBytes()); 
         for(int i=0; i<10; i++){
             

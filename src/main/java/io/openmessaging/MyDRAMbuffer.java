@@ -20,12 +20,12 @@ public class MyDRAMbuffer {
     
     public int put(ByteBuffer data){
         // 负数代表是从 buffer1 分配的，其中从为了使 -1 表示不能分配，所以负值 = - 原本值 - 2
-        if(data.remaining() > buffer0.slotSize){
-            int addr = buffer1.put(data);
-            return  addr == -1 ? addr : -addr - 2;
-        }else{
-            return buffer0.put(data);
+        if(data.remaining() <= buffer0.slotSize){
+            int addr = buffer0.put(data);
+            if(addr != -1) return addr;
         }
+        int addr = buffer1.put(data);
+        return  addr == -1 ? addr : -addr - 2;
     }
     public ByteBuffer read(int addr, int dataSize){
         if(addr == -1) return null;

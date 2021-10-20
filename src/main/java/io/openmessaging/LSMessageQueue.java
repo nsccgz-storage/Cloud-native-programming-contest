@@ -251,7 +251,7 @@ public class LSMessageQueue extends MessageQueue {
             }
 
             // dramBuffer = new DRAMbuffer();
-            dramBuffer = new byte[ 1 << 30];
+            // dramBuffer = new byte[ 1 << 30];
             localDramBuffer = new ThreadLocal<>();
 
             
