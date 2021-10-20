@@ -796,6 +796,8 @@ public class LSMessageQueue extends MessageQueue {
             if(q.type == 0){
                 if(offset != 0){ // 热队列
                     q.type = 1;
+                }else{
+                    q.type = 2; 
                 }
             }
         }
