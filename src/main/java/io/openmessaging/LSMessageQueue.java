@@ -485,6 +485,8 @@ public class LSMessageQueue extends MessageQueue {
             q.offset2DramAddr.add(addr);
         }else{
             q.offset2DramAddr.add(-1);
+
+            testStat.incDramFullCount();
         }
         // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
         try {
@@ -892,6 +894,9 @@ public class LSMessageQueue extends MessageQueue {
                 if(addr != -1){
                     ByteBuffer buf = dramBuffer.read(addr, dataLength);
                     ret.put(i, buf);
+
+                    testStat.incHitHotReadCount();
+
                 }else{
                     long pos = q.offset2position.get(curOffset);
                     log.debug("read position : " + pos);
@@ -901,6 +906,8 @@ public class LSMessageQueue extends MessageQueue {
                         //buf.limit(buf.capacity());
                         ret.put(i, buf);
                     }
+
+                    testStat.incMissHotReadCount();
                 }
             }
             fetchStartIndex = i;
@@ -2134,6 +2141,10 @@ public class LSMessageQueue extends MessageQueue {
             int hotFetchCount;
             int hotReadSSDCount;
 
+            int hitHotCount;
+            int missHotCount;
+            int dramBufferFullCount;
+
             public int[] bucketBound;
             public int[] bucketCount;
 
@@ -2158,6 +2169,10 @@ public class LSMessageQueue extends MessageQueue {
                 hotFetchCount = 0;
                 hotReadSSDCount = 0;
 
+                hitHotCount = 0;
+                missHotCount = 0;
+                dramBufferFullCount = 0;
+                
 
 
                 fetchCount = 0;
@@ -2246,6 +2261,19 @@ public class LSMessageQueue extends MessageQueue {
         void incColdQueueCount(){
             int id = threadId.get();
             stats[id].coldQueueCount++;
+        }
+
+        void incHitHotReadCount(){
+            int id = threadId.get();
+            stats[id].hitHotCount++;
+        }
+        void incMissHotReadCount(){
+            int id = threadId.get();
+            stats[id].missHotCount++;
+        }
+        void incDramFullCount(){
+            int id = threadId.get();
+            stats[id].dramBufferFullCount++;
         }
 
         void incFetchMsgCount(int fetchNum){
@@ -2505,30 +2533,33 @@ public class LSMessageQueue extends MessageQueue {
             StringBuilder hotDataReport = new StringBuilder();
             StringBuilder fetchCountReport = new StringBuilder();
             StringBuilder readSSDCountReport = new StringBuilder();
-            StringBuilder coldFetchCountReport = new StringBuilder();
-            StringBuilder coldReadSSDCountReport = new StringBuilder();
-            StringBuilder hotFetchCountReport = new StringBuilder();
-            StringBuilder hotReadSSDCountReport = new StringBuilder();
+            //StringBuilder coldFetchCountReport = new StringBuilder();
+            //StringBuilder coldReadSSDCountReport = new StringBuilder();
+            //StringBuilder hotFetchCountReport = new StringBuilder();
+            //StringBuilder hotReadSSDCountReport = new StringBuilder();
+            StringBuilder dramReadReport = new StringBuilder();
 
             for (int i = 0; i < getNumOfThreads; i++){
                 hotDataHitCountReport.append(String.format("%d,",(stats[i].hitHotDataCount)));
                 hotDataReport.append(String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount));
                 fetchCountReport.append(String.format("%d,",(stats[i].fetchCount)));
                 readSSDCountReport.append(String.format("%d,",(stats[i].readSSDCount)));
-                hotFetchCountReport.append(String.format("%d,",(stats[i].hotFetchCount)));
-                hotReadSSDCountReport.append(String.format("%d,",(stats[i].hotReadSSDCount)));
-                coldFetchCountReport.append(String.format("%d,",(stats[i].coldFetchCount)));
-                coldReadSSDCountReport.append(String.format("%d,",(stats[i].coldReadSSDCount)));
+                //hotFetchCountReport.append(String.format("%d,",(stats[i].hotFetchCount)));
+                //hotReadSSDCountReport.append(String.format("%d,",(stats[i].hotReadSSDCount)));
+                //coldFetchCountReport.append(String.format("%d,",(stats[i].coldFetchCount)));
+                //coldReadSSDCountReport.append(String.format("%d,",(stats[i].coldReadSSDCount)));
+                dramReadReport.append(String.format("Hot hit DRAM: %d, Hot miss DRAM: %d, full DRAM count: %d", stats[i].hitHotCount, stats[i].missHotCount, stats[i].dramBufferFullCount ));
+              
             }
             log.info("[hit hot data counter] : " + hotDataHitCountReport);
             log.info("[hit hot data] : " + hotDataReport);
             log.info("[fetch Msg Count ] : "+fetchCountReport);
             log.info("[read SSD Count] : "+readSSDCountReport);
-            log.info("[HOT fetch Msg Count ] : "+hotFetchCountReport);
-            log.info("[HOT read SSD Count] : "+hotReadSSDCountReport);
-            log.info("[COLD fetch Msg Count ] : "+coldFetchCountReport);
-            log.info("[COLD read SSD Count] : "+coldReadSSDCountReport);
-
+            //log.info("[HOT fetch Msg Count ] : "+hotFetchCountReport);
+            //log.info("[HOT read SSD Count] : "+hotReadSSDCountReport);
+            //log.info("[COLD fetch Msg Count ] : "+coldFetchCountReport);
+            //log.info("[COLD read SSD Count] : "+coldReadSSDCountReport);
+            log.info("[READ DRAM buffer info] : " + dramReadReport);
 
 
 
