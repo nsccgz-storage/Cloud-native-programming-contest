@@ -236,8 +236,8 @@ public class LSMessageQueue extends MessageQueue {
             threadLocalWriterBuffer = new ThreadLocal<>();
             // appendWriterBuffer = new Writer[400];
 
-            DRAMbufferList = new MyDRAMbuffer[45];
-            for(int i=0; i<45; i++){
+            DRAMbufferList = new MyDRAMbuffer[42];
+            for(int i=0; i<42; i++){
                 DRAMbufferList[i] = new MyDRAMbuffer();
             }
 
@@ -475,7 +475,7 @@ public class LSMessageQueue extends MessageQueue {
         q.offset2Length.add(dataLength);
 
 
-        if(q.type == 1){ // 热队列
+        if(q.type == 2){ // 冷队列
             if(localDramBuffer.get() == null){
                 // localDramBuffer.set(new MyDRAMbuffer());
                 int threadId = mqTopic.threadId;
@@ -886,7 +886,7 @@ public class LSMessageQueue extends MessageQueue {
         //         }
         //     }
         // }
-        if(q.type == 1){ // 只有热队列才有可能读 DRAM
+        if(q.type == 2){ // 只有热队列才有可能读 DRAM
             int i = 0;
             MyDRAMbuffer dramBuffer = localDramBuffer.get();
             for(i=fetchStartIndex; i < fetchNum; i++){
