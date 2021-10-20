@@ -71,19 +71,20 @@ public class Main {
         }        
         int i = 0;
         for(i=0; i<10; i++){
-            ByteBuffer tmp2 = ByteBuffer.allocate(t.length());
             int addr = testAddr.get(i);
-            dramBuffer.read(tmp2, addr, t.length());
-            tmp2.flip();
+            ByteBuffer tmp2 = dramBuffer.read(addr, t.length());
+            
             ByteBuffer tmp = ByteBuffer.wrap(t.getBytes()); 
             addr = dramBuffer.put(tmp);
 
             testAddr.add(addr);
 
-            String t2 = new String(tmp2.array());
-            System.out.println(t2);
-            if(!t2.equals(t)){
+            // String t2 = new String(tmp2.array());
+            // System.out.println(t2);
+            if(!tmp2.equals(tmp0)){
                 System.out.println("error!");
+            }else{
+                System.out.println("ok!");
             }
         }
 
