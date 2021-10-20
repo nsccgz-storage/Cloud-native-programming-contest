@@ -151,6 +151,7 @@ public class LSMessageQueue extends MessageQueue {
     public PMDoubleWrite pmDoubleWrite;
     // public Writer[] appendWriterBuffer;
     // public DRAMbuffer dramBuffer;
+    public byte[] dramBuffer;
 
     public ThreadLocal<MyDRAMbuffer> localDramBuffer;
     public MyDRAMbuffer[] DRAMbufferList;
@@ -250,6 +251,7 @@ public class LSMessageQueue extends MessageQueue {
             }
 
             // dramBuffer = new DRAMbuffer();
+            dramBuffer = new byte[ 1 << 30];
             localDramBuffer = new ThreadLocal<>();
 
             
@@ -906,9 +908,10 @@ public class LSMessageQueue extends MessageQueue {
                         //buf.position(0);
                         //buf.limit(buf.capacity());
                         ret.put(i, buf);
+                        testStat.incMissHotReadCount();
                     }
 
-                    testStat.incMissHotReadCount();
+                    
                 }
             }
             fetchStartIndex = i;
