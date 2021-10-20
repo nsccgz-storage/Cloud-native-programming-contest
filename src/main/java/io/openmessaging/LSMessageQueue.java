@@ -245,7 +245,7 @@ public class LSMessageQueue extends MessageQueue {
             }
             if (crash) {
                 log.info("recover !!");
-                // System.exit(-1);
+                System.exit(-1);
                 recover();
             }
 
@@ -482,11 +482,12 @@ public class LSMessageQueue extends MessageQueue {
 
             MyDRAMbuffer draMbuffer = localDramBuffer.get();
             int addr = draMbuffer.put(writeDramData);   
+            if(addr == -1){
+                testStat.incDramFullCount();
+            }
             q.offset2DramAddr.add(addr);
         }else{
             q.offset2DramAddr.add(-1);
-
-            testStat.incDramFullCount();
         }
         // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
         try {
@@ -2205,6 +2206,9 @@ public class LSMessageQueue extends MessageQueue {
                 ret.writeBytes = this.writeBytes;
                 ret.bucketBound = this.bucketBound.clone();
                 ret.bucketCount = this.bucketCount.clone();
+                ret.dramBufferFullCount = this.dramBufferFullCount;
+                ret.hitHotCount = this.hitHotCount;
+                ret.missHotCount = this.missHotCount;
                 return ret;
             }
             public void addSample(int len){
@@ -2548,7 +2552,7 @@ public class LSMessageQueue extends MessageQueue {
                 //hotReadSSDCountReport.append(String.format("%d,",(stats[i].hotReadSSDCount)));
                 //coldFetchCountReport.append(String.format("%d,",(stats[i].coldFetchCount)));
                 //coldReadSSDCountReport.append(String.format("%d,",(stats[i].coldReadSSDCount)));
-                dramReadReport.append(String.format("Hot hit DRAM: %d, Hot miss DRAM: %d, full DRAM count: %d", stats[i].hitHotCount, stats[i].missHotCount, stats[i].dramBufferFullCount ));
+                dramReadReport.append(String.format("Hot hit DRAM: %d, Hot miss DRAM: %d, full DRAM count: %d | ", stats[i].hitHotCount, stats[i].missHotCount, stats[i].dramBufferFullCount ));
               
             }
             log.info("[hit hot data counter] : " + hotDataHitCountReport);

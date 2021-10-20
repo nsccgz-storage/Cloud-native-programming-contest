@@ -3,6 +3,7 @@ package io.openmessaging;
 import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.Vector;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -25,7 +26,7 @@ public class MyDRAMbuffer {
 
         dirBuffer = ByteBuffer.allocateDirect(capacity);
 
-        addrPool = new LinkedList<>();
+        addrPool = new LinkedList<>(); // 或许可以直接使用数组实现？用链表性能影响？
         for(int i=0; i<slotNum; i++){
             addrPool.offer(i);
         }
