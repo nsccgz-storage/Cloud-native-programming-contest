@@ -42,7 +42,7 @@ public class MyDRAMbuffer {
         int dataSize = data.remaining();
         int addr = -1;
         for(int i=0; i<4; i++){
-            if(dataSize <= bufferArray[i].capacity){
+            if(dataSize <= bufferArray[i].slotSize){
                 addr = bufferArray[i].put(data);
                 if(addr != -1) return addr + addr2buffer[i];
             }
