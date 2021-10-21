@@ -54,7 +54,7 @@ public class MyDRAMbuffer {
         // return addr < 0 ? buffer1.read(-(addr + 2), dataSize) : buffer0.read(addr, dataSize);
         if(addr == -1) return null;
         for(int i=0 ;i<4; i++){
-            if(addr <= addr2buffer[i+1]){
+            if(addr < addr2buffer[i+1]){
                 return bufferArray[i].read(addr - addr2buffer[i], dataSize);
             }
         }

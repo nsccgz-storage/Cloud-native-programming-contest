@@ -53,16 +53,19 @@ public class Main {
         
         Vector<String> testData = new Vector<>();
         Vector<Integer> testAddr = new Vector<>();
+        Vector<Integer> testSize = new Vector<>();  
 
         String t = "1234567890123456789012345678901234567890";
         
-        byte[] data = new byte[10 * 1024];
-        for(int i=0; i<data.length; i++){}
+        byte[] data = new byte[5 * 1024];
+        for(int i=0; i<data.length; i++){
+            data[i] =  (byte)(i % 128);
+        }
         
-        ByteBuffer tmp0 = ByteBuffer.wrap(t.getBytes()); 
+        ByteBuffer tmp0 = ByteBuffer.wrap(data); 
         for(int i=0; i<10; i++){
             
-            ByteBuffer tmp = ByteBuffer.wrap(t.getBytes()); 
+            ByteBuffer tmp = ByteBuffer.wrap(data); 
             int addr = dramBuffer.put(tmp);
 
             if(addr == -1){
@@ -76,9 +79,9 @@ public class Main {
         int i = 0;
         for(i=0; i<10; i++){
             int addr = testAddr.get(i);
-            ByteBuffer tmp2 = dramBuffer.read(addr, t.length());
+            ByteBuffer tmp2 = dramBuffer.read(addr, data.length);
             
-            ByteBuffer tmp = ByteBuffer.wrap(t.getBytes()); 
+            ByteBuffer tmp = ByteBuffer.wrap(data); 
             addr = dramBuffer.put(tmp);
 
             testAddr.add(addr);
@@ -97,7 +100,7 @@ public class Main {
         for(;i < 20; i++){
             // ByteBuffer tmp2 = ByteBuffer.allocate(t.length());
             int addr = testAddr.get(i);
-            ByteBuffer tmp2 = dramBuffer.read(addr, t.length());
+            ByteBuffer tmp2 = dramBuffer.read(addr, data.length);
             // tmp2.flip();
             //String t2 = new String(tmp2.array());
             //System.out.println(t2);
