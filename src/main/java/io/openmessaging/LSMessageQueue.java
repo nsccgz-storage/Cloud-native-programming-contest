@@ -475,7 +475,7 @@ public class LSMessageQueue extends MessageQueue {
         q.offset2Length.add(dataLength);
 
 
-        if(q.type != 0){ // 冷队列
+        if(q.type == 1){ // 热队列
             if(localDramBuffer.get() == null){
                 // localDramBuffer.set(new MyDRAMbuffer());
                 int threadId = mqTopic.threadId;
@@ -886,7 +886,7 @@ public class LSMessageQueue extends MessageQueue {
         //         }
         //     }
         // }
-        if(q.type != 0){ // 只有热队列才有可能读 DRAM
+        if(q.type == 1){ // 只有热队列才有可能读 DRAM
             int i = 0;
             MyDRAMbuffer dramBuffer = localDramBuffer.get();
             for(i=fetchStartIndex; i < fetchNum; i++){
