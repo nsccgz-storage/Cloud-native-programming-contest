@@ -104,6 +104,7 @@ public class Main {
             // tmp2.flip();
             //String t2 = new String(tmp2.array());
             //System.out.println(t2);
+            System.out.println(dramBuffer.toString());
             if(tmp2.equals(tmp0)){
                 System.out.println("ok!");
             }

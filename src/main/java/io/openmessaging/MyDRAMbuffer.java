@@ -10,18 +10,17 @@ import org.apache.log4j.Logger;
 
 public class MyDRAMbuffer {
     private static final Logger log = Logger.getLogger(MyDRAMbuffer.class);
-     
-    DRAMbuffer buffer0; // small
-    DRAMbuffer buffer1; // large
-    DRAMbuffer buffer2; // larger
-    DRAMbuffer buffer3;
 
     int[] addr2buffer;
     DRAMbuffer[] bufferArray;
 
 
     public String toString(){
-        return "left0: " + buffer0.addrPool.size() + " left1: " + buffer1.addrPool.size() + " left2: " + buffer2.addrPool.size() + " left3: " + buffer3.addrPool.size();
+        StringBuilder str = new StringBuilder();
+        for(int i=0; i<bufferArray.length; ++i){
+            str.append("| left" + i + ": " + bufferArray[i].addrPool.size());
+        }
+        return str.toString();
     }
 
     public MyDRAMbuffer(){
