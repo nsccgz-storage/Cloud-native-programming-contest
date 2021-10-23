@@ -393,7 +393,10 @@ public class MQBench {
 		// 	e.printStackTrace();
 		// }
 
-
+		if(args.length == 3){
+			perfBenchByTrace(dbPath, pmDirPath);
+			return ;
+		}
 		correctBenchByTrace(dbPath, pmDirPath);
 
 		// perfBenchByTrace(dbPath, pmDirPath);

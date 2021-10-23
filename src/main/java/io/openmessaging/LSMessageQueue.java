@@ -64,7 +64,7 @@ public class LSMessageQueue extends MessageQueue {
         // boolean useStats = false;
         int writeMethod = 12;
         int numOfDataFiles = 4;
-        int maxBufNum = 10;
+        int maxBufNum = 16;
         int maxBufLength = 256*1024;
         boolean fairLock = true;
         public String toString() {
