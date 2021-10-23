@@ -13,8 +13,6 @@ public class MyDRAMbuffer {
 
     int[] addr2buffer;
     DRAMbuffer[] bufferArray;
-
-
     public String toString(){
         StringBuilder str = new StringBuilder();
         for(int i=0; i<bufferArray.length; ++i){
@@ -22,7 +20,6 @@ public class MyDRAMbuffer {
         }
         return str.toString();
     }
-
     public MyDRAMbuffer(){
 
         addr2buffer = new int[]{0, 2048, 4096, 4096 + 1024, 4096 + 1024 + 512};
