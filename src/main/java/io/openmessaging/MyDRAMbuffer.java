@@ -10,24 +10,26 @@ import org.apache.log4j.Logger;
 
 public class MyDRAMbuffer {
     private static final Logger log = Logger.getLogger(MyDRAMbuffer.class);
-     
-    DRAMbuffer buffer0; // small
-    DRAMbuffer buffer1; // large
-    DRAMbuffer buffer2; // larger
-    DRAMbuffer buffer3;
 
     int[] addr2buffer;
     DRAMbuffer[] bufferArray;
 
 
-    public String toString(){
-        return "left0: " + buffer0.addrPool.size() + " left1: " + buffer1.addrPool.size() + " left2: " + buffer2.addrPool.size() + " left3: " + buffer3.addrPool.size();
+    public String toString() {
+        StringBuilder str = new StringBuilder("");
+        for (int i = 0; i < bufferArray.length; i++) {
+            str.append(" |buffer").append(i).append(": ").append(bufferArray[i].addrPool.size());
+        }
+        return str.toString();
     }
-
     public MyDRAMbuffer(){
 
-        addr2buffer = new int[]{0, 2048, 4096, 4096 + 1024, 4096 + 1024 + 512};
-        bufferArray = new DRAMbuffer[]{new DRAMbuffer(2048, 2 * 1024), new DRAMbuffer(2048, 4 * 1024), new DRAMbuffer(1024, 8 * 1024), new DRAMbuffer(512 , 17 * 1024)};
+        addr2buffer = new int[]{0, 1024, 1024+1024, 1024+1024+1024, 1024+1024+1024+512};
+        bufferArray = new DRAMbuffer[]{
+                new DRAMbuffer(1024, 4 * 1024),
+                new DRAMbuffer(1024, 8 * 1024),
+                new DRAMbuffer(1024, 12 * 1024),
+                new DRAMbuffer(512 , 17 * 1024)};
     }
     
     public int put(ByteBuffer data){
