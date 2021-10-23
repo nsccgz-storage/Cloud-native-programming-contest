@@ -3,6 +3,7 @@ package io.openmessaging;
 import java.io.IOException;
 
 import java.nio.channels.FileChannel;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.io.RandomAccessFile;
 import java.util.concurrent.Future;
@@ -1292,11 +1293,53 @@ public class LSMessageQueue extends MessageQueue {
             }
 
         }
+    
+    public class MyByteBuffer{
+
+        int curBufIndex;
+        ByteBuffer[] commByteBuffers;
+        int minBufLen;
+        int capacity;
+        int curPositions[];
+        public MyByteBuffer(int writerQueueBufferCapacity){
+            curBufIndex = 0;
+            commByteBuffers = new ByteBuffer[2];
+            capacity = writerQueueBufferCapacity;
+            for(int i=0; i<2; i++){
+                commByteBuffers[i] = ByteBuffer.allocate(capacity);
+            }
+            minBufLen = 256 * 1024;
+            curPositions = new int[2];
+            curPositions[0] = 0;
+            curPositions[1] = 0;
+        }
+        boolean isFull(){
+            return capacity - commByteBuffers[curBufIndex].position() < minBufLen;
+        }
+        void changeBuf(){
+            curBufIndex = (curBufIndex + 1) & 1;
+            curPositions[curBufIndex] = 0;
+        }
+        ByteBuffer duplicate(int choice){
+            if(isFull()) changeBuf();
+            ByteBuffer res = commByteBuffers[curBufIndex].duplicate();
+            res.limit(capacity);
+            res.position(curPositions[curBufIndex]);
+            res = res.slice();
+            return res;
+        }
+        void updataCurPosition(int choice, int bufLength){
+            curPositions[curBufIndex] += bufLength;
+        }
+    }
 
     public class DataFile {
         public FileChannel dataFileChannel;
         public long curPosition;
-        public ByteBuffer commonWriteBuffer;
+
+        //public ByteBuffer commonWriteBuffer;
+        public MyByteBuffer commonWriteBuffer;
+
         public int writerQueueBufferCapacity;
         public Queue<Writer> writerConcurrentQueue;
 
@@ -1321,8 +1364,8 @@ public class LSMessageQueue extends MessageQueue {
                 dataFileChannel.force(true);
                 writerQueueBufferCapacity = 512*1024; // 512 KB * 4 = 1MB
                 // commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
-                commonWriteBuffer = ByteBuffer.allocateDirect(writerQueueBufferCapacity);
-                commonWriteBuffer.clear();
+                commonWriteBuffer = new MyByteBuffer(writerQueueBufferCapacity);
+                //commonWriteBuffer.clear();
 
                 writerConcurrentQueue = new ConcurrentLinkedQueue<>();
 
@@ -1372,7 +1415,7 @@ public class LSMessageQueue extends MessageQueue {
             long position = curPosition;
             position += bufMetadataLength;
 
-            ByteBuffer writerBuffer = commonWriteBuffer;
+            ByteBuffer writerBuffer = commonWriteBuffer.duplicate(0); // 0 for seqWrite
             writerBuffer.clear();
             int writeLength = 0;
             int bufNum = 0;
@@ -1418,6 +1461,8 @@ public class LSMessageQueue extends MessageQueue {
                 return ;
             }
             // 对齐 4K
+            commonWriteBuffer.updataCurPosition(0, bufLength); //  更新
+
             bufLength = bufLength + (4096 - bufLength % 4096);
 
             // log.info(writerBuffer);
@@ -1429,6 +1474,8 @@ public class LSMessageQueue extends MessageQueue {
             writerBuffer.position(0);
             // log.info(writerBuffer);
             // writerBuffer.position(0);
+            
+
             try {
                 dataFileChannel.write(writerBuffer, writePosition);
                 dataFileChannel.force(true);
@@ -1460,7 +1507,7 @@ public class LSMessageQueue extends MessageQueue {
 
         public long syncSeqWritePushConcurrentQueueHeapBatchBufferPrefetch(Short topicIndex, int queueId, ByteBuffer data, MQQueue q){
 
-            ByteBuffer writerBuffer = commonWriteBuffer;
+            ByteBuffer writerBuffer = commonWriteBuffer.duplicate(0);
 
             long position = bufMetadataLength;
             try {
@@ -1643,7 +1690,7 @@ public class LSMessageQueue extends MessageQueue {
 
         public long syncSeqWritePushConcurrentQueueHeapBatchBuffer(Short topicIndex, int queueId, ByteBuffer data){
 
-            ByteBuffer writerBuffer = commonWriteBuffer;
+            ByteBuffer writerBuffer = null;
 
             long position = bufMetadataLength;
             try {
@@ -1743,7 +1790,7 @@ public class LSMessageQueue extends MessageQueue {
 
         public long syncSeqWritePushConcurrentQueueHeapBatchBufferHotData(Short topicIndex, int queueId, ByteBuffer data, MQQueue q){
 
-            ByteBuffer writerBuffer = commonWriteBuffer;
+            ByteBuffer writerBuffer = null;
 
             long position = bufMetadataLength;
             try {
@@ -1846,7 +1893,7 @@ public class LSMessageQueue extends MessageQueue {
 
         public long syncSeqWritePushConcurrentQueueHeapBatchBuffer4K(Short topicIndex, int queueId, ByteBuffer data){
 
-            ByteBuffer writerBuffer = commonWriteBuffer;
+            ByteBuffer writerBuffer = null;
 
             long position = 0L;
             try {
