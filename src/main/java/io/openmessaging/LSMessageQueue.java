@@ -246,7 +246,7 @@ public class LSMessageQueue extends MessageQueue {
             }
             if (crash) {
                 log.info("recover !!");
-                // System.exit(-1);
+                System.exit(-1);
                 recover();
             }
 
