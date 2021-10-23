@@ -469,7 +469,7 @@ public class LSMessageQueue extends MessageQueue {
         }else{ // pmAddr 后直接写 DRAM
             // 如何设计写 DRAM 呢？
             // 初步想法是：
-            // 怎么简单怎么来：每个分配多个小池子，
+            // 怎么简单怎么来：每个分配多个小池子
         }
 
         q.offset2Length.add(dataLength);
