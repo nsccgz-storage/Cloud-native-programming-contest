@@ -486,6 +486,7 @@ public class LSMessageQueue extends MessageQueue {
             int addr = draMbuffer.put(writeDramData);   
             if(addr == -1){
                 testStat.incDramFullCount();
+                testStat.dramBufferUsedReport(draMbuffer.toString());
             }
             q.offset2DramAddr.add(addr);
         }else{
@@ -2149,6 +2150,8 @@ public class LSMessageQueue extends MessageQueue {
             int missHotCount;
             int dramBufferFullCount;
 
+            String dramBufferUsedInfo;
+
             public int[] bucketBound;
             public int[] bucketCount;
 
@@ -2281,6 +2284,10 @@ public class LSMessageQueue extends MessageQueue {
         void incDramFullCount(){
             int id = threadId.get();
             stats[id].dramBufferFullCount++;
+        }
+        void dramBufferUsedReport(String str){
+            int id = threadId.get();
+            stats[id].dramBufferUsedInfo = str;
         }
 
         void incFetchMsgCount(int fetchNum){
@@ -2545,7 +2552,7 @@ public class LSMessageQueue extends MessageQueue {
             //StringBuilder hotFetchCountReport = new StringBuilder();
             //StringBuilder hotReadSSDCountReport = new StringBuilder();
             StringBuilder dramReadReport = new StringBuilder();
-
+            StringBuffer dramBufferUesdReport = new StringBuffer();
             for (int i = 0; i < getNumOfThreads; i++){
                 hotDataHitCountReport.append(String.format("%d,",(stats[i].hitHotDataCount)));
                 hotDataReport.append(String.format("%.2f,",(double)(stats[i].hitHotDataCount)/stats[i].getRangeCount));
@@ -2556,6 +2563,8 @@ public class LSMessageQueue extends MessageQueue {
                 //coldFetchCountReport.append(String.format("%d,",(stats[i].coldFetchCount)));
                 //coldReadSSDCountReport.append(String.format("%d,",(stats[i].coldReadSSDCount)));
                 dramReadReport.append(String.format("Hot hit DRAM: %d, Hot miss DRAM: %d, full DRAM count: %d | ", stats[i].hitHotCount, stats[i].missHotCount, stats[i].dramBufferFullCount ));
+
+                dramBufferUesdReport.append(String.format("%s| ", stats[i].dramBufferUsedInfo));
               
             }
             log.info("[hit hot data counter] : " + hotDataHitCountReport);
@@ -2567,6 +2576,7 @@ public class LSMessageQueue extends MessageQueue {
             //log.info("[COLD fetch Msg Count ] : "+coldFetchCountReport);
             //log.info("[COLD read SSD Count] : "+coldReadSSDCountReport);
             log.info("[READ DRAM buffer info] : " + dramReadReport);
+            log.info("[DRAM buffer used info] : " + dramBufferUesdReport);
 
 
 

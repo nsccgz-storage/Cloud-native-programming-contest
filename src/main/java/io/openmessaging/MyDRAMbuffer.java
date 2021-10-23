@@ -19,6 +19,11 @@ public class MyDRAMbuffer {
     int[] addr2buffer;
     DRAMbuffer[] bufferArray;
 
+
+    public String toString(){
+        return "left0: " + buffer0.addrPool.size() + " left1: " + buffer1.addrPool.size() + " left2: " + buffer2.addrPool.size() + " left3: " + buffer3.addrPool.size();
+    }
+
     public MyDRAMbuffer(){
 
         addr2buffer = new int[]{0, 2048, 4096, 4096 + 1024, 4096 + 1024 + 512};
