@@ -32,13 +32,18 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Timer;
 import java.util.TimerTask;
-
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import java.util.ArrayList;
 
 import org.apache.log4j.spi.LoggerFactory;
+
+import io.openmessaging.PMwrite.PMBlock;
+
+// import io.openmessaging.PMDoubleWrite.PMBlock;
+// import io.openmessaging.PMDoubleWrite.PMBlockPool;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -204,7 +209,7 @@ public class LSMessageQueue extends MessageQueue {
             log.info("Initializing on PM : " + pmDataFile);
 
             // pmRingBuffer = new PMPrefetchBuffer(pmDataFile);
-            pmDoubleWrite = new PMDoubleWrite(pmDataFile);
+            // pmDoubleWrite = new PMDoubleWrite(pmDataFile);
 
             // pmHeap = Heap.createHeap(pmDataFile, 60L*1024L*1024L*1024L);
             // if (!isCrash){
@@ -238,6 +243,9 @@ public class LSMessageQueue extends MessageQueue {
             // appendWriterBuffer = new Writer[400];
 
             DRAMbufferList = new MyDRAMbuffer[42];
+
+            pmWrite = new PMwrite(pmDataFile);
+
             for(int i=0; i<42; i++){
                 DRAMbufferList[i] = new MyDRAMbuffer();
             }
@@ -371,7 +379,7 @@ public class LSMessageQueue extends MessageQueue {
         data.mark();
 
         ByteBuffer writeDramData = data.duplicate();
-        ByteBuffer doubleWriteData = data.duplicate();
+        // ByteBuffer doubleWriteData = data.duplicate();
         log.debug("append : "+topic+","+queueId + data);
         if (mqConfig.useStats){
             testStat.appendStart();
@@ -462,17 +470,18 @@ public class LSMessageQueue extends MessageQueue {
         //         // }
         //     // }
         // }
-        int dataLength = doubleWriteData.remaining();
-        long pmAddr = pmDoubleWrite.doubleWrite(localThreadId.get(), doubleWriteData);
-        if (pmAddr != -1){
-            log.debug("get pm Addr : " + pmAddr);
-            q.offset2PMAddr.add(pmAddr);
-        }else{ // pmAddr 后直接写 DRAM
-            // 如何设计写 DRAM 呢？
-            // 初步想法是：
-            // 怎么简单怎么来：每个分配多个小池子
-        }
-
+        // int dataLength = doubleWriteData.remaining();
+        // long pmAddr = pmDoubleWrite.doubleWrite(localThreadId.get(), doubleWriteData);
+        // if (pmAddr != -1){
+        //     log.debug("get pm Addr : " + pmAddr);
+        //     q.offset2PMAddr.add(pmAddr);
+        // }else{ // pmAddr 后直接写 DRAM
+        //     // 如何设计写 DRAM 呢？
+        //     // 初步想法是：
+        //     // 怎么简单怎么来：每个分配多个小池子
+        // }
+        
+        int dataLength = writeDramData.remaining();
         q.offset2Length.add(dataLength);
 
 
@@ -538,7 +547,7 @@ public class LSMessageQueue extends MessageQueue {
 
         log.debug("add position " + w.position);
         q.offset2position.add(w.position);
-
+        q.offset2PMAddr.add(w.pmAddr);
 
         return ret;
 
@@ -1259,6 +1268,8 @@ public class LSMessageQueue extends MessageQueue {
             MQQueue q;
             Semaphore sema;
             AtomicBoolean isDone;
+            long pmAddr;
+
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Thread t){
                 topicIndex = myTopicIndex;
                 queueId = myQueueId;
@@ -1268,6 +1279,7 @@ public class LSMessageQueue extends MessageQueue {
                 done = 0;
                 needWrite = 0;
                 position = 0L;
+                pmAddr = 0L;
             }
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Thread t, MQQueue myQ){
                 topicIndex = myTopicIndex;
@@ -1279,6 +1291,7 @@ public class LSMessageQueue extends MessageQueue {
                 needWrite = 0;
                 position = 0L;
                 q = myQ;
+                pmAddr = 0L;
             }
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Semaphore s){
                 topicIndex = myTopicIndex;
@@ -1290,9 +1303,13 @@ public class LSMessageQueue extends MessageQueue {
                 position = 0L;
                 isDone = new AtomicBoolean();
                 isDone.set(false);
+                pmAddr = 0L;
             }
 
         }
+    
+
+    PMwrite pmWrite;
     
     public class MyByteBuffer{
 
@@ -1301,35 +1318,85 @@ public class LSMessageQueue extends MessageQueue {
         int minBufLen;
         int capacity;
         int curPositions[];
+
+        PMBlock block;
+        boolean isFinished;
+        Future<Integer> backgroundDoubleWriteFuture;
+
         public MyByteBuffer(int writerQueueBufferCapacity){
             curBufIndex = 0;
             commByteBuffers = new ByteBuffer[2];
-            capacity = writerQueueBufferCapacity;
+            capacity = writerQueueBufferCapacity; // 4*1024*1024
             for(int i=0; i<2; i++){
                 commByteBuffers[i] = ByteBuffer.allocate(capacity);
             }
-            minBufLen = 256 * 1024;
+            minBufLen = 512 * 1024;
             curPositions = new int[2];
             curPositions[0] = 0;
             curPositions[1] = 0;
+            isFinished = false;
         }
-        boolean isFull(){
-            return capacity - commByteBuffers[curBufIndex].position() < minBufLen;
+        boolean writePmem(){
+            if(isFinished) return false;
+            if(block == null){
+                block = pmWrite.pmBlockPool.allocate();
+                if(block == null){
+                    isFinished = true;
+                    log.info("the pm is full!");
+                    return false;
+                }
+            }
+            
+            if(backgroundDoubleWriteFuture != null){
+                while(backgroundDoubleWriteFuture.isDone() != true){
+                    try{
+                        Thread.sleep(1);
+                    }catch(Exception e){
+                        e.printStackTrace();
+                    }
+                }
+                backgroundDoubleWriteFuture = null;
+            }
+            final PMBlock backgroundBlock = block;
+            final ByteBuffer flushBuf = commByteBuffers[curBufIndex];
+            
+            backgroundDoubleWriteFuture = pmWrite.backgroundDoubleWriteThread.submit(new Callable<Integer>(){
+                @Override
+                public Integer call() throws Exception {
+                    pmWrite.pool.copyFromByteArrayNT(flushBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+                    return 0;
+                }
+            });
+
+            block = pmWrite.pmBlockPool.allocate();
+            if(block == null){
+                isFinished = true;
+                log.info("the pm is full!!");
+                return false;
+            }
+            return true;
         }
         void changeBuf(){
             curBufIndex = (curBufIndex + 1) & 1;
             curPositions[curBufIndex] = 0;
+            commByteBuffers[curBufIndex].clear();
+        }
+        boolean isFull(){
+            return capacity - curPositions[curBufIndex] < minBufLen;
         }
         ByteBuffer duplicate(int choice){
-            if(isFull()) changeBuf();
+           
             ByteBuffer res = commByteBuffers[curBufIndex].duplicate();
             res.limit(capacity);
             res.position(curPositions[curBufIndex]);
             res = res.slice();
-            return res;
+            return res; 
         }
         void updataCurPosition(int choice, int bufLength){
             curPositions[curBufIndex] += bufLength;
+        }
+        int getAddr(){
+            return curPositions[curBufIndex];
         }
     }
 
@@ -1353,7 +1420,6 @@ public class LSMessageQueue extends MessageQueue {
         public Writer[] appendWriters;
         public int maxAppendWritersNum;
 
-
         DataFile(String dataFileName){
             try {
                 File dataFile = new File(dataFileName);
@@ -1362,7 +1428,7 @@ public class LSMessageQueue extends MessageQueue {
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
                 // dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
                 dataFileChannel.force(true);
-                writerQueueBufferCapacity = 512*1024; // 512 KB * 4 = 1MB
+                writerQueueBufferCapacity = 4*1024*1024; // 不能大于一个 block 的大小
                 // commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
                 commonWriteBuffer = new MyByteBuffer(writerQueueBufferCapacity);
                 //commonWriteBuffer.clear();
@@ -1383,6 +1449,10 @@ public class LSMessageQueue extends MessageQueue {
                 dataFileLock = new ReentrantLock();
                 appendWriters = new Writer[100];
                 maxAppendWritersNum = 10;
+
+                // block = PMBlockPool.allocate();    
+                
+
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
@@ -1415,8 +1485,24 @@ public class LSMessageQueue extends MessageQueue {
             long position = curPosition;
             position += bufMetadataLength;
 
+            // 异步刷另外一个缓冲区到 PMEM 
+            // 判断缓存区是否满了，满了，就异步刷 PMEM 
+            // 
+            if(commonWriteBuffer.isFull()){
+                commonWriteBuffer.writePmem();
+                commonWriteBuffer.changeBuf();
+            }
+            
+            // long blockAddr = block.addr; // 同一个 dataFile
+            
             ByteBuffer writerBuffer = commonWriteBuffer.duplicate(0); // 0 for seqWrite
+            int bufferStartAddr = commonWriteBuffer.getAddr();
+            PMBlock block = commonWriteBuffer.block;
+            
             writerBuffer.clear();
+
+            // log.info(writerBuffer.toString());
+
             int writeLength = 0;
             int bufNum = 0;
             int bufLength = bufMetadataLength;
@@ -1439,10 +1525,17 @@ public class LSMessageQueue extends MessageQueue {
                     log.debug("update position to : " + position);
                     bufLength += writeLength;
                     bufNum += 1;
+                    
                     writerBuffer.putShort(thisWriter.topicIndex);
                     writerBuffer.putInt(thisWriter.queueId);
                     writerBuffer.putShort(thisWriter.length);
+
+                    
+                    thisWriter.pmAddr =  block == null ? -1L :  block.addr + writerBuffer.position() + bufferStartAddr; // 直接存地址, 这个地址可以先存进去
+                    //log.info(writerBuffer.capacity());
+
                     writerBuffer.put(thisWriter.data);
+
                     if (bufNum >= maxBufNum){
                         if (mqConfig.useStats){
                             writeStat.incExceedBufNumCount();

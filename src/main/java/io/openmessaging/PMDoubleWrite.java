@@ -39,6 +39,7 @@ import java.util.ArrayList;
 
 import org.apache.log4j.spi.LoggerFactory;
 
+import io.openmessaging.LSMessageQueue.DataFile;
 import io.openmessaging.LSMessageQueue.MyByteBufferPool;
 import io.openmessaging.SSDqueue.HotData;
 
@@ -103,8 +104,8 @@ public class PMDoubleWrite {
         ThreadData(){
             buf = new ByteBuffer[2];
             curBuf = 0;
-            buf[0] = ByteBuffer.allocate(4*1024*1024);  // 4MB
-            buf[1] = ByteBuffer.allocate(4*1024*1024);
+            //buf[0] = ByteBuffer.allocate(4*1024*1024);  // 4MB
+            //buf[1] = ByteBuffer.allocate(4*1024*1024);
             isFinished = false;
         }
     }
@@ -115,7 +116,7 @@ public class PMDoubleWrite {
     public long totalCapacity;
     public MemoryPool pool;
     public PMBlockPool pmBlockPool;
-
+    public DataFile[] dataFiles;
 
 
     PMDoubleWrite(String pmDataFile){
@@ -136,6 +137,7 @@ public class PMDoubleWrite {
         backgroundDoubleWriteThread = Executors.newFixedThreadPool(4);
        
     }
+
 
     public long doubleWrite(int threadId, ByteBuffer data){
         // 双写，返回PM地址
@@ -196,7 +198,6 @@ public class PMDoubleWrite {
         return pmAddr;
 
     }
-
     public void shutdown(){
         // 把目前的buffer全部写到PM到，并且结束双写
         for (int i = 0; i < maxThreadNum; i++){
