@@ -179,13 +179,13 @@ public class LSMessageQueue extends MessageQueue {
 
         try {
              // 超时自动退出
-            new Timer("timer").schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    log.info(Thread.currentThread().getName() + " Exit !");
-                    System.exit(-1);
-                }
-            }, 620000);
+//            new Timer("timer").schedule(new TimerTask() {
+//                @Override
+//                public void run() {
+//                    log.info(Thread.currentThread().getName() + " Exit !");
+//                    System.exit(-1);
+//                }
+//            }, 620000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
