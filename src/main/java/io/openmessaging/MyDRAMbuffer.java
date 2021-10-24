@@ -73,7 +73,7 @@ public class MyDRAMbuffer {
         int capacity;
         int slotSize;
         int slotNum;
-        Queue<Integer> addrPool;
+        RingArray addrPool;
         public DRAMbuffer(int slotNum, int slotSize){
             this.slotNum = slotNum;
             // slotNum = 10;
@@ -81,12 +81,8 @@ public class MyDRAMbuffer {
             this.capacity = slotSize * slotNum; // 17 KiB * 1542 * 40 = 1.002 GiB
     
             dirBuffer = ByteBuffer.allocateDirect(capacity);
-    
-            addrPool = new LinkedList<>(); // 考虑自己使用数组实现一个？链表感觉性能不大行
-            for(int i=0; i<slotNum; i++){
-                addrPool.offer(i);
-            }
-    
+
+            addrPool = new RingArray(slotNum);
         }
         public int put(ByteBuffer data){
             if(addrPool.isEmpty()){
@@ -127,6 +123,41 @@ public class MyDRAMbuffer {
             free(addr);
     
             return res;
+        }
+    }
+
+    class RingArray{
+        int size;
+        int[] addr;
+        int head;
+        int tail;
+        public RingArray(int s){
+            size = s+1;
+            addr = new int[s+1];
+            for(int i=0; i<s; i++){
+                addr[i] = i;
+            }
+            head = 0;
+            tail = s;
+        }
+
+        boolean isEmpty(){
+            return head == tail;
+        }
+
+        int poll(){ // 没有边界检查
+            int ret = addr[head];
+            head = (head + 1) % size;
+            return ret;
+        }
+
+        void offer(int v){
+            addr[tail] = v;
+            tail = (tail + 1) % size;
+        }
+
+        int size(){
+            return (head + size - tail) % size;
         }
     }
 }
