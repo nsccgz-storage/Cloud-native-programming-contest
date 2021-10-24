@@ -172,18 +172,18 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public void init(String dbDirPath, String pmDirPath) {
-        SSDBench.runStandardBench(dbDirPath);
+//        SSDBench.runStandardBench(dbDirPath);
         // PMBench.runStandardBench(pmDirPath);
 
         try {
              // 超时自动退出
-//            new Timer("timer").schedule(new TimerTask() {
-//                @Override
-//                public void run() {
-//                    log.info(Thread.currentThread().getName() + " Exit !");
-//                    System.exit(-1);
-//                }
-//            }, 640000);
+            new Timer("timer").schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    log.info(Thread.currentThread().getName() + " Exit !");
+                    System.exit(-1);
+                }
+            }, 630000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
@@ -246,7 +246,7 @@ public class LSMessageQueue extends MessageQueue {
             }
             if (crash) {
                 log.info("recover !!");
-                System.exit(-1);
+//                System.exit(-1);
                 recover();
             }
 
@@ -788,7 +788,7 @@ public class LSMessageQueue extends MessageQueue {
                 log.debug("read from pm Addr " + readPMAddr);
 //                pmDoubleWrite.updatePoolFreeList(readPMAddr, dataLength);
                 // log.info(buf);
-                pmDoubleWrite.pool.copyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
+                pmDoubleWrite.unsafeCopyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
                 // log.info(buf);
                 ret.put(i, buf);
             }
@@ -1994,7 +1994,7 @@ public class LSMessageQueue extends MessageQueue {
             ByteBuffer readMeta = threadLocalReadMetaBuf.get();
             MyDirectBufferPool dbPool = threadLocalDirectBufferPool.get();
             MyByteBufferPool bbPool = threadLocalByteBufferPool.get();
-        
+
             readMeta.clear();
             try {
                 int ret;
@@ -2019,7 +2019,7 @@ public class LSMessageQueue extends MessageQueue {
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
-        
+
             return null;
         }
         public ByteBuffer readData(long position, int dataLength) {
