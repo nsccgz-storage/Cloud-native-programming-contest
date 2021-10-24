@@ -912,8 +912,6 @@ public class LSMessageQueue extends MessageQueue {
                         ret.put(i, buf);
                         testStat.incMissHotReadCount();
                     }
-
-                    
                 }
             }
             fetchStartIndex = i;
@@ -935,9 +933,9 @@ public class LSMessageQueue extends MessageQueue {
                 ret.put(i, buf);
             }
         }
-//        if (q.maxOffset - (offset + fetchNum) >= 4 && q.type == 2){
-//            q.type = 1; // 修改冷队列为热队列，阈值设置暂定为4
-//        }
+        if (q.maxOffset - (offset + fetchNum) <= 4 && q.type == 2){
+            q.type = 1; // 修改冷队列为热队列，阈值设置暂定为4
+        }
         // // 同步预取
         // if (q.type == 2){
         // // if (q.type == 1 || q.type == 2){
