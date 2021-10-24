@@ -362,11 +362,6 @@ public class MQBench {
 			if (threadId == 0){
 				log.info("pass !ok !!");
 			}
-
-			((LSMessageQueue)mq).close();
-
-
-
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
