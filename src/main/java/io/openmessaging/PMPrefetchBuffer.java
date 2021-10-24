@@ -1,75 +1,24 @@
 package io.openmessaging;
 
-import java.io.IOException;
-import java.nio.channels.AsynchronousFileChannel;
-import java.nio.file.StandardOpenOption;
-import java.nio.channels.CompletionHandler;
-import java.nio.channels.FileChannel;
 import java.nio.ByteBuffer;
-import java.io.RandomAccessFile;
-import java.util.concurrent.Future;
-import java.io.File;
-import java.io.IOException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.LockSupport;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
-import java.util.function.IntUnaryOperator;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Map;
 import java.util.Queue;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
-
-import org.apache.log4j.spi.LoggerFactory;
 
 import io.openmessaging.LSMessageQueue.MyByteBufferPool;
-import io.openmessaging.SSDqueue.HotData;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
-import java.util.concurrent.Callable;
-import java.lang.management.GarbageCollectorMXBean;
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
-import java.lang.management.MemoryUsage;
-import java.lang.Math;
-import java.text.Format;
-import java.util.concurrent.TimeoutException;
 
-import java.util.concurrent.locks.Condition;
-import java.nio.MappedByteBuffer;
-import java.util.Deque;
-
-import com.intel.pmem.llpl.Heap;
-import com.intel.pmem.llpl.MemoryBlock;
 import com.intel.pmem.llpl.MemoryPool;
 
 
 import sun.misc.Unsafe;
 import sun.nio.ch.DirectBuffer;
 import java.lang.reflect.Field;
-
-
-
-import java.util.Comparator;
 
 public class PMPrefetchBuffer {
     public static final Logger log = Logger.getLogger(PMPrefetchBuffer.class);

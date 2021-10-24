@@ -65,38 +65,6 @@ public class Test1 {
 		return msgs;
 	}
 
-	public static void testOne() throws IOException{
-		//Test1MessageQueue mq = new Test1MessageQueue("/mnt/nvme/mq");
-		//DefaultMessageQueueImpl mq = new DefaultMessageQueueImpl();
-		SSDqueue mq = new SSDqueue("/mnt/ssd/wyk2");
-		Vector<Message> msgs = generateOne();
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			msg.getOffset = mq.append(msg.topic, msg.queueId, msg.buf);
-			if (msg.getOffset != msg.offset) {
-				log.error("offset error !");
-			}
-		}
-		Map<Integer, ByteBuffer> result;
-		for (int i = 0; i < msgs.size(); i++) {
-			Message msg = msgs.get(i);
-			result = mq.getRange(msg.topic, msg.queueId, msg.offset, 1);
-			if (result.get(0).compareTo(msg.buf) != 0) {
-
-				log.info("topic: " + msg.topic + " id: " + msg.queueId + " offset: " + msg.offset +" buffer: "  + result.get(0));
-		
-				byte[] tmp = msg.buf.array();
-							log.info("***************real*************************");
-							for(int ii=0;  ii < tmp.length; ++ii){
-								System.out.print(tmp[ii] + " ");
-							}
-							log.info("***************end*************************");
-				log.error("data error !");
-				System.exit(0);
-			}
-		}
-	}
-
 	public static Vector<Message> generateTopic(int i) {
 		String topicName = "topic" + i;
 		Vector<Message> msgs = new Vector<>();
