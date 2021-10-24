@@ -64,7 +64,7 @@ public class LSMessageQueue extends MessageQueue {
         // boolean useStats = false;
         int writeMethod = 12;
         int numOfDataFiles = 4;
-        int maxBufNum = 16;
+        int maxBufNum = 11;
         int maxBufLength = 256*1024;
         boolean fairLock = true;
         public String toString() {
@@ -786,6 +786,7 @@ public class LSMessageQueue extends MessageQueue {
                 // ByteBuffer buf = ByteBuffer.allocate(dataLength);
                 long readPMAddr = q.offset2PMAddr.get(curOffset);
                 log.debug("read from pm Addr " + readPMAddr);
+//                pmDoubleWrite.updatePoolFreeList(readPMAddr, dataLength);
                 // log.info(buf);
                 pmDoubleWrite.pool.copyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
                 // log.info(buf);
@@ -2648,6 +2649,7 @@ public class LSMessageQueue extends MessageQueue {
             log.info(coldQueueCountReport);
             log.info(otherQueueCountReport);
 
+//            log.info("[pmem free list for this thread] "+pmDoubleWrite.getFreeListString());
 
 
 

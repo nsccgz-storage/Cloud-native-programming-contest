@@ -24,12 +24,12 @@ public class MyDRAMbuffer {
     }
     public MyDRAMbuffer(){
 
-        addr2buffer = new int[]{0, 1024, 1024+1024, 1024+1024+1024, 1024+1024+1024+512};
+        addr2buffer = new int[]{0, 800, 1600, 2400, 3400};
         bufferArray = new DRAMbuffer[]{
-                new DRAMbuffer(1024, 4 * 1024),
-                new DRAMbuffer(1024, 8 * 1024),
-                new DRAMbuffer(1024, 12 * 1024),
-                new DRAMbuffer(512 , 17 * 1024)};
+                new DRAMbuffer(800, 4 * 1024),
+                new DRAMbuffer(800, 8 * 1024),
+                new DRAMbuffer(800, 12 * 1024),
+                new DRAMbuffer(1000 , 17 * 1024)};
     }
     
     public int put(ByteBuffer data){
