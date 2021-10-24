@@ -487,8 +487,10 @@ public class LSMessageQueue extends MessageQueue {
             MyDRAMbuffer draMbuffer = localDramBuffer.get();
             int addr = draMbuffer.put(writeDramData);   
             if(addr == -1){
-                testStat.incDramFullCount();
-                testStat.dramBufferUsedReport(draMbuffer.toString());
+                if(mqConfig.useStats) {
+                    testStat.incDramFullCount();
+                    testStat.dramBufferUsedReport(draMbuffer.toString());
+                }
             }
             q.offset2DramAddr.add(addr);
         }else{
@@ -901,8 +903,7 @@ public class LSMessageQueue extends MessageQueue {
                 if(addr != -1){
                     ByteBuffer buf = dramBuffer.read(addr, dataLength);
                     ret.put(i, buf);
-
-                    testStat.incHitHotReadCount();
+                    if(mqConfig.useStats) testStat.incHitHotReadCount();
 
                 }else{
                     long pos = q.offset2position.get(curOffset);
@@ -912,7 +913,7 @@ public class LSMessageQueue extends MessageQueue {
                         //buf.position(0);
                         //buf.limit(buf.capacity());
                         ret.put(i, buf);
-                        testStat.incMissHotReadCount();
+                        if(mqConfig.useStats) testStat.incMissHotReadCount();
                     }
                 }
             }
