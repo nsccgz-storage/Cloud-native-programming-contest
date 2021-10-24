@@ -1308,13 +1308,13 @@ public class LSMessageQueue extends MessageQueue {
             for(int i=0; i<2; i++){
                 commByteBuffers[i] = ByteBuffer.allocate(capacity);
             }
-            minBufLen = 256 * 1024;
+            minBufLen = 512 * 1024;
             curPositions = new int[2];
             curPositions[0] = 0;
             curPositions[1] = 0;
         }
         boolean isFull(){
-            return capacity - commByteBuffers[curBufIndex].position() < minBufLen;
+            return capacity - curPositions[curBufIndex] < minBufLen;
         }
         void changeBuf(){
             curBufIndex = (curBufIndex + 1) & 1;
@@ -1362,7 +1362,7 @@ public class LSMessageQueue extends MessageQueue {
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
                 // dataFileChannel.truncate(100L*1024L*1024L*1024L); // 100GiB
                 dataFileChannel.force(true);
-                writerQueueBufferCapacity = 512*1024; // 512 KB * 4 = 1MB
+                writerQueueBufferCapacity = 16*512*1024; // 512 KB * 16 * 4 = 32MB
                 // commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
                 commonWriteBuffer = new MyByteBuffer(writerQueueBufferCapacity);
                 //commonWriteBuffer.clear();
@@ -1417,6 +1417,9 @@ public class LSMessageQueue extends MessageQueue {
 
             ByteBuffer writerBuffer = commonWriteBuffer.duplicate(0); // 0 for seqWrite
             writerBuffer.clear();
+
+            // log.info(writerBuffer.toString());
+
             int writeLength = 0;
             int bufNum = 0;
             int bufLength = bufMetadataLength;
@@ -1442,7 +1445,11 @@ public class LSMessageQueue extends MessageQueue {
                     writerBuffer.putShort(thisWriter.topicIndex);
                     writerBuffer.putInt(thisWriter.queueId);
                     writerBuffer.putShort(thisWriter.length);
+
+                    //log.info(writerBuffer.capacity());
+
                     writerBuffer.put(thisWriter.data);
+
                     if (bufNum >= maxBufNum){
                         if (mqConfig.useStats){
                             writeStat.incExceedBufNumCount();
