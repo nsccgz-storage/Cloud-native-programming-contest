@@ -41,6 +41,8 @@ import org.apache.log4j.spi.LoggerFactory;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import sun.nio.ch.DirectBuffer;
+
 import java.lang.ThreadLocal;
 
 import java.lang.management.ManagementFactory;
@@ -183,7 +185,7 @@ public class LSMessageQueue extends MessageQueue {
                     log.info(Thread.currentThread().getName() + " Exit !");
                     System.exit(-1);
                 }
-            }, 630000);
+            }, 620000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
@@ -992,7 +994,7 @@ public class LSMessageQueue extends MessageQueue {
     public short getAndUpdateTopicId(String topic) {
         int topicId = numOfTopics.getAndAdd(1);
         try {
-            ByteBuffer buf = ByteBuffer.allocate(128);
+            ByteBuffer buf = ByteBuffer.allocateDirect(128);
             buf.putInt(topic.length());
             buf.put(topic.getBytes());
             buf.position(0);
@@ -1431,6 +1433,7 @@ public class LSMessageQueue extends MessageQueue {
             // log.info(writerBuffer);
             // writerBuffer.position(0);
             try {
+                // TODO: 给每个DataFile分配一小块direct buffer
                 dataFileChannel.write(writerBuffer, writePosition);
                 dataFileChannel.force(true);
             } catch (Exception ie){
