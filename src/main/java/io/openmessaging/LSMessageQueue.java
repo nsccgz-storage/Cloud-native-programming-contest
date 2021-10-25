@@ -28,7 +28,7 @@ public class LSMessageQueue extends MessageQueue {
 
     public class MQConfig {
         Level logLevel = Level.INFO;
-        boolean useStats = true;
+        boolean useStats = false;
         int writeMethod = 12;
         int numOfDataFiles = 4;
         int maxBufNum = 11;
@@ -119,13 +119,13 @@ public class LSMessageQueue extends MessageQueue {
     public void init(String dbDirPath, String pmDirPath) {
         try {
              // 超时自动退出
-            new Timer("timer").schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    log.info(Thread.currentThread().getName() + " Exit !");
-                    System.exit(-1);
-                }
-            }, 610000);
+//            new Timer("timer").schedule(new TimerTask() {
+//                @Override
+//                public void run() {
+//                    log.info(Thread.currentThread().getName() + " Exit !");
+//                    System.exit(-1);
+//                }
+//            }, 610000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
@@ -171,18 +171,15 @@ public class LSMessageQueue extends MessageQueue {
                 DRAMbufferList[i] = new MyDRAMbuffer();
             }
 
-            if (mqConfig.useStats) {
-                testStat = new TestStat(dataFiles);
-            }
+//            if (mqConfig.useStats) {
+//                testStat = new TestStat(dataFiles);
+//            }
             if (crash) {
-                log.info("recover !!");
+//                log.info("recover !!");
 //                System.exit(-1);
                 recover();
             }
-
             localDramBuffer = new ThreadLocal<>();
-
-            
         } catch (IOException ie) {
             ie.printStackTrace();
         }
@@ -251,7 +248,6 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position,int dataLength) {
-
 //        log.debug("replay append : " + topic + "," + queueId + "," + position);
         MQTopic mqTopic;
         MQQueue q;
@@ -428,7 +424,7 @@ public class LSMessageQueue extends MessageQueue {
             long doubleWriteMaxOffset = q.offset2PMAddr.size()-1;
             long doubleWriteNum = Math.min(fetchMaxOffset, doubleWriteMaxOffset) - offset + 1;
             int intDoubleWriteNum =(int)doubleWriteNum;
-            for (int i = 0; i < intDoubleWriteNum; i++){
+            for(int i = 0; i < intDoubleWriteNum; i++){
                 int curOffset = (int)offset+i;
 //                log.debug("curOffset : " + curOffset);
                 int dataLength = q.offset2Length.get(curOffset);
