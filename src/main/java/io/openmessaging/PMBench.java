@@ -66,14 +66,13 @@ public class PMBench {
 
 		String type = "seqWrite";
 		int thread = 1;
-		long benchBlockSize = 4*1024L*1024*1024L;
+		long benchBlockSize = 16*1024L*1024*1024L;
 
-		for (long i = 0; i < benchBlockSize; i++){
-			pool.setByte(i, (byte)0);
-		}
+		pool.setMemoryNT((byte)0, 0, totalCapacity);
 
 		long curPosition = 0L;
-		// int ioSize = 4096;
+		// int ioSize = 4*1024;
+		// int ioSize = 1024*1024;
 		int ioSize = 4096*1024;
 		long benchCount = benchBlockSize/ioSize;
 
