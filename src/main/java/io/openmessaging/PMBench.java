@@ -26,10 +26,10 @@ public class PMBench {
 	}
     	private static final Logger log = Logger.getLogger(PMBench.class);
 	public static void main(String[] args) {
-		// benchWrite("/mnt/pmem/mq/data");
+		benchWrite("/mnt/pmem/mq/data");
 		// benchWriteUnsafe("/mnt/pmem/mq/data");
 		// benchWriteUnsafeDirect("/mnt/pmem/mq/data");
-		benchWriteUnsafeDirectNT("/mnt/pmem/mq/data");
+		// benchWriteUnsafeDirectNT("/mnt/pmem/mq/data");
 	}
 
 	public static void runStandardBench(String pmDirPath){
@@ -232,10 +232,13 @@ public class PMBench {
 		for (int i = 0; i < ioSize; i++){
 			sampleData[i] = (byte)i;
 		}
+		// ByteBuffer sampleDataBuffer = ByteBuffer.allocate(ioSize);
+		// ByteBuffer sampleDataBuffer = ByteBuffer.allocateDirect(ioSize);
 
 		log.info("start!");
 		long startTime = System.nanoTime();
 		while (curPosition < benchBlockSize){
+			// pool.copyFromByteArrayNT(sampleDataBuffer.array(), 0, curPosition, ioSize);
 			pool.copyFromByteArrayNT(sampleData, 0, curPosition, ioSize);
 			curPosition += ioSize;
 		}
