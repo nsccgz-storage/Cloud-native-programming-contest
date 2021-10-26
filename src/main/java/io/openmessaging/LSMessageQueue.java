@@ -721,7 +721,7 @@ public class LSMessageQueue extends MessageQueue {
             commByteBuffers = new ByteBuffer[bufferNum];
             capacity = 4 * (1 << 20); // 4*1024*1024
             for(int i=0; i<bufferNum; i++){
-                commByteBuffers[i] = ByteBuffer.allocateDirect(capacity);
+                commByteBuffers[i] = ByteBuffer.allocate(capacity);
             }
             minBufLen = 512 * 1024;
             curPositions = new int[bufferNum];
@@ -763,6 +763,7 @@ public class LSMessageQueue extends MessageQueue {
                 @Override
                 public Integer call() throws Exception {
                     pmWrite.pool.copyFromByteArrayNT(flushBuf.array(), 0, backgroundAddr , backgroundCapacity);
+                    // log.info("this is no error!!!!!!");
                     return 0;
                 }
             });
