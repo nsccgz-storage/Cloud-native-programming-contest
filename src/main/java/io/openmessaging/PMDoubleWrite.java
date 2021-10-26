@@ -1,76 +1,26 @@
 package io.openmessaging;
 
-import java.io.IOException;
-import java.nio.channels.AsynchronousFileChannel;
-import java.nio.file.StandardOpenOption;
-import java.nio.channels.CompletionHandler;
-import java.nio.channels.FileChannel;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
-import java.io.RandomAccessFile;
+import java.util.*;
 import java.util.concurrent.Future;
-import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.LockSupport;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Function;
-import java.util.function.IntUnaryOperator;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.Queue;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-
-import org.apache.log4j.spi.LoggerFactory;
-
-import io.openmessaging.LSMessageQueue.DataFile;
-import io.openmessaging.LSMessageQueue.MyByteBufferPool;
-import io.openmessaging.SSDqueue.HotData;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import java.lang.ThreadLocal;
 import java.util.concurrent.Callable;
-import java.lang.management.GarbageCollectorMXBean;
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
-import java.lang.management.MemoryUsage;
-import java.lang.Math;
-import java.text.Format;
-import java.util.concurrent.TimeoutException;
 
-import java.util.concurrent.locks.Condition;
-import java.nio.MappedByteBuffer;
-import java.util.Deque;
-
-import com.intel.pmem.llpl.Heap;
-import com.intel.pmem.llpl.MemoryBlock;
 import com.intel.pmem.llpl.MemoryPool;
 
 
 import sun.misc.Unsafe;
 import sun.nio.ch.DirectBuffer;
 import java.lang.reflect.Field;
-
-
-
-import java.util.Comparator;
 
 public class PMDoubleWrite {
     public static final Logger log = Logger.getLogger(PMDoubleWrite.class);
@@ -116,15 +66,15 @@ public class PMDoubleWrite {
     public long totalCapacity;
     public MemoryPool pool;
     public PMBlockPool pmBlockPool;
-    public DataFile[] dataFiles;
 
+    private long poolAddress;
 
     PMDoubleWrite(String pmDataFile){
         log.setLevel(Level.INFO);
         // log.setLevel(Level.DEBUG);
 
         totalCapacity = 60L * 1024 * 1024 * 1024;
-        pool = MemoryPool.createPool(pmDataFile, totalCapacity);
+//        pool = MemoryPool.createPool(pmDataFile, totalCapacity);
         pmBlockPool = new PMBlockPool(totalCapacity);
 
         // threadId < 50
@@ -135,7 +85,20 @@ public class PMDoubleWrite {
         }
         // backgroundDoubleWriteThread = Executors.newSingleThreadExecutor();
         backgroundDoubleWriteThread = Executors.newFixedThreadPool(4);
-       
+
+        try {
+            Class<?> aClass = Class.forName("com.intel.pmem.llpl.MemoryPoolImpl");
+            Constructor<?> constructor = aClass.getDeclaredConstructor(String.class, long.class);
+            constructor.setAccessible(true);
+            Object obj = constructor.newInstance(pmDataFile, totalCapacity);
+            Field field = aClass.getDeclaredField("poolAddress");
+            field.setAccessible(true);
+            this.poolAddress = (long) field.get(obj);
+            this.pool = (MemoryPool) obj;
+        }catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException |
+                InvocationTargetException | NoSuchFieldException e){
+            log.info(e);
+        }
     }
 
 
@@ -253,6 +216,8 @@ public class PMDoubleWrite {
         // 小池子
         public ThreadLocal<Long> threadLocalBigBlockStartAddr;
         public ThreadLocal<Integer> threadLocalBigBlockFreeOffset;
+//        public ThreadLocal<LinkedList<Node>> threadLocalFreeList;
+
         PMBlockPool(long capacity) {
             totalCapacity = capacity;
 
@@ -267,6 +232,7 @@ public class PMDoubleWrite {
             // 小池子
             threadLocalBigBlockFreeOffset = new ThreadLocal<>();
             threadLocalBigBlockStartAddr = new ThreadLocal<>();
+//            threadLocalFreeList = new ThreadLocal<>();
         }
 
         public PMBlock allocate() {
@@ -289,4 +255,73 @@ public class PMDoubleWrite {
         }
 
     }
+
+
+    public void unsafeCopyToByteArray(long srcOffset, byte[] dstArray, int dstIndex, int byteCount) {
+//        if (dstIndex < 0 || dstIndex + byteCount > dstArray.length) {
+//            throw new IndexOutOfBoundsException(indexOutOfBoundsMessage(dstIndex, byteCount));
+//        }
+//        checkBounds(srcOffset, byteCount);
+        long dstAddress = Unsafe.ARRAY_BYTE_BASE_OFFSET + (long) Unsafe.ARRAY_BYTE_INDEX_SCALE * dstIndex;
+        UNSAFE.copyMemory(null, poolAddress + srcOffset, dstArray, dstAddress, byteCount);
+    }
+
+//    public class Node{
+//        public long begin;
+//        public long end;
+//        public Node(long addr, int length){
+//            begin = addr;
+//            end = begin + length;
+//        }
+//
+//        public void merge(long addr, int length){
+//            begin = Math.min(begin, addr);
+//            end = Math.max(end, addr+length);
+//        }
+//    }
+//
+//    public void updatePoolFreeList(long addr, int length){
+//        LinkedList<Node> freeList = pmBlockPool.threadLocalFreeList.get();
+//        if(freeList == null){
+//            freeList = new LinkedList<>();
+//            pmBlockPool.threadLocalFreeList.set(freeList);
+//            freeList.add(new Node(addr, length));
+//            return ;
+//        }
+//        Iterator<Node> iterator = freeList.listIterator();
+//        int index = 0;
+//        while(iterator.hasNext()){
+//            Node node = iterator.next();
+//            if(node.begin <= addr){
+//                if(node.end >= addr){
+//                    node.merge(addr, length);
+//                    return ;
+//                }
+//            }else{
+//               if(addr + length >= node.begin){
+//                   node.merge(addr, length);
+//               }
+//               else{
+//                   freeList.add(index, new Node(addr, length));
+//               }
+//               return ;
+//            }
+//            index++;
+//        }
+//        freeList.addLast(new Node(addr, length));
+//    }
+//
+//    public String getFreeListString(){
+//        LinkedList<Node> freeList = pmBlockPool.threadLocalFreeList.get();
+//        if(freeList == null){
+//            return "";
+//        }
+//        Iterator<Node> iterator = freeList.listIterator();
+//        StringBuilder sb = new StringBuilder();
+//        while(iterator.hasNext()){
+//            Node node = iterator.next();
+//            sb.append(String.format("[%d, %d) ", node.begin, node.end));
+//        }
+//        return sb.toString();
+//    }
 }

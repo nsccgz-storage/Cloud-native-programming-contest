@@ -4,6 +4,8 @@ import java.util.concurrent.Executors;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
@@ -38,7 +40,7 @@ public class PMwrite {
         // UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
         return ;
     }
-
+    
 
     int maxThreadNum;
     
@@ -48,21 +50,44 @@ public class PMwrite {
     public MemoryPool pool;
     public PMBlockPool pmBlockPool;
 
+    private long poolAddress;
+
     PMwrite(String pmDataFile){
         log.setLevel(Level.INFO);
         // log.setLevel(Level.DEBUG);
 
         totalCapacity = 60L * 1024 * 1024 * 1024;
-        // totalCapacity = 10 * 1024 * 1024;
-        pool = MemoryPool.createPool(pmDataFile, totalCapacity);
+//        pool = MemoryPool.createPool(pmDataFile, totalCapacity);
         pmBlockPool = new PMBlockPool(totalCapacity);
 
         // threadId < 50
         maxThreadNum = 50;
         // backgroundDoubleWriteThread = Executors.newSingleThreadExecutor();
         backgroundDoubleWriteThread = Executors.newFixedThreadPool(4);
-       
+
+        try {
+            Class<?> aClass = Class.forName("com.intel.pmem.llpl.MemoryPoolImpl");
+            Constructor<?> constructor = aClass.getDeclaredConstructor(String.class, long.class);
+            constructor.setAccessible(true);
+            Object obj = constructor.newInstance(pmDataFile, totalCapacity);
+            Field field = aClass.getDeclaredField("poolAddress");
+            field.setAccessible(true);
+            this.poolAddress = (long) field.get(obj);
+            this.pool = (MemoryPool) obj;
+        }catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException |
+                InvocationTargetException | NoSuchFieldException e){
+            log.info(e);
+        }
     }
+    public void unsafeCopyToByteArray(long srcOffset, byte[] dstArray, int dstIndex, int byteCount) {
+        //        if (dstIndex < 0 || dstIndex + byteCount > dstArray.length) {
+        //            throw new IndexOutOfBoundsException(indexOutOfBoundsMessage(dstIndex, byteCount));
+        //        }
+        //        checkBounds(srcOffset, byteCount);
+        long dstAddress = Unsafe.ARRAY_BYTE_BASE_OFFSET + (long) Unsafe.ARRAY_BYTE_INDEX_SCALE * dstIndex;
+        UNSAFE.copyMemory(null, poolAddress + srcOffset, dstArray, dstAddress, byteCount);
+    }
+    
     
 
     public class PMBlock {
@@ -127,7 +152,5 @@ public class PMwrite {
 
             return new PMBlock(addr, blockSize);
         }
-
-
     }
 }

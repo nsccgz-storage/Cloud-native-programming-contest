@@ -63,7 +63,7 @@ public class Test1MessageQueue extends MessageQueue {
         // Level logLevel = Level.DEBUG;
         Level logLevel = Level.INFO;
 
-        // // version 0: local SSD: 70 MiB/s   
+        // // version 0: local SSD: 70 MiB/s
         // int numOfDataFiles = 10;
         // int minBufNum = 20; // 无效
         // int minBufLength = 32768; // 无效
@@ -72,7 +72,7 @@ public class Test1MessageQueue extends MessageQueue {
         // boolean useWriteAgg = false; // 不使用写聚合
         // boolean useWriteAggDirect = false;
 
-        // version 1: local SSD: 110MiB/s   
+        // version 1: local SSD: 110MiB/s
         // int numOfDataFiles = 4;
         // int minBufNum = 20;
         // int minBufLength = 28672;
@@ -80,7 +80,7 @@ public class Test1MessageQueue extends MessageQueue {
         // boolean fairLock = true;
         // boolean useWriteAgg = true; // 使用写聚合
 
-        // version 1: local SSD: 110MiB/s   
+        // version 1: local SSD: 110MiB/s
         // int numOfDataFiles = 4;
         // int minBufNum = 6;
         // int minBufLength = 28672;
@@ -113,7 +113,7 @@ public class Test1MessageQueue extends MessageQueue {
         // int timeOutMS = 10;
         // boolean fairLock = true;
         // boolean useWriteAgg = true; // 使用写聚合
-        // boolean useWriteAggDirect = false; 
+        // boolean useWriteAggDirect = false;
         // boolean useWriteAggHeap = false;
 
         // version 5: test for online
@@ -130,7 +130,7 @@ public class Test1MessageQueue extends MessageQueue {
         // int minBufLength = 32768;
         // int timeOutMS = 8;
         // boolean fairLock = true;
-        // int writeMethod = 1; 
+        // int writeMethod = 1;
         // 0: no write agg
         // 1: write agg (best)
         // 2: write agg direct
@@ -142,20 +142,20 @@ public class Test1MessageQueue extends MessageQueue {
         // int minBufLength = 32768;
         // int timeOutMS = 8;
         // boolean fairLock = true;
-        // int writeMethod = 4; 
-    
+        // int writeMethod = 4;
+
         int numOfDataFiles = 4;
         int minBufNum = 6;
         int minBufLength = 50*1024;
         boolean fairLock = true;
-        int writeMethod = 12; 
- 
+        int writeMethod = 12;
+
         // int numOfDataFiles = 3;
         // int minBufNum = 9;
         // int minBufLength = 72*1024;
         // boolean fairLock = true;
-        // int writeMethod = 12; 
- 
+        // int writeMethod = 12;
+
         // version just for test
         // int numOfDataFiles = 4;
         // int minBufNum = 4;
@@ -169,7 +169,7 @@ public class Test1MessageQueue extends MessageQueue {
 
 
         // int minBufLength = 32768;
-        
+
         // int minBufLength = 24576;
         // int minBufLength = 16384;
         // boolean useWriteAgg = true;
@@ -407,7 +407,7 @@ public class Test1MessageQueue extends MessageQueue {
             appendLatency /= getNumOfThreads;
             getRangeLatency /= getNumOfThreads;
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
-            
+
             // 报告总的写入大小分布
             int[] totalWriteBucketCount = new int[100];
             int[] myBucketBound = stats[0].bucketBound;
@@ -493,7 +493,7 @@ public class Test1MessageQueue extends MessageQueue {
                 curAppendLatency /= getNumOfThreads;
                 curGetRangeLatency /= getNumOfThreads;
             }
-            
+
             String appendStat = "";
             String getRangeStat = "";
             for (int i = 0; i < getNumOfThreads; i++){
@@ -514,7 +514,7 @@ public class Test1MessageQueue extends MessageQueue {
             for (int i = 0; i < dataFiles.length; i++){
                 if (oldWriteStats[i] != null){
                     // get total write stat and cur write stat
-                    
+
                     DataFile.WriteStat curWriteStat = dataFiles[i].writeStat;
                     DataFile.WriteStat oldWriteStat = oldWriteStats[i];
                     String writeReport = "";
@@ -543,7 +543,7 @@ public class Test1MessageQueue extends MessageQueue {
                     log.info(writeReport);
                     log.info("Write Size Dist : "+curWriteStat.toString());
 
- 
+
                 }
                 oldWriteStats[i] = dataFiles[i].writeStat.clone();
             }
@@ -663,7 +663,7 @@ public class Test1MessageQueue extends MessageQueue {
                 ret += bucketBound[0] + " < ";
                 for (int i = 0; i < bucketCount.length; i++){
                     ret += "[" + bucketCount[i] + "]";
-                    ret += " < " + bucketBound[i+1] + " < "; 
+                    ret += " < " + bucketBound[i+1] + " < ";
                 }
                 return ret;
             }
@@ -748,7 +748,7 @@ public class Test1MessageQueue extends MessageQueue {
             curBufLength = 0;
             minBufNum = mqConfig.minBufNum; // 缓冲在buf中的数据的个数
             curBufNum = 0; // 缓冲在buf中的数据的个数
-            
+
             writeAggDirectBufferCapacity = 1024*1024;
             writeAggDirectBuffer = ByteBuffer.allocateDirect(writeAggDirectBufferCapacity); // 1MiB 的direct buffer
             writeAggDirectBuffer.position(0);
@@ -981,7 +981,7 @@ public class Test1MessageQueue extends MessageQueue {
         // }
         public long asyncSeqWritePushQueueHeapBatchBuffer(ByteBuffer data){
             Writer w = new Writer(data, Thread.currentThread());
-            // only for debug            
+            // only for debug
             // fileLock.lock();
             // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
             // fileLock.unlock();
@@ -995,8 +995,8 @@ public class Test1MessageQueue extends MessageQueue {
             }
             return w.position;
         }
- 
- 
+
+
 
         public Long syncSeqWrite(ByteBuffer data) {
             fileLock.lock();
@@ -1185,7 +1185,7 @@ public class Test1MessageQueue extends MessageQueue {
                             curBufLength = 0;
                             curBufNum = 0;
                             writeAggCondition.signalAll();
-                       }
+                        }
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
@@ -1281,7 +1281,7 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.lock();
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
- 
+
                 log.debug("try to new a writer to queue");
                 writerQueue.addLast(w);
                 log.debug(writerQueue);
@@ -1295,7 +1295,7 @@ public class Test1MessageQueue extends MessageQueue {
                     return w.position;
                 }
                 log.debug("I am the head");
-                
+
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = mqConfig.minBufLength; // 36 KiB
@@ -1411,7 +1411,7 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.lock();
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
- 
+
                 log.debug("try to new a writer to queue");
                 writerQueue.addLast(w);
                 log.debug(writerQueue);
@@ -1425,7 +1425,7 @@ public class Test1MessageQueue extends MessageQueue {
                     return w.position;
                 }
                 log.debug("I am the head");
-                
+
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = mqConfig.minBufLength; // 36 KiB
@@ -1538,7 +1538,7 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.lock();
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
- 
+
                 // log.debug("try to new a writer to queue");
                 writerQueue.addLast(w);
                 // log.debug(writerQueue);
@@ -1552,7 +1552,7 @@ public class Test1MessageQueue extends MessageQueue {
                     return w.position;
                 }
                 log.debug("I am the head");
-                
+
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = mqConfig.minBufLength; // 36 KiB
@@ -1657,7 +1657,7 @@ public class Test1MessageQueue extends MessageQueue {
             return position;
 
         }
-    
+
         public long syncSeqWritePushQueueBatch(ByteBuffer data){
             if (threadLocalWriteMetaBuf.get() == null) {
                 threadLocalWriteMetaBuf.set(ByteBuffer.allocate(writeMetaLength));
@@ -1677,7 +1677,7 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.lock();
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
- 
+
                 log.debug("try to new a writer to queue");
                 writerQueue.addLast(w);
                 log.debug(writerQueue);
@@ -1691,7 +1691,7 @@ public class Test1MessageQueue extends MessageQueue {
                     return w.position;
                 }
                 log.debug("I am the head");
-                
+
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = mqConfig.minBufLength; // 36 KiB
@@ -1811,7 +1811,7 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.lock();
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
- 
+
                 log.debug("try to add a new writer to queue");
                 writerQueue.addLast(w);
                 log.debug(writerQueue);
@@ -1825,7 +1825,7 @@ public class Test1MessageQueue extends MessageQueue {
                     return w.position;
                 }
                 // log.debug("I am the head");
-                
+
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = mqConfig.minBufLength; // 36 KiB
@@ -1960,7 +1960,7 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.lock();
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
- 
+
                 // log.debug("try to add a new writer to queue");
                 writerQueue.add(w);
                 // log.debug(writerQueue);
@@ -1976,7 +1976,7 @@ public class Test1MessageQueue extends MessageQueue {
                 }
                 // log.debug("I am the head");
                 // writeTime = System.nanoTime();
-                
+
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = mqConfig.minBufLength; // 36 KiB
@@ -2122,7 +2122,7 @@ public class Test1MessageQueue extends MessageQueue {
                 }
                 // log.debug("I am the head");
                 // writeTime = System.nanoTime();
-                
+
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = mqConfig.minBufLength; // 36 KiB
@@ -2272,7 +2272,7 @@ public class Test1MessageQueue extends MessageQueue {
                 // fileLock.lock();
                 // writeAggCondition.await(1000, TimeUnit.MILLISECONDS);
                 // fileLock.unlock();
- 
+
                 // log.debug("try to add a new writer to queue");
                 writerQueue.add(w);
                 // log.debug(writerQueue);
@@ -2288,7 +2288,7 @@ public class Test1MessageQueue extends MessageQueue {
                 }
                 // log.debug("I am the head");
                 // writeTime = System.nanoTime();
-                
+
                 // TODO: 调参
                 int bufLength = 0;
                 int maxBufLength = mqConfig.minBufLength; // 36 KiB
@@ -2473,8 +2473,8 @@ public class Test1MessageQueue extends MessageQueue {
     public class PMCache{
         Map<String, Map<Integer, PMQueue> > pmQueueMap;
         int numOfBlocks;
-		PMMemoryBlock[] pmBlocks;
-		Heap h;
+        PMMemoryBlock[] pmBlocks;
+        Heap h;
         public class PMMemoryBlock{
             long curPosition;
             long capacity;
@@ -2548,7 +2548,7 @@ public class Test1MessageQueue extends MessageQueue {
             }
 
             // q ??
-            // FIXME: 
+            // FIXME:
             long addr = pmBlocks[pmBlockId].addData(data);
             if (addr != -1){
                 q.addrMap.put(q.maxOffset, addr);
@@ -2649,7 +2649,7 @@ public class Test1MessageQueue extends MessageQueue {
             headOffset++;
             head++;
             head = head % maxLength;
-            
+
             // method 1
             // log.debug(data);
             // datas[head] = data.slice();
@@ -2795,7 +2795,7 @@ public class Test1MessageQueue extends MessageQueue {
     /**
      * 写入一条信息； 返回的long值为offset，用于从这个topic+queueId中读取这条数据
      * offset要求topic+queueId维度内严格递增，即第一条消息offset必须是0，第二条必须是1，第三条必须是2，第一万条必须是9999。
-     * 
+     *
      * @param topic   topic的值，总共有100个topic
      * @param queueId topic下队列的id，每个topic下不超过10000个
      * @param data    信息的内容，评测时会随机产生
@@ -2933,7 +2933,7 @@ public class Test1MessageQueue extends MessageQueue {
         // DataFile df = dataFiles[dataFileId];
         // DataFile df = q.df;
         DataFile df = mqTopic.df;
-        
+
         long position = 0;
         switch (mqConfig.writeMethod) {
             case 0:
@@ -2988,7 +2988,7 @@ public class Test1MessageQueue extends MessageQueue {
 
     /**
      * 读取某个范围内的信息； 返回值中的key为消息在Map中的偏移，从0开始，value为对应的写入data。读到结尾处没有新数据了，要求返回null。
-     * 
+     *
      * @param topic    topic的值
      * @param queueId  topic下队列的id
      * @param offset   写入消息时返回的offset
@@ -3075,7 +3075,6 @@ public class Test1MessageQueue extends MessageQueue {
                 //         System.exit(0);
                 //     }
                 // }
- 
                 ret.put(i, bbf);
             }
         }

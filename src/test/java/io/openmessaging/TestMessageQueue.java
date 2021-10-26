@@ -2,31 +2,18 @@ package io.openmessaging;
 
 import org.junit.Test;
 
-import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
-import java.util.HashMap;
 import java.util.Map;
-import java.io.IOException;
 import java.lang.Integer;
 import java.util.Random;
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.Vector;
 
-import org.apache.log4j.spi.LoggerFactory;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
 import java.util.concurrent.CyclicBarrier;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import io.openmessaging.MessageQueue;
-import io.openmessaging.Test1MessageQueue;
-import io.openmessaging.DefaultMessageQueueImpl;
-import io.openmessaging.DefaultTestMessageQueueImpl;
-import io.openmessaging.Test1MessageQueueImpl;
 
 import java.nio.ByteBuffer;
 
