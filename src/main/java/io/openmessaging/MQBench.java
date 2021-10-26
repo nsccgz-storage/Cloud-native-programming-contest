@@ -83,7 +83,7 @@ public class MQBench {
 
 	public static void correctBenchByTrace(String dbPath, String pmDirPath) {
 		MessageQueue mq = new LSMessageQueue(dbPath, pmDirPath);
-		int numOfThreads = 8;
+		int numOfThreads = 4;
 		CyclicBarrier barrier = new CyclicBarrier(numOfThreads);
 		ExecutorService executor = Executors.newFixedThreadPool(numOfThreads);
 		long startTime = System.nanoTime();
@@ -130,6 +130,7 @@ public class MQBench {
 		Vector<Message> step1Msgs = new Vector<>();
 		Vector<Message> step2Msgs = new Vector<>();
 		Vector<Message> msgs = step1Msgs;
+		int cnt = 10000;
 		while ((line = reader.readLine()) != null) {
 			// log.debug(line);
 			String item[] = line.split(",");
@@ -142,6 +143,7 @@ public class MQBench {
 				Message msg = new Message(topic, queueId, dataLength, sampleData);
 				// log.debug(msg);
 				msgs.add(msg);
+				cnt--;
 			} else if (item[0].compareTo("getRange") == 0) {
 				if (msgs.equals(step1Msgs)) {
 					msgs = step2Msgs;
@@ -150,8 +152,13 @@ public class MQBench {
 				int fetchNum = Integer.parseInt(item[4]);
 				Message msg = new Message(topic, queueId, offset, fetchNum);
 				// log.debug(msg);
+				
+
 				msgs.add(msg);
+				cnt--;
 			}
+			
+			// if(cnt <= 0) break;
 		}
 		barrier.await();
 		if (threadId == 0){
@@ -186,7 +193,7 @@ public class MQBench {
 
 		if (threadId == 0){
 			log.info("step 1 ok");
-			((LSMessageQueue)mq).pmDoubleWrite.shutdown();
+			((LSMessageQueue)mq).pmWriteShutdown();
 			log.info("start step 2");
 			// LSMessageQueue.log.setLevel(Level.DEBUG);
 			// PMPrefetchBuffer.log.setLevel(Level.DEBUG);
@@ -213,7 +220,20 @@ public class MQBench {
 							log.error("j : "+ j);
 							log.error(msg.results.get(j));
 							log.error(trueResult.get(j));
+							log.error("[READ FROM PMEM] "+ msg.topic + " " + msg.queueId + " " + (msg.offset + j) + " data remaining: " + msg.results.get(j).remaining());
+
+							// check
+							ByteBuffer tmp = ((LSMessageQueue)mq).debugReadCheck(msg.topic, msg.queueId, msg.offset + j);
+							if(tmp != null && tmp.remaining() >= Short.BYTES * 2 + Integer.BYTES + Long.BYTES){
+								log.error("[CHECK FROM PMEM ] topic: " + tmp.getShort() + " queueId: " + tmp.getInt() + " length: " + tmp.getShort());
+								log.error("[REAL] topic: " + msg.topic + " queueId: " + msg.queueId + " real length: " + trueResult.get(j).remaining());
+							}else{
+								log.error("[NULL ] data remaining is: " + tmp.remaining());
+							}
+							
 							System.exit(-1);
+						}else{
+							// log.info("ok!!");
 						}
 					}
 
@@ -393,7 +413,7 @@ public class MQBench {
 		// 	e.printStackTrace();
 		// }
 
-
+		log.info("hello from MQbench");
 		correctBenchByTrace(dbPath, pmDirPath);
 
 		// perfBenchByTrace(dbPath, pmDirPath);
