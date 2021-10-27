@@ -3,8 +3,7 @@ package io.openmessaging;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
-import java.util.*;
+import java.nio.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -59,6 +58,7 @@ public class PMDoubleWrite {
     public PMBlockPool pmBlockPool;
 
     private long poolAddress;
+    Method nativeCopyFromByteArrayNT;
 
     PMDoubleWrite(String pmDataFile){
         log.setLevel(Level.INFO);
@@ -77,18 +77,26 @@ public class PMDoubleWrite {
         backgroundDoubleWriteThread = Executors.newFixedThreadPool(4);
 
         try {
-            Class<?> aClass = Class.forName("com.intel.pmem.llpl.MemoryPoolImpl");
-            Constructor<?> constructor = aClass.getDeclaredConstructor(String.class, long.class);
+
+            Class<?> memoryPoolClass = Class.forName("com.intel.pmem.llpl.MemoryPoolImpl");
+            Constructor<?> constructor = memoryPoolClass.getDeclaredConstructor(String.class, long.class);
             constructor.setAccessible(true);
             Object obj = constructor.newInstance(pmDataFile, totalCapacity);
-            Field field = aClass.getDeclaredField("poolAddress");
+            Field field = memoryPoolClass.getDeclaredField("poolAddress");
             field.setAccessible(true);
             this.poolAddress = (long) field.get(obj);
             this.pool = (MemoryPool) obj;
+
+            nativeCopyFromByteArrayNT = memoryPoolClass.getDeclaredMethod(
+                    "nativeCopyFromByteArrayNT",byte[].class, int.class, long.class, int.class);
+            nativeCopyFromByteArrayNT.setAccessible(true);
         }catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException |
                 InvocationTargetException | NoSuchFieldException e){
             log.info(e);
         }
+
+        // iterate pmem space, reducing page fault during write and read
+        this.pool.setMemory((byte)0, 0, 60L*1024L*1024L*1024L);
     }
 
     public long doubleWrite(int threadId, ByteBuffer data){
@@ -124,7 +132,7 @@ public class PMDoubleWrite {
             td.backgroundDoubleWriteFuture = backgroundDoubleWriteThread.submit(new Callable<Integer>(){
                 @Override
                 public Integer call() throws Exception {
-                    pool.copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+                    copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
                     return 0;
                 }
             });
@@ -172,7 +180,7 @@ public class PMDoubleWrite {
                 // 触发刷盘任务，异步调用block的刷盘函数
                 final PMBlock backgroundBlock = td.block;
                 final ByteBuffer finalBuf = td.buf[td.curBuf];
-                pool.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+                this.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
                 td.block = null;
             }
         }
@@ -243,19 +251,25 @@ public class PMDoubleWrite {
         }
     }
 
-
     public void unsafeCopyToByteArray(long srcOffset, byte[] dstArray, int dstIndex, int byteCount) {
         long dstAddress = Unsafe.ARRAY_BYTE_BASE_OFFSET + (long) Unsafe.ARRAY_BYTE_INDEX_SCALE * dstIndex;
         UNSAFE.copyMemory(null, poolAddress + srcOffset, dstArray, dstAddress, byteCount);
     }
 
-    public static void copyFromDirectBufferToPM(DirectBuffer srcBuf, MemoryPool dstPool, long PMAddr, int length){
-        // TODO: 实现DirectBuffer 复制到 PM （llpl原来不支持这个，不过可以自己实现）
-//         long addr = srcBuf.address();
-        // Field pmAddrField = dstPool.getClass().getDeclaredField("poolAddress");
-        // pmAddrField.setAccessible(true);
-        // long pmPoolAddr = pmAddrField.get(dstPool);
-//         UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
-    }
+//    public static void copyFromDirectBufferToPM(DirectBuffer srcBuf, MemoryPool dstPool, long PMAddr, int length){
+//        // TODO: 实现DirectBuffer 复制到 PM （llpl原来不支持这个，不过可以自己实现）
+////         long addr = srcBuf.address();
+//        // Field pmAddrField = dstPool.getClass().getDeclaredField("poolAddress");
+//        // pmAddrField.setAccessible(true);
+//        // long pmPoolAddr = pmAddrField.get(dstPool);
+////         UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
+//    }
 
+    public void copyFromByteArrayNT(byte[] srcArray, int srcIndex, long dstOffset, int byteCount) {
+        try {
+            nativeCopyFromByteArrayNT.invoke(null, srcArray, srcIndex, poolAddress + dstOffset, byteCount);
+        }catch (InvocationTargetException | IllegalAccessException e){
+            log.info(e);
+        }
+    }
 }

@@ -28,12 +28,11 @@ public class LSMessageQueue extends MessageQueue {
 
     public class MQConfig {
         Level logLevel = Level.INFO;
-        boolean useStats = false;
+        boolean useStats = true;
         int writeMethod = 12;
         int numOfDataFiles = 4;
         int maxBufNum = 11;
         int maxBufLength = 256*1024;
-        boolean fairLock = true;
         public String toString() {
             return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
         }
@@ -113,19 +112,19 @@ public class LSMessageQueue extends MessageQueue {
         // PMBench.runStandardBench(pmDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath, pmDirPath);
-
+        log.info("init ok");
     }
 
     public void init(String dbDirPath, String pmDirPath) {
         try {
-             // 超时自动退出
+            // 超时自动退出
 //            new Timer("timer").schedule(new TimerTask() {
 //                @Override
 //                public void run() {
 //                    log.info(Thread.currentThread().getName() + " Exit !");
 //                    System.exit(-1);
 //                }
-//            }, 610000);
+//            }, 710000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
@@ -171,9 +170,9 @@ public class LSMessageQueue extends MessageQueue {
                 DRAMbufferList[i] = new MyDRAMbuffer();
             }
 
-//            if (mqConfig.useStats) {
-//                testStat = new TestStat(dataFiles);
-//            }
+            if (mqConfig.useStats) {
+                testStat = new TestStat(dataFiles);
+            }
             if (crash) {
 //                log.info("recover !!");
 //                System.exit(-1);
@@ -279,10 +278,10 @@ public class LSMessageQueue extends MessageQueue {
         ByteBuffer writeDramData = data.duplicate();
         ByteBuffer doubleWriteData = data.duplicate();
 //        log.debug("append : "+topic+","+queueId + data);
-//        if (mqConfig.useStats){
-//            testStat.appendStart();
-//            testStat.appendUpdateStat(topic, queueId, data);
-//        }
+        if (mqConfig.useStats){
+            testStat.appendStart();
+            testStat.appendUpdateStat(topic, queueId, data);
+        }
         MQTopic mqTopic;
         // TODO: maybe useless
         if (threadLocalSemaphore.get() == null){
@@ -316,9 +315,9 @@ public class LSMessageQueue extends MessageQueue {
             q.dbPool = threadLocalDirectBufferPool.get();
 
             mqTopic.id2queue.put(queueId, q);
-//            if (mqConfig.useStats){
-//                testStat.incQueueCount();
-//            }
+            if (mqConfig.useStats){
+                testStat.incQueueCount();
+            }
         }
 //        log.debug("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
 
@@ -344,12 +343,12 @@ public class LSMessageQueue extends MessageQueue {
 
             MyDRAMbuffer draMbuffer = localDramBuffer.get();
             int addr = draMbuffer.put(writeDramData);   
-//            if(addr == -1){
-//                if(mqConfig.useStats) {
-//                    testStat.incDramFullCount();
-//                    testStat.dramBufferUsedReport(draMbuffer.toString());
-//                }
-//            }
+            if(addr == -1){
+                if(mqConfig.useStats) {
+                    testStat.incDramFullCount();
+                    testStat.dramBufferUsedReport(draMbuffer.toString());
+                }
+            }
             q.offset2DramAddr.add(addr);
         }else{
             q.offset2DramAddr.add(-1);
@@ -386,10 +385,10 @@ public class LSMessageQueue extends MessageQueue {
 
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-//        if (mqConfig.useStats){
-//            testStat.getRangeStart();
-//            testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
-//        }
+        if (mqConfig.useStats){
+            testStat.getRangeStart();
+            testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
+        }
         Map<Integer, ByteBuffer> ret = new HashMap<>();
         MQTopic mqTopic;
         MQQueue q;
@@ -463,14 +462,14 @@ public class LSMessageQueue extends MessageQueue {
                 if(addr != -1){
                     ByteBuffer buf = dramBuffer.read(addr, dataLength);
                     ret.put(i, buf);
-//                    if(mqConfig.useStats) testStat.incHitHotReadCount();
+                    if(mqConfig.useStats) testStat.incHitHotReadCount();
                 }else{
                     long pos = q.offset2position.get(curOffset);
 //                    log.debug("read position : " + pos);
                     ByteBuffer buf = df.readData(pos,dataLength);
                     if (buf != null){
                         ret.put(i, buf);
-//                        if(mqConfig.useStats) testStat.incMissHotReadCount();
+                        if(mqConfig.useStats) testStat.incMissHotReadCount();
                     }
                 }
             }
@@ -733,15 +732,15 @@ public class LSMessageQueue extends MessageQueue {
                     writerBuffer.putShort(thisWriter.length);
                     writerBuffer.put(thisWriter.data);
                     if (bufNum >= maxBufNum){
-//                        if (mqConfig.useStats){
-//                            writeStat.incExceedBufNumCount();
-//                        }
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
                         break;
                     }
                     if (bufLength >= maxBufLength){
-//                        if (mqConfig.useStats){
-//                            writeStat.incExceedBufLengthCount();
-//                        }
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
                         break;
                     }
                 }
@@ -775,9 +774,9 @@ public class LSMessageQueue extends MessageQueue {
             }
 
             curPosition += bufLength;
-//            if (mqConfig.useStats){
-//                writeStat.addSample(bufLength);
-//            }
+            if (mqConfig.useStats){
+                writeStat.addSample(bufLength);
+            }
 //            log.debug("df.curPosition : " + curPosition);
         }
 
