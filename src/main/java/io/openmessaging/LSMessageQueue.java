@@ -117,14 +117,6 @@ public class LSMessageQueue extends MessageQueue {
 
     public void init(String dbDirPath, String pmDirPath) {
         try {
-            // 超时自动退出
-//            new Timer("timer").schedule(new TimerTask() {
-//                @Override
-//                public void run() {
-//                    log.info(Thread.currentThread().getName() + " Exit !");
-//                    System.exit(-1);
-//                }
-//            }, 710000);
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
@@ -177,6 +169,15 @@ public class LSMessageQueue extends MessageQueue {
 //                log.info("recover !!");
 //                System.exit(-1);
                 recover();
+            }else{
+                // 超时自动退出
+                new Timer("timer").schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        log.info(Thread.currentThread().getName() + " Exit !");
+                        System.exit(-1);
+                    }
+                }, 610000);
             }
             localDramBuffer = new ThreadLocal<>();
         } catch (IOException ie) {

@@ -49,31 +49,6 @@ public class Main {
         //         System.out.println("" + entry.getKey() + " : " + new String(entry.getValue().array()));
         //     }
         // }
-
-
-//
-        try {
-            while (true) {
-                func1();
-                func2();
-                func3();
-            }
-        }catch (InterruptedException e){
-            e.printStackTrace();
-        }
-
-    }
-
-    public static void func1() throws InterruptedException { //调用第一个方法，需要100ms
-        Thread.sleep(100L);
-    }
-
-    public static void func2() throws InterruptedException { //调用第二个方法，需要500ms
-        Thread.sleep(500L);
-    }
-
-    public static void func3() throws InterruptedException { //调用第三个方法，需要1500ms
-        Thread.sleep(1500L);
     }
 }
 

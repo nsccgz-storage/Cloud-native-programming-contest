@@ -23,8 +23,8 @@ current=`date "+%Y-%m-%d-%H-%M-%S"`
 LOGDIR=/home/wxr/project/Cloud-native-programming-contest/mylogs
 LOG_PATH=${LOGDIR}/${current}.log
 
-#DBDIR=/mnt/nvme/mq
-DBDIR=/mnt/ssd/wxr
+DBDIR=/mnt/nvme/mq
+#DBDIR=/mnt/ssd/wxr
 PMEMDIR=/mnt/pmem/wxr
 
 ulimit -s unlimited
@@ -45,7 +45,7 @@ ls -l ${PMEMDIR}
 
 mvn clean package -Dmaven.test.skip=true assembly:single
 
-taskset -c 5-7 java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx128g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMEMDIR} 0 | tee ${LOG_PATH}
+taskset -c 5-8 java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx128g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMEMDIR} 0 | tee ${LOG_PATH}
 
 ls -l ${DBDIR}
 ls -l ${PMEMDIR}
