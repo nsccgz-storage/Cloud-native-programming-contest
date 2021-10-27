@@ -409,9 +409,9 @@ public class MQBench {
 		// }
 
 		log.info("hello from MQbench");
-		correctBenchByTrace(dbPath, pmDirPath);
+		// correctBenchByTrace(dbPath, pmDirPath);
 
-		// perfBenchByTrace(dbPath, pmDirPath);
+		perfBenchByTrace(dbPath, pmDirPath);
 
 		// log.setLevel(Level.INFO);
 		// try {

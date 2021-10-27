@@ -319,10 +319,10 @@ public class LSMessageQueue extends MessageQueue {
         ByteBuffer writeDramData = data.duplicate();
         ByteBuffer doubleWriteData = data.duplicate();
 //        log.debug("append : "+topic+","+queueId + data);
-//        if (mqConfig.useStats){
-//            testStat.appendStart();
-//            testStat.appendUpdateStat(topic, queueId, data);
-//        }
+       if (mqConfig.useStats){
+           testStat.appendStart();
+           testStat.appendUpdateStat(topic, queueId, data);
+       }
         MQTopic mqTopic;
         // TODO: maybe useless
         if (threadLocalSemaphore.get() == null){
@@ -356,9 +356,9 @@ public class LSMessageQueue extends MessageQueue {
             q.dbPool = threadLocalDirectBufferPool.get();
 
             mqTopic.id2queue.put(queueId, q);
-//            if (mqConfig.useStats){
-//                testStat.incQueueCount();
-//            }
+           if (mqConfig.useStats){
+               testStat.incQueueCount();
+           }
         }
 //        log.debug("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
 
@@ -374,12 +374,12 @@ public class LSMessageQueue extends MessageQueue {
 
             MyDRAMbuffer draMbuffer = localDramBuffer.get();
             int addr = draMbuffer.put(writeDramData);   
-//            if(addr == -1){
-//                if(mqConfig.useStats) {
-//                    testStat.incDramFullCount();
-//                    testStat.dramBufferUsedReport(draMbuffer.toString());
-//                }
-//            }
+           if(addr == -1){
+               if(mqConfig.useStats) {
+                   testStat.incDramFullCount();
+                   testStat.dramBufferUsedReport(draMbuffer.toString());
+               }
+           }
             q.offset2DramAddr.add(addr);
         }else{
             q.offset2DramAddr.add(-1);
@@ -423,10 +423,10 @@ public class LSMessageQueue extends MessageQueue {
     }
     @Override
     public Map<Integer, ByteBuffer> getRange(String topic, int queueId, long offset, int fetchNum) {
-//        if (mqConfig.useStats){
-//            testStat.getRangeStart();
-//            testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
-//        }
+       if (mqConfig.useStats){
+           testStat.getRangeStart();
+           testStat.getRangeUpdateStat(topic, queueId, offset, fetchNum);
+       }
         Map<Integer, ByteBuffer> ret = new HashMap<>();
         MQTopic mqTopic;
         MQQueue q;
@@ -499,14 +499,14 @@ public class LSMessageQueue extends MessageQueue {
                 if(addr != -1){
                     ByteBuffer buf = dramBuffer.read(addr, dataLength);
                     ret.put(i, buf);
-//                    if(mqConfig.useStats) testStat.incHitHotReadCount();
+                   if(mqConfig.useStats) testStat.incHitHotReadCount();
                 }else{
                     long pos = q.offset2position.get(curOffset);
 //                    log.debug("read position : " + pos);
                     ByteBuffer buf = df.readData(pos,dataLength);
                     if (buf != null){
                         ret.put(i, buf);
-//                        if(mqConfig.useStats) testStat.incMissHotReadCount();
+                       if(mqConfig.useStats) testStat.incMissHotReadCount();
                     }
                 }
             }
@@ -585,7 +585,7 @@ public class LSMessageQueue extends MessageQueue {
 //            log.debug(buf);
             metadataFileChannel.write(buf, (topicId-1)*128);
             metadataFileChannel.force(true);
-//            log.info("get topic id : " + topicId );
+           log.info("get topic id : " + topicId );
         } catch (IOException ie){
             ie.printStackTrace();
         }
@@ -1272,7 +1272,7 @@ public class LSMessageQueue extends MessageQueue {
             int id = threadId.get();
             if (stats[id].appendStartTime == 0L) {
                 stats[id].appendStartTime = System.nanoTime();
-                // log.info("init append time");
+                log.info("init append time");
             }
         }
 
@@ -1281,7 +1281,7 @@ public class LSMessageQueue extends MessageQueue {
             int id = threadId.get();
             if (stats[id].getRangeStartTime == 0L) {
                 stats[id].getRangeStartTime = System.nanoTime();
-                // log.info("init getRange time");
+                log.info("init getRange time");
             }
         }
 
