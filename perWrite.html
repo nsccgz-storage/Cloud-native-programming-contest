@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<style>
+	body {margin: 0; padding: 10px; background-color: #ffffff}
+	h1 {margin: 5px 0 0 0; font-size: 18px; font-weight: normal; text-align: center}
+	header {margin: -24px 0 5px 0; line-height: 24px}
+	button {font: 12px sans-serif; cursor: pointer}
+	p {margin: 5px 0 5px 0}
+	a {color: #0366d6}
+	#hl {position: absolute; display: none; overflow: hidden; white-space: nowrap; pointer-events: none; background-color: #ffffe0; outline: 1px solid #ffc000; height: 15px}
+	#hl span {padding: 0 3px 0 3px}
+	#status {overflow: hidden; white-space: nowrap}
+	#match {overflow: hidden; white-space: nowrap; display: none; float: right; text-align: right}
+	#reset {cursor: pointer}
+</style>
+</head>
+<body style='font: 12px Verdana, sans-serif'>
+<h1>CPU profile</h1>
+<header style='text-align: left'><button id='reverse' title='Reverse'>&#x1f53b;</button>&nbsp;&nbsp;<button id='search' title='Search'>&#x1f50d;</button></header>
+<header style='text-align: right'>Produced by <a href='https://github.com/jvm-profiling-tools/async-profiler'>async-profiler</a></header>
+<canvas id='canvas' style='width: 100%; height: 528px'></canvas>
+<div id='hl'><span></span></div>
+<p id='match'>Matched: <span id='matchval'></span> <span id='reset' title='Clear'>&#x274c;</span></p>
+<p id='status'>&nbsp;</p>
+<script>
+	// Copyright 2020 Andrei Pangin
+	// Licensed under the Apache License, Version 2.0.
+	'use strict';
+	var root, rootLevel, px, pattern;
+	var reverse = false;
+	const levels = Array(33);
+	for (let h = 0; h < levels.length; h++) {
+		levels[h] = [];
+	}
+
+	const canvas = document.getElementById('canvas');
+	const c = canvas.getContext('2d');
+	const hl = document.getElementById('hl');
+	const status = document.getElementById('status');
+
+	const canvasWidth = canvas.offsetWidth;
+	const canvasHeight = canvas.offsetHeight;
+	canvas.style.width = canvasWidth + 'px';
+	canvas.width = canvasWidth * (devicePixelRatio || 1);
+	canvas.height = canvasHeight * (devicePixelRatio || 1);
+	if (devicePixelRatio) c.scale(devicePixelRatio, devicePixelRatio);
+	c.font = document.body.style.font;
+
+	const palette = [
+		[0x50e150, 30, 30, 30],
+		[0x50bebe, 30, 30, 30],
+		[0xe17d00, 30, 30,  0],
+		[0xc8c83c, 30, 30, 10],
+		[0xe15a5a, 30, 40, 40],
+	];
+
+	function getColor(p) {
+		const v = Math.random();
+		return '#' + (p[0] + ((p[1] * v) << 16 | (p[2] * v) << 8 | (p[3] * v))).toString(16);
+	}
+
+	function f(level, left, width, type, title) {
+		levels[level].push({left: left, width: width, color: getColor(palette[type]), title: title});
+	}
+
+	function samples(n) {
+		return n === 1 ? '1 sample' : n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' samples';
+	}
+
+	function pct(a, b) {
+		return a >= b ? '100' : (100 * a / b).toFixed(2);
+	}
+
+	function findFrame(frames, x) {
+		let left = 0;
+		let right = frames.length - 1;
+
+		while (left <= right) {
+			const mid = (left + right) >>> 1;
+			const f = frames[mid];
+
+			if (f.left > x) {
+				right = mid - 1;
+			} else if (f.left + f.width <= x) {
+				left = mid + 1;
+			} else {
+				return f;
+			}
+		}
+
+		if (frames[left] && (frames[left].left - x) * px < 0.5) return frames[left];
+		if (frames[right] && (x - (frames[right].left + frames[right].width)) * px < 0.5) return frames[right];
+
+		return null;
+	}
+
+	function search(r) {
+		if (r && (r = prompt('Enter regexp to search:', '')) === null) {
+			return;
+		}
+
+		pattern = r ? RegExp(r) : undefined;
+		const matched = render(root, rootLevel);
+		document.getElementById('matchval').textContent = pct(matched, root.width) + '%';
+		document.getElementById('match').style.display = r ? 'inherit' : 'none';
+	}
+
+	function render(newRoot, newLevel) {
+		if (root) {
+			c.fillStyle = '#ffffff';
+			c.fillRect(0, 0, canvasWidth, canvasHeight);
+		}
+
+		root = newRoot || levels[0][0];
+		rootLevel = newLevel || 0;
+		px = canvasWidth / root.width;
+
+		const x0 = root.left;
+		const x1 = x0 + root.width;
+		const marked = [];
+
+		function mark(f) {
+			return marked[f.left] >= f.width || (marked[f.left] = f.width);
+		}
+
+		function totalMarked() {
+			let total = 0;
+			let left = 0;
+			Object.keys(marked).sort(function(a, b) { return a - b; }).forEach(function(x) {
+				if (+x >= left) {
+					total += marked[x];
+					left = +x + marked[x];
+				}
+			});
+			return total;
+		}
+
+		function drawFrame(f, y, alpha) {
+			if (f.left < x1 && f.left + f.width > x0) {
+				c.fillStyle = pattern && f.title.match(pattern) && mark(f) ? '#ee00ee' : f.color;
+				c.fillRect((f.left - x0) * px, y, f.width * px, 15);
+
+				if (f.width * px >= 21) {
+					const chars = Math.floor(f.width * px / 7);
+					const title = f.title.length <= chars ? f.title : f.title.substring(0, chars - 2) + '..';
+					c.fillStyle = '#000000';
+					c.fillText(title, Math.max(f.left - x0, 0) * px + 3, y + 12, f.width * px - 6);
+				}
+
+				if (alpha) {
+					c.fillStyle = 'rgba(255, 255, 255, 0.5)';
+					c.fillRect((f.left - x0) * px, y, f.width * px, 15);
+				}
+			}
+		}
+
+		for (let h = 0; h < levels.length; h++) {
+			const y = reverse ? h * 16 : canvasHeight - (h + 1) * 16;
+			const frames = levels[h];
+			for (let i = 0; i < frames.length; i++) {
+				drawFrame(frames[i], y, h < rootLevel);
+			}
+		}
+
+		return totalMarked();
+	}
+
+	canvas.onmousemove = function() {
+		const h = Math.floor((reverse ? event.offsetY : (canvasHeight - event.offsetY)) / 16);
+		if (h >= 0 && h < levels.length) {
+			const f = findFrame(levels[h], event.offsetX / px + root.left);
+			if (f) {
+				hl.style.left = (Math.max(f.left - root.left, 0) * px + canvas.offsetLeft) + 'px';
+				hl.style.width = (Math.min(f.width, root.width) * px) + 'px';
+				hl.style.top = ((reverse ? h * 16 : canvasHeight - (h + 1) * 16) + canvas.offsetTop) + 'px';
+				hl.firstChild.textContent = f.title;
+				hl.style.display = 'block';
+				canvas.title = f.title + '\n(' + samples(f.width) + ', ' + pct(f.width, levels[0][0].width) + '%)';
+				canvas.style.cursor = 'pointer';
+				canvas.onclick = function() {
+					if (f != root) {
+						render(f, h);
+						canvas.onmousemove();
+					}
+				};
+				status.textContent = 'Function: ' + canvas.title;
+				return;
+			}
+		}
+		canvas.onmouseout();
+	}
+
+	canvas.onmouseout = function() {
+		hl.style.display = 'none';
+		status.textContent = '\xa0';
+		canvas.title = '';
+		canvas.style.cursor = '';
+		canvas.onclick = '';
+	}
+
+	document.getElementById('reverse').onclick = function() {
+		reverse = !reverse;
+		render();
+	}
+
+	document.getElementById('search').onclick = function() {
+		search(true);
+	}
+
+	document.getElementById('reset').onclick = function() {
+		search(false);
+	}
+
+	window.onkeydown = function() {
+		if (event.ctrlKey && event.keyCode === 70) {
+			event.preventDefault();
+			search(true);
+		} else if (event.keyCode === 27) {
+			search(false);
+		}
+	}
+f(0,0,1956,4,'all')
+f(1,0,1956,0,'java/lang/Thread.run')
+f(2,0,1956,0,'java/util/concurrent/ThreadPoolExecutor$Worker.run')
+f(3,0,1956,0,'java/util/concurrent/ThreadPoolExecutor.runWorker')
+f(4,1,443,0,'io/openmessaging/MQBench$$Lambda$1/580024961.run')
+f(5,1,443,0,'io/openmessaging/MQBench.lambda$perfBenchByTrace$1')
+f(6,1,443,0,'io/openmessaging/MQBench.threadRunPerfBenchByTrace')
+f(7,18,418,0,'io/openmessaging/LSMessageQueue.append')
+f(8,21,415,0,'io/openmessaging/LSMessageQueue.append2')
+f(9,41,1,3,'OptoRuntime::new_instance_C(Klass*, JavaThread*)')
+f(10,41,1,3,'InstanceKlass::allocate_instance(Thread*)')
+f(11,41,1,3,'MutableSpace::cas_allocate(unsigned long)')
+f(9,42,193,0,'io/openmessaging/LSMessageQueue$DataFile.syncSeqWriteAddWriterTryLock')
+f(10,44,182,0,'io/openmessaging/LSMessageQueue$DataFile.syncSeqWriteBatchInLock')
+f(11,45,8,0,'io/openmessaging/LSMessageQueue$MyByteBuffer.writePmem')
+f(12,45,8,0,'java/lang/Thread.sleep')
+f(13,46,7,4,'JVM_Sleep')
+f(14,46,7,3,'os::sleep(Thread*, long, bool)')
+f(15,46,2,4,'__lll_unlock_wake')
+f(15,48,2,4,'__pthread_cond_timedwait')
+f(15,50,3,3,'os::PlatformEvent::park(long)')
+f(11,53,3,0,'java/lang/StringBuilder.append')
+f(11,56,7,0,'java/nio/HeapByteBuffer.put')
+f(11,63,39,0,'java/util/concurrent/Semaphore.release')
+f(12,63,39,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.releaseShared')
+f(13,63,39,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.doReleaseShared')
+f(14,63,38,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.unparkSuccessor')
+f(15,63,38,0,'java/util/concurrent/locks/LockSupport.unpark')
+f(16,74,27,0,'sun/misc/Unsafe.unpark')
+f(17,75,24,4,'Unsafe_Unpark')
+f(18,75,1,3,'Parker::unpark()')
+f(18,76,21,4,'__pthread_cond_signal')
+f(18,97,2,4,'__pthread_mutex_lock')
+f(17,99,2,4,'pthread_mutex_unlock')
+f(14,101,1,4,'jlong_disjoint_arraycopy')
+f(11,102,51,4,'jbyte_disjoint_arraycopy')
+f(11,153,17,0,'sun/nio/ch/FileChannelImpl.force')
+f(12,153,1,0,'java/nio/channels/spi/AbstractInterruptibleChannel.begin')
+f(13,153,1,0,'java/nio/channels/spi/AbstractInterruptibleChannel.blockedOn')
+f(14,153,1,0,'java/lang/System$2.blockedOn')
+f(15,153,1,0,'java/lang/Thread.blockedOn')
+f(12,154,14,0,'sun/nio/ch/FileDispatcherImpl.force')
+f(13,154,14,0,'sun/nio/ch/FileDispatcherImpl.force0')
+f(14,158,10,4,'fsync')
+f(12,168,1,0,'sun/nio/ch/NativeThreadSet.add')
+f(13,168,1,0,'sun/nio/ch/NativeThread.current')
+f(14,168,1,4,'pthread_self')
+f(12,169,1,0,'sun/nio/ch/NativeThreadSet.remove')
+f(11,170,56,0,'sun/nio/ch/FileChannelImpl.write')
+f(12,170,56,0,'sun/nio/ch/FileChannelImpl.writeInternal')
+f(13,171,54,0,'sun/nio/ch/IOUtil.write')
+f(14,171,54,0,'sun/nio/ch/IOUtil.writeFromNativeBuffer')
+f(15,171,54,0,'sun/nio/ch/FileDispatcherImpl.pwrite')
+f(16,173,27,4,'jbyte_disjoint_arraycopy')
+f(16,200,1,4,'jint_disjoint_arraycopy')
+f(16,201,9,4,'jshort_disjoint_arraycopy')
+f(16,210,15,0,'sun/nio/ch/FileDispatcherImpl.pwrite0')
+f(17,210,1,4,'__pthread_disable_asynccancel')
+f(17,211,1,4,'__pthread_enable_asynccancel')
+f(17,212,13,4,'__pwrite')
+f(13,225,1,0,'sun/nio/ch/NativeThreadSet.add')
+f(10,226,9,0,'java/util/concurrent/locks/ReentrantLock.unlock')
+f(11,226,9,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.release')
+f(12,226,9,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.unparkSuccessor')
+f(13,226,9,0,'java/util/concurrent/locks/LockSupport.unpark')
+f(14,230,5,0,'sun/misc/Unsafe.unpark')
+f(15,230,5,4,'Unsafe_Unpark')
+f(16,230,5,4,'__pthread_cond_signal')
+f(9,235,10,0,'io/openmessaging/LSMessageQueue$DataFile.syncSeqWriteBatchLock')
+f(10,235,2,0,'io/openmessaging/LSMessageQueue$DataFile.syncSeqWriteBatchInLock')
+f(11,235,1,4,'jbyte_disjoint_arraycopy')
+f(11,236,1,0,'sun/nio/ch/FileChannelImpl.write')
+f(12,236,1,0,'sun/nio/ch/FileChannelImpl.writeInternal')
+f(13,236,1,0,'sun/nio/ch/IOUtil.write')
+f(14,236,1,0,'sun/nio/ch/IOUtil.writeFromNativeBuffer')
+f(15,236,1,0,'sun/nio/ch/FileDispatcherImpl.pwrite')
+f(16,236,1,4,'jbyte_disjoint_arraycopy')
+f(10,237,8,0,'java/util/concurrent/locks/ReentrantLock.lock')
+f(11,237,8,0,'java/util/concurrent/locks/ReentrantLock$NonfairSync.lock')
+f(12,237,8,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.acquire')
+f(13,237,8,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.acquireQueued')
+f(14,239,6,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.parkAndCheckInterrupt')
+f(15,239,6,0,'java/util/concurrent/locks/LockSupport.park')
+f(16,239,6,0,'sun/misc/Unsafe.park')
+f(17,240,4,4,'Unsafe_Park')
+f(18,240,2,4,'__lll_unlock_wake')
+f(18,242,1,4,'__pthread_disable_asynccancel')
+f(18,243,1,4,'__pthread_mutex_cond_lock')
+f(17,244,1,4,'__pthread_mutex_trylock')
+f(9,245,4,0,'io/openmessaging/LSMessageQueue$TestStat.appendStart')
+f(10,245,4,0,'io/openmessaging/LSMessageQueue$TestStat.updateThreadId')
+f(9,249,17,0,'io/openmessaging/LSMessageQueue$TestStat.appendUpdateStat')
+f(10,249,1,3,'SharedRuntime::complete_monitor_unlocking_C(oopDesc*, BasicLock*)')
+f(11,249,1,3,'ObjectMonitor::ExitEpilog(Thread*, ObjectWaiter*)')
+f(12,249,1,4,'__pthread_cond_signal')
+f(10,250,7,0,'io/openmessaging/LSMessageQueue$TestStat.update')
+f(11,253,4,0,'io/openmessaging/LSMessageQueue$TestStat.report')
+f(12,254,3,0,'org/apache/log4j/Category.info')
+f(13,254,3,0,'org/apache/log4j/Category.forcedLog')
+f(14,254,3,0,'org/apache/log4j/Category.callAppenders')
+f(15,254,3,0,'org/apache/log4j/helpers/AppenderAttachableImpl.appendLoopOnAppenders')
+f(16,254,3,0,'org/apache/log4j/AppenderSkeleton.doAppend')
+f(17,254,3,0,'org/apache/log4j/WriterAppender.append')
+f(18,254,3,0,'org/apache/log4j/WriterAppender.subAppend')
+f(19,254,3,0,'org/apache/log4j/PatternLayout.format')
+f(20,254,3,0,'org/apache/log4j/helpers/PatternConverter.format')
+f(21,254,1,0,'org/apache/log4j/helpers/PatternParser$BasicPatternConverter.convert')
+f(21,255,2,0,'org/apache/log4j/helpers/PatternParser$LocationPatternConverter.convert')
+f(22,255,2,0,'org/apache/log4j/spi/LoggingEvent.getLocationInformation')
+f(23,255,2,0,'org/apache/log4j/spi/LocationInfo.<init>')
+f(24,255,2,0,'java/lang/Throwable.printStackTrace')
+f(25,255,2,0,'java/lang/Throwable.printStackTrace')
+f(26,255,2,0,'java/lang/Throwable.getOurStackTrace')
+f(27,255,2,0,'java/lang/Throwable.getStackTraceElement')
+f(28,255,2,4,'JVM_GetStackTraceElement')
+f(29,255,2,3,'java_lang_Throwable::get_stack_trace_element(oopDesc*, int, Thread*)')
+f(30,255,2,3,'java_lang_StackTraceElement::create(Handle, int, int, int, int, Thread*)')
+f(31,255,1,3,'Method::line_number_from_bci(int) const')
+f(31,256,1,3,'StringTable::intern(char const*, Thread*)')
+f(32,256,1,4,'__pthread_getspecific')
+f(10,257,9,0,'java/lang/ThreadLocal.get')
+f(11,257,9,0,'java/lang/ThreadLocal.setInitialValue')
+f(12,257,9,0,'java/lang/ThreadLocal$ThreadLocalMap.access$100')
+f(13,265,1,4,'__clock_gettime')
+f(9,266,2,0,'java/lang/Long.valueOf')
+f(9,268,1,0,'java/lang/StringBuilder.<init>')
+f(10,268,1,0,'java/lang/AbstractStringBuilder.<init>')
+f(9,269,13,0,'java/lang/StringBuilder.append')
+f(10,279,3,0,'java/lang/AbstractStringBuilder.append')
+f(11,279,2,0,'java/lang/AbstractStringBuilder.ensureCapacityInternal')
+f(12,279,2,0,'java/util/Arrays.copyOf')
+f(11,281,1,0,'java/lang/Long.getChars')
+f(9,282,4,0,'java/nio/HeapByteBuffer.duplicate')
+f(10,282,4,0,'java/nio/HeapByteBuffer.<init>')
+f(11,282,4,0,'java/nio/ByteBuffer.<init>')
+f(12,282,4,0,'java/nio/Buffer.<init>')
+f(9,286,14,0,'java/util/ArrayList.add')
+f(10,286,14,0,'java/util/ArrayList.ensureCapacityInternal')
+f(11,286,14,0,'java/util/ArrayList.ensureExplicitCapacity')
+f(12,286,14,0,'java/util/ArrayList.grow')
+f(13,286,14,0,'java/util/Arrays.copyOf')
+f(9,300,25,0,'java/util/HashMap.get')
+f(10,300,25,0,'java/util/HashMap.getNode')
+f(9,325,111,0,'java/util/concurrent/Semaphore.tryAcquire')
+f(10,325,111,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.tryAcquireSharedNanos')
+f(11,325,111,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer.doAcquireSharedNanos')
+f(12,326,3,4,'__clock_gettime')
+f(13,328,1,4,'[vdso]')
+f(12,329,2,0,'java/util/concurrent/Semaphore$NonfairSync.tryAcquireShared')
+f(13,329,2,0,'java/util/concurrent/Semaphore$Sync.nonfairTryAcquireShared')
+f(12,331,105,0,'java/util/concurrent/locks/LockSupport.parkNanos')
+f(13,332,1,4,'[vdso]')
+f(13,333,1,4,'__clock_gettime')
+f(14,333,1,4,'[vdso]')
+f(13,334,102,0,'sun/misc/Unsafe.park')
+f(14,341,1,3,'ThreadStateTransition::transition_from_native(JavaThread*, JavaThreadState) [clone .constprop.201]')
+f(14,342,93,4,'Unsafe_Park')
+f(15,346,3,3,'HandleMark::pop_and_restore()')
+f(15,349,5,3,'Parker::park(bool, long)')
+f(16,350,2,3,'Monitor::lock_without_safepoint_check()')
+f(17,350,2,3,'Monitor::ILock(Thread*)')
+f(16,352,1,4,'__pthread_getspecific')
+f(16,353,1,3,'os::is_interrupted(Thread*, bool)')
+f(15,354,1,3,'ThreadStateTransition::transition_and_fence(JavaThread*, JavaThreadState, JavaThreadState) [clone .constprop.202]')
+f(15,355,1,4,'__clock_gettime')
+f(16,355,1,4,'[vdso]')
+f(15,356,2,4,'__lll_lock_wait')
+f(15,358,23,4,'__lll_unlock_wake')
+f(15,381,42,4,'__pthread_cond_timedwait')
+f(15,423,3,4,'__pthread_disable_asynccancel')
+f(15,426,1,4,'__pthread_enable_asynccancel')
+f(15,427,2,4,'__pthread_mutex_cond_lock')
+f(15,429,1,4,'__pthread_mutex_trylock')
+f(15,430,3,4,'__pthread_mutex_unlock_usercnt')
+f(15,433,2,4,'pthread_mutex_unlock')
+f(14,435,1,3,'java_lang_Thread::set_thread_status(oopDesc*, java_lang_Thread::ThreadStatus)')
+f(7,436,4,0,'java/util/Vector.get')
+f(8,437,3,0,'java/util/Vector.elementData')
+f(7,440,4,0,'java/util/Vector.size')
+f(4,444,1511,0,'java/util/concurrent/FutureTask.run')
+f(5,444,1511,0,'io/openmessaging/LSMessageQueue$MyByteBuffer$1.call')
+f(6,444,1511,0,'io/openmessaging/LSMessageQueue$MyByteBuffer$1.call')
+f(7,444,1511,0,'com/intel/pmem/llpl/MemoryPoolImpl.copyFromByteArrayNT')
+f(8,444,1511,0,'com/intel/pmem/llpl/MemoryPoolImpl.nativeCopyFromByteArrayNT')
+f(9,445,1081,4,'[unknown]')
+f(10,445,452,4,'[unknown]')
+f(11,445,452,4,'Java_com_intel_pmem_llpl_MemoryPoolImpl_nativeCopyFromByteArrayNT')
+f(12,445,451,4,'__memcpy_ssse3')
+f(12,896,1,4,'jni_GetByteArrayElements')
+f(10,897,629,4,'memmove_nodrain_avx512f_clwb')
+f(11,897,629,4,'memmove_movnt_avx512f_clwb')
+f(9,1526,429,4,'__memcpy_ssse3')
+f(4,1955,1,0,'java/util/concurrent/ThreadPoolExecutor.getTask')
+f(5,1955,1,0,'java/util/concurrent/LinkedBlockingQueue.take')
+f(6,1955,1,0,'java/util/concurrent/locks/AbstractQueuedSynchronizer$ConditionObject.await')
+f(7,1955,1,0,'java/util/concurrent/locks/LockSupport.park')
+f(8,1955,1,0,'sun/misc/Unsafe.park')
+f(9,1955,1,4,'Unsafe_Park')
+f(10,1955,1,4,'__pthread_cond_wait')
+render();
+</script></body></html>

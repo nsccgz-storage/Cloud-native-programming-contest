@@ -151,13 +151,7 @@ public class LSMessageQueue extends MessageQueue {
     public void init(String dbDirPath, String pmDirPath) {
         try {
              // 超时自动退出
-            new Timer("timer").schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    log.info(Thread.currentThread().getName() + " Exit !");
-                    System.exit(-1);
-                }
-            }, 610000);
+            
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);
@@ -171,7 +165,22 @@ public class LSMessageQueue extends MessageQueue {
                 crash = true;
                 isCrash = true;
             }
+            if(!isCrash){
+                new Timer("timer").schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        log.info(Thread.currentThread().getName() + " Exit !");
+                        System.exit(-1);
+                    }
+                }, 610000);
+                DRAMbufferList = new MyDRAMbuffer[42];
 
+                pmWrite = new PMwrite(pmDataFile);
+
+                for(int i=0; i<42; i++){
+                    DRAMbufferList[i] = new MyDRAMbuffer();
+                }
+            }
 
             topic2object = new ConcurrentHashMap<String, MQTopic>();
 //            log.info("Initializing on PM : " + pmDataFile);
@@ -199,13 +208,7 @@ public class LSMessageQueue extends MessageQueue {
             threadLocalSemaphore = new ThreadLocal<>();
             threadLocalWriterBuffer = new ThreadLocal<>();
 
-            DRAMbufferList = new MyDRAMbuffer[42];
-
-            pmWrite = new PMwrite(pmDataFile);
-
-            for(int i=0; i<42; i++){
-                DRAMbufferList[i] = new MyDRAMbuffer();
-            }
+            
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);

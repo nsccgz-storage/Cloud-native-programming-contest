@@ -15,4 +15,4 @@ cd ${RESULT_PATH}
 
 ${PROFILE_PATH}/profiler.sh -e cpu -d 60 -f cpu_profile.html MQBench
 
-python3 -m http.server
+# python3 -m http.server
