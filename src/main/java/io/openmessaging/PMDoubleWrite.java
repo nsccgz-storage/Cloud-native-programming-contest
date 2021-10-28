@@ -43,8 +43,8 @@ public class PMDoubleWrite {
         ThreadData(){
             buf = new ByteBuffer[2];
             curBuf = 0;
-            buf[0] = ByteBuffer.allocate(4*1024*1024);  // 4MB
-            buf[1] = ByteBuffer.allocate(4*1024*1024);
+            //buf[0] = ByteBuffer.allocate(4*1024*1024);  // 4MB
+            //buf[1] = ByteBuffer.allocate(4*1024*1024);
             isFinished = false;
         }
     }
@@ -103,6 +103,7 @@ public class PMDoubleWrite {
         // iterate pmem space, reducing page fault during write and read
         this.pool.setMemory((byte)0, 0, 60L*1024L*1024L*1024L);
     }
+
 
     public long doubleWrite(int threadId, ByteBuffer data){
         // 双写，返回PM地址
@@ -164,7 +165,6 @@ public class PMDoubleWrite {
         return pmAddr;
 
     }
-
     public void shutdown(){
         // 把目前的buffer全部写到PM到，并且结束双写
         for (int i = 0; i < maxThreadNum; i++){
