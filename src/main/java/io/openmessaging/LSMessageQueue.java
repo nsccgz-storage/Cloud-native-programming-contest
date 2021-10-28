@@ -172,7 +172,7 @@ public class LSMessageQueue extends MessageQueue {
                         log.info(Thread.currentThread().getName() + " Exit !");
                         System.exit(-1);
                     }
-                }, 610000);
+                }, 910000);
                 DRAMbufferList = new MyDRAMbuffer[42];
 
                 pmWrite = new PMwrite(pmDataFile);
