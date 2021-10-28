@@ -26,7 +26,7 @@ ulimit -s unlimited
 
 export LD_LIBRARY_PATH=/home/wyf/nfs/software/spack/opt/spack/linux-centos7-cascadelake/gcc-9.4.0/pmdk-1.9-v5dq7ypxskas4r7j7pyk7wsg2qxfyypj/lib:${LD_LIBRARY_PATH}
 export PATH=/home/wyf/nfs/software/envs/maven/apache-maven-3.8.2/bin:${PATH}
-export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.292.b10-1.el7_9.x86_64/jre
+export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.302.b08-0.el7_9.x86_64/jre
 
 
 mkdir -p ${DBDIR}

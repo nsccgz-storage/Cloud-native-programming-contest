@@ -18,7 +18,6 @@ import com.intel.pmem.llpl.MemoryPool;
 
 
 import sun.misc.Unsafe;
-import sun.nio.ch.DirectBuffer;
 import java.lang.reflect.Field;
 
 public class PMDoubleWrite {
@@ -59,6 +58,7 @@ public class PMDoubleWrite {
 
     private long poolAddress;
     Method nativeCopyFromByteArrayNT;
+    Method nativeCopyMemoryNT;
 
     PMDoubleWrite(String pmDataFile){
         log.setLevel(Level.INFO);
@@ -90,6 +90,11 @@ public class PMDoubleWrite {
             nativeCopyFromByteArrayNT = memoryPoolClass.getDeclaredMethod(
                     "nativeCopyFromByteArrayNT",byte[].class, int.class, long.class, int.class);
             nativeCopyFromByteArrayNT.setAccessible(true);
+
+            nativeCopyMemoryNT = memoryPoolClass.getDeclaredMethod(
+                    "nativeCopyMemoryNT", long.class, long.class, long.class);
+            nativeCopyMemoryNT.setAccessible(true);
+
         }catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException |
                 InvocationTargetException | NoSuchFieldException e){
             log.info(e);
@@ -132,6 +137,7 @@ public class PMDoubleWrite {
             td.backgroundDoubleWriteFuture = backgroundDoubleWriteThread.submit(new Callable<Integer>(){
                 @Override
                 public Integer call() throws Exception {
+//                    copyMemoryNT(td.buf[flushBuf], backgroundBlock.addr, backgroundBlock.capacity);
                     copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
                     return 0;
                 }
@@ -180,6 +186,7 @@ public class PMDoubleWrite {
                 // 触发刷盘任务，异步调用block的刷盘函数
                 final PMBlock backgroundBlock = td.block;
                 final ByteBuffer finalBuf = td.buf[td.curBuf];
+//                this.copyMemoryNT(finalBuf, backgroundBlock.addr, backgroundBlock.capacity);
                 this.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
                 td.block = null;
             }
@@ -265,6 +272,18 @@ public class PMDoubleWrite {
 ////         UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
 //    }
 
+    public void copyMemoryNT(ByteBuffer srcBuf, long dstOffset, int byteCount){
+        try {
+            // TODO: 外部逻辑好像是不管position，直接复制srcBuf的array的内容
+            Class<?> aClass = Class.forName("java.nio.Buffer");
+            Field addrField = aClass.getDeclaredField("address");
+            addrField.setAccessible(true);
+            long addr = (long)addrField.get(srcBuf);
+            nativeCopyMemoryNT.invoke(null, addr, poolAddress+dstOffset, byteCount);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
     public void copyFromByteArrayNT(byte[] srcArray, int srcIndex, long dstOffset, int byteCount) {
         try {
             nativeCopyFromByteArrayNT.invoke(null, srcArray, srcIndex, poolAddress + dstOffset, byteCount);

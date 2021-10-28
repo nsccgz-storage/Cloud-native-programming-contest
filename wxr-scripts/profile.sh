@@ -5,12 +5,9 @@ PROFILE_PATH=/home/wyf/nfs/software/envs/mqJavaClass/async-profile/async-profile
 
 current=`date "+%Y-%m-%d-%H-%M-%S"`
 
-LOG_DIR=/home/wxr/project/Cloud-native-programming-contest/mylogs/${current}
+LOG_DIR=/home/wxr/project/mylogs/flameGraph/${current}
 #LOG_DIR=./mylogs/test/${current}
 mkdir ${LOG_DIR}
-
-
-#${PROFILE_PATH}/profiler.sh -d 5 MQBench
 
 cd ${LOG_DIR}
 
