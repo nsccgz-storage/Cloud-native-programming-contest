@@ -182,7 +182,11 @@ public class PMDoubleWrite {
                 // 触发刷盘任务，异步调用block的刷盘函数
                 final PMBlock backgroundBlock = td.block;
                 final ByteBuffer finalBuf = td.buf[td.curBuf];
-                pool.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+                pool.copyFromByteArrayNT(
+                    finalBuf.array(), 
+                0, 
+                backgroundBlock.addr , 
+                backgroundBlock.capacity);
                 td.block = null;
             }
         }
