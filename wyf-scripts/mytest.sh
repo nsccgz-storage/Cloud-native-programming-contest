@@ -38,9 +38,9 @@ export PATH=/home/wyf/nfs/software/envs/maven/apache-maven-3.8.2/bin:${PATH}
 # on cn3
 #export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.292.b10-1.el7_9.x86_64/jre
 # on cn6
-export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.302.b08-0.el7_9.x86_64
+#export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.302.b08-0.el7_9.x86_64
 
-#export JAVA_HOME=/usr/java/jdk1.8.0_301-amd64
+export JAVA_HOME=/usr/java/jdk1.8.0_301-amd64
 
 
 
@@ -62,12 +62,12 @@ mvn clean package assembly:single -DskipTests
 rm -rf  ${DBDIR}/*
 
 
-#taskset -c 1-4 java -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx18g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMDIR} perf  2>&1 | tee ${LOG_PATH}
+taskset -c 1-4 java -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx16g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMDIR} perf  2>&1 | tee ${LOG_PATH}
 
 #taskset -c 1-4 java -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx160g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMDIR}  2>&1 | tee ${LOG_PATH}
 
 
-taskset -c 1-4 java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx128g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.WYFTest  ${DBDIR} ${PMDIR}  2>&1 | tee ${LOG_PATH}
+#taskset -c 1-4 java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx128g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.WYFTest  ${DBDIR} ${PMDIR}  2>&1 | tee ${LOG_PATH}
 
 
 #taskset -c 1-4 java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx170g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMDIR} | tee ${LOG_PATH}
