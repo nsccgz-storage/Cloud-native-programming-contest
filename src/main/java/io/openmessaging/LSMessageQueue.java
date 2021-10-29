@@ -898,6 +898,8 @@ public class LSMessageQueue extends MessageQueue {
             int missHotCount;
             int dramBufferFullCount;
 
+            int hitPmemCount;
+
             String dramBufferUsedInfo = "";
 
             public int[] bucketBound;
@@ -927,7 +929,8 @@ public class LSMessageQueue extends MessageQueue {
                 hitHotCount = 0;
                 missHotCount = 0;
                 dramBufferFullCount = 0;
-                
+
+                hitPmemCount = 0;
 
 
                 fetchCount = 0;
@@ -963,6 +966,8 @@ public class LSMessageQueue extends MessageQueue {
                 ret.dramBufferFullCount = this.dramBufferFullCount;
                 ret.hitHotCount = this.hitHotCount;
                 ret.missHotCount = this.missHotCount;
+
+                ret.hitPmemCount = this.hitPmemCount;
                 return ret;
             }
             public void addSample(int len){
@@ -1032,6 +1037,10 @@ public class LSMessageQueue extends MessageQueue {
         void incDramFullCount(){
             int id = threadId.get();
             stats[id].dramBufferFullCount++;
+        }
+        void incHitPmemCount(int v){
+            int id = threadId.get();
+            stats[id].hitPmemCount+=v;
         }
         void dramBufferUsedReport(String str){
             int id = threadId.get();
@@ -1334,6 +1343,13 @@ public class LSMessageQueue extends MessageQueue {
             log.info("[total dram buffer info] :" + totalDramReadReport);
             log.info("[DRAM buffer used info] : " + dramBufferUesdReport);
 
+            int totalHitPmemCount = 0;
+            StringBuilder hitPmemCountReport = new StringBuilder();
+            for(int i = 0;i < getNumOfThreads;i++){
+                hitPmemCountReport.append(String.format("%d,",(stats[i].hitPmemCount)));
+                totalHitPmemCount += stats[i].hitPmemCount;
+            }
+            log.info("[Pmem hit count] : total= "+totalHitPmemCount+"; "+hitPmemCountReport);
 
 
             log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
