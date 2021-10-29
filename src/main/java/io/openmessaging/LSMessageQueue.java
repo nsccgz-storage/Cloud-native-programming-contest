@@ -85,6 +85,7 @@ public class LSMessageQueue extends MessageQueue {
         public int dataFileId;
         public int threadId;
         public PMDirectByteBufferPool pmdbbPool;
+        public MapDirectBufferPool mapbbPool;
 
         MQTopic(short myTopicId, String name, DataFile dataFile){
             topicId = myTopicId;
@@ -109,6 +110,7 @@ public class LSMessageQueue extends MessageQueue {
     public ThreadLocal<MyDRAMbuffer> localDramBuffer;
     public MyDRAMbuffer[] DRAMbufferList;
     public PMDirectByteBufferPool[] pmdbbPools;
+    public MapDirectBufferPool [] mapbbPools;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         mqConfig = config;
@@ -151,6 +153,11 @@ public class LSMessageQueue extends MessageQueue {
                 for (int i = 0; i < 50; i++){
                     pmdbbPools[i] = pmDoubleWrite.new PMDirectByteBufferPool();
                 }
+                mapbbPools = new MapDirectBufferPool[50];
+                for (int i = 0; i < 50; i++){
+                    mapbbPools[i] = new MapDirectBufferPool();
+                }
+
             }
 
             numOfDataFiles = mqConfig.numOfDataFiles;
@@ -193,7 +200,8 @@ public class LSMessageQueue extends MessageQueue {
                         log.info(Thread.currentThread().getName() + " Exit !");
                         System.exit(-1);
                     }
-                }, 610000);
+                }, 910000);
+                // }, 610000);
             }
             localDramBuffer = new ThreadLocal<>();
         } catch (IOException ie) {
@@ -318,6 +326,7 @@ public class LSMessageQueue extends MessageQueue {
             mqTopic.threadId = threadId;
             mqTopic.dataFileId = dataFileId;
             mqTopic.pmdbbPool = pmdbbPools[threadId];
+            mqTopic.mapbbPool = mapbbPools[threadId];
             topic2object.put(topic, mqTopic);
         }
 
@@ -513,8 +522,18 @@ public class LSMessageQueue extends MessageQueue {
             pos = q.offset2position.get(intCurOffset);
             int dataLength = q.offset2Length.get(intCurOffset);
 //            log.debug("read position : " + pos);
-            // ByteBuffer buf = df.readData(pos,dataLength);
-            ByteBuffer buf = df.mmapReadData(pos,dataLength);
+
+            ByteBuffer buf;
+            if (isCrash){
+                buf = df.readData(pos,dataLength);
+            } else {
+                long bufAddr = df.mmapReadDataAddr(pos,dataLength);
+                buf = mqTopic.mapbbPool.getNewMapDirectByteBuffer(bufAddr, dataLength);
+            }
+
+            // ByteBuffer buf = df.mmapReadData(pos,dataLength);
+
+
             if (buf != null){
                 ret.put(i, buf);
             }
@@ -899,6 +918,23 @@ public class LSMessageQueue extends MessageQueue {
                 ie.printStackTrace();
             }
             return null;
+        }
+
+        public long mmapReadDataAddr(long position, int dataLength) {
+            long ret = 0;
+            try {
+                // which mapbytebuffer
+                int mapByteBufferIndex = (int) (position / (1024*1024*1024));
+                int mapByteBufferOffset = (int) (position % (1024*1024*1024));
+                MappedByteBuffer mapByteBuffer = mapByteBuffers[mapByteBufferIndex];
+                // log.info("mmap read ! " + mapByteBufferIndex + "," + mapByteBufferOffset);
+                // mapByteBuffer.position(mapByteBufferOffset);
+                long mapByteBufferAddr = ((DirectBuffer)mapByteBuffer).address();
+                ret = mapByteBufferAddr+mapByteBufferOffset+globalMetadataLength;
+            } catch (Exception ie) {
+                ie.printStackTrace();
+            }
+            return ret;
         }
 
 
