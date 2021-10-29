@@ -24,27 +24,22 @@ public class MyDRAMbuffer {
     }
     public MyDRAMbuffer(){
 
-        addr2buffer = new int[]{0, 800, 1600, 2400, 3400};
-        bufferArray = new DRAMbuffer[]{
-                new DRAMbuffer(800, 4 * 1024),
-                new DRAMbuffer(800, 8 * 1024),
-                new DRAMbuffer(800, 12 * 1024),
-                new DRAMbuffer(1000 , 17 * 1024)};
+        int[] slotNums = new int[]{800, 800, 800, 1000};
+        int[] slotSizes = new int[]{4, 8, 12, 17};
+
+        addr2buffer = new int[5];
+        addr2buffer[0] = 0;
+        for(int i=1; i<5; i++){
+            addr2buffer[i] = addr2buffer[i-1] + slotNums[i-1];
+        }
+
+        bufferArray = new DRAMbuffer[4];
+        for(int i=0; i<4; i++){
+            bufferArray[i] = new DRAMbuffer(slotNums[i], slotSizes[i] * 1024);
+        }
     }
     
     public int put(ByteBuffer data){
-        // // 负数代表是从 buffer1 分配的，其中从为了使 -1 表示不能分配，所以负值 = - 原本值 - 2
-        // if(data.remaining() <= buffer0.slotSize){
-        //     int addr = buffer0.put(data);
-        //     if(addr != -1) return addr;
-        // }
-        // int addr = buffer1.put(data);
-
-        // if(addr == -1 && buffer2 == null){// 进行一次扩容
-        //     buffer2 = new DRAMbuffer(512, 8 * 1024);
-        // }
-        // return  addr == -1 ? addr : -addr - 2;
-
         // 地址展开:
         int dataSize = data.remaining();
         int addr = -1;
@@ -57,8 +52,6 @@ public class MyDRAMbuffer {
         return addr;
     }
     public ByteBuffer read(int addr, int dataSize){
-        // if(addr == -1) return null;
-        // return addr < 0 ? buffer1.read(-(addr + 2), dataSize) : buffer0.read(addr, dataSize);
         if(addr == -1) return null;
         for(int i=0 ;i<4; i++){
             if(addr < addr2buffer[i+1]){
@@ -76,9 +69,8 @@ public class MyDRAMbuffer {
         RingArray addrPool;
         public DRAMbuffer(int slotNum, int slotSize){
             this.slotNum = slotNum;
-            // slotNum = 10;
-            this.slotSize = slotSize; // 17 KiB
-            this.capacity = slotSize * slotNum; // 17 KiB * 1542 * 40 = 1.002 GiB
+            this.slotSize = slotSize;
+            this.capacity = slotSize * slotNum;
     
             dirBuffer = ByteBuffer.allocateDirect(capacity);
 
@@ -117,8 +109,7 @@ public class MyDRAMbuffer {
            
             ByteBuffer res = dirBuffer.duplicate();
             res.limit(startAddr + dataSize);
-            res.position(startAddr);  
-            // res = res.slice();
+            res.position(startAddr);
             // 默认 free
             free(addr);
     

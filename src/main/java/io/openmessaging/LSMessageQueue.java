@@ -39,7 +39,6 @@ public class LSMessageQueue extends MessageQueue {
         int numOfDataFiles = 4;
         int maxBufNum = 11;
         int maxBufLength = 256*1024;
-        boolean fairLock = true;
         public String toString() {
             return String.format("useStats=%b | writeMethod=%d | numOfDataFiles=%d | maxBufLength=%d | maxBufNum=%d | ",useStats,writeMethod,numOfDataFiles,maxBufLength,maxBufNum);
         }
@@ -66,7 +65,9 @@ public class LSMessageQueue extends MessageQueue {
                 // 触发刷盘任务，异步调用block的刷盘函数
                 final PMBlock backgroundBlock = bf.block;
                 if(bf.block != null && bf.curPositions[bf.curBufIndex] != 0){
-                    pmWrite.pool.copyFromByteArrayNT(bf.commByteBuffers[bf.curBufIndex].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+                    // pmWrite.pool.copyFromByteArrayNT(bf.commByteBuffers[bf.curBufIndex].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+
+                    pmWrite.copyMemoryNT(bf.commByteBuffers[bf.curBufIndex], backgroundBlock.addr, backgroundBlock.capacity);
                 }
                 bf.block = null;
             }
@@ -145,7 +146,7 @@ public class LSMessageQueue extends MessageQueue {
         // PMBench.runStandardBench(pmDirPath);
         mqConfig = new MQConfig();
         init(dbDirPath, pmDirPath);
-
+        log.info("init ok");
     }
 
     public void init(String dbDirPath, String pmDirPath) {
@@ -214,14 +215,20 @@ public class LSMessageQueue extends MessageQueue {
                 testStat = new TestStat(dataFiles);
             }
             if (crash) {
-                log.info("recover !!");
+//                log.info("recover !!");
 //                System.exit(-1);
                 recover();
+            }else{
+                // 超时自动退出
+                new Timer("timer").schedule(new TimerTask() {
+                    @Override
+                    public void run() {
+                        log.info(Thread.currentThread().getName() + " Exit !");
+                        System.exit(-1);
+                    }
+                }, 610000);
             }
-
             localDramBuffer = new ThreadLocal<>();
-
-            
         } catch (IOException ie) {
             ie.printStackTrace();
         }
@@ -290,7 +297,6 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position,int dataLength) {
-
 //        log.debug("replay append : " + topic + "," + queueId + "," + position);
         MQTopic mqTopic;
         MQQueue q;
@@ -477,7 +483,7 @@ public class LSMessageQueue extends MessageQueue {
             long doubleWriteMaxOffset = q.offset2PMAddr.size()-1;
             long doubleWriteNum = Math.min(fetchMaxOffset, doubleWriteMaxOffset) - offset + 1;
             int intDoubleWriteNum =(int)doubleWriteNum;
-            for (int i = 0; i < intDoubleWriteNum; i++){
+            for(int i = 0; i < intDoubleWriteNum; i++){
                 int curOffset = (int)offset+i;
 //                log.debug("curOffset : " + curOffset);
                 int dataLength = q.offset2Length.get(curOffset);
@@ -746,7 +752,7 @@ public class LSMessageQueue extends MessageQueue {
             commByteBuffers = new ByteBuffer[bufferNum];
             capacity = 4 * (1 << 20); // 4*1024*1024
             for(int i=0; i<bufferNum; i++){
-                commByteBuffers[i] = ByteBuffer.allocate(capacity);
+                commByteBuffers[i] = ByteBuffer.allocateDirect(capacity);
             }
             minBufLen = 512 * 1024;
             curPositions = new int[bufferNum];
@@ -788,7 +794,8 @@ public class LSMessageQueue extends MessageQueue {
             backgroundDoubleWriteFuture = pmWrite.backgroundDoubleWriteThread.submit(new Callable<Integer>(){
                 @Override
                 public Integer call() throws Exception {
-                    pmWrite.pool.copyFromByteArrayNT(flushBuf.array(), 0, backgroundAddr , backgroundCapacity);
+                    // pmWrite.pool.copyFromByteArrayNT(flushBuf.array(), 0, backgroundAddr , backgroundCapacity);
+                    pmWrite.copyMemoryNT(flushBuf, backgroundAddr, backgroundCapacity);
                     // log.info("this is no error!!!!!!");
                     isFlushUsed.set(false);
                     return 0;
@@ -970,15 +977,15 @@ public class LSMessageQueue extends MessageQueue {
                     writerBuffer.put(thisWriter.data);
 
                     if (bufNum >= maxBufNum){
-//                        if (mqConfig.useStats){
-//                            writeStat.incExceedBufNumCount();
-//                        }
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufNumCount();
+                        }
                         break;
                     }
                     if (bufLength >= maxBufLength){
-//                        if (mqConfig.useStats){
-//                            writeStat.incExceedBufLengthCount();
-//                        }
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
                         break;
                     }
                 }

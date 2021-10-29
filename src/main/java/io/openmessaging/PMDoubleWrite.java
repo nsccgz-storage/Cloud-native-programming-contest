@@ -3,8 +3,7 @@ package io.openmessaging;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
-import java.util.*;
+import java.nio.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,7 +18,6 @@ import com.intel.pmem.llpl.MemoryPool;
 
 
 import sun.misc.Unsafe;
-import sun.nio.ch.DirectBuffer;
 import java.lang.reflect.Field;
 
 public class PMDoubleWrite {
@@ -34,15 +32,6 @@ public class PMDoubleWrite {
 		throw new RuntimeException(e);
 	    }
 	}
-    public static void copyFromDirectBufferToPM(DirectBuffer srcBuf, MemoryPool dstPool, long PMAddr, int length){
-        // TODO: 实现DirectBuffer 复制到 PM （llpl原来不支持这个，不过可以自己实现）
-        // long addr = srcBuf.address();
-        // Field pmAddrField = dstPool.getClass().getDeclaredField("poolAddress");
-        // pmAddrField.setAccessible(true);
-        // long pmPoolAddr = pmAddrField.get(dstPool);
-        // UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
-        return ;
-    }
 
     //TODO: 是否会有cache伪共享问题？，是否要加padding
     public class ThreadData{
@@ -68,6 +57,8 @@ public class PMDoubleWrite {
     public PMBlockPool pmBlockPool;
 
     private long poolAddress;
+    Method nativeCopyFromByteArrayNT;
+    Method nativeCopyMemoryNT;
 
     PMDoubleWrite(String pmDataFile){
         log.setLevel(Level.INFO);
@@ -83,29 +74,41 @@ public class PMDoubleWrite {
         for (int i = 0; i < maxThreadNum; i++){
             threadDatas[i] = new ThreadData();
         }
-        // backgroundDoubleWriteThread = Executors.newSingleThreadExecutor();
         backgroundDoubleWriteThread = Executors.newFixedThreadPool(4);
 
         try {
-            Class<?> aClass = Class.forName("com.intel.pmem.llpl.MemoryPoolImpl");
-            Constructor<?> constructor = aClass.getDeclaredConstructor(String.class, long.class);
+
+            Class<?> memoryPoolClass = Class.forName("com.intel.pmem.llpl.MemoryPoolImpl");
+            Constructor<?> constructor = memoryPoolClass.getDeclaredConstructor(String.class, long.class);
             constructor.setAccessible(true);
             Object obj = constructor.newInstance(pmDataFile, totalCapacity);
-            Field field = aClass.getDeclaredField("poolAddress");
+            Field field = memoryPoolClass.getDeclaredField("poolAddress");
             field.setAccessible(true);
             this.poolAddress = (long) field.get(obj);
             this.pool = (MemoryPool) obj;
+
+            nativeCopyFromByteArrayNT = memoryPoolClass.getDeclaredMethod(
+                    "nativeCopyFromByteArrayNT",byte[].class, int.class, long.class, int.class);
+            nativeCopyFromByteArrayNT.setAccessible(true);
+
+            nativeCopyMemoryNT = memoryPoolClass.getDeclaredMethod(
+                    "nativeCopyMemoryNT", long.class, long.class, long.class);
+            nativeCopyMemoryNT.setAccessible(true);
+
         }catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException |
                 InvocationTargetException | NoSuchFieldException e){
             log.info(e);
         }
+
+        // iterate pmem space, reducing page fault during write and read
+        this.pool.setMemory((byte)0, 0, 60L*1024L*1024L*1024L);
     }
 
 
     public long doubleWrite(int threadId, ByteBuffer data){
         // 双写，返回PM地址
         ThreadData td = threadDatas[threadId]; // 一个线程内的数据结构？
-        if (td.isFinished == true){ 
+        if (td.isFinished){
             return -1;
         }
         if (td.block == null){
@@ -120,7 +123,7 @@ public class PMDoubleWrite {
         if (td.buf[td.curBuf].remaining() < data.remaining()){
             // 确认刷PM任务完成
             if (td.backgroundDoubleWriteFuture != null){
-                while (td.backgroundDoubleWriteFuture.isDone() != true){
+                while (!td.backgroundDoubleWriteFuture.isDone()){
                     try {
                         Thread.sleep(1);
                     } catch (Exception e){
@@ -135,7 +138,8 @@ public class PMDoubleWrite {
             td.backgroundDoubleWriteFuture = backgroundDoubleWriteThread.submit(new Callable<Integer>(){
                 @Override
                 public Integer call() throws Exception {
-                    pool.copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+//                    copyMemoryNT(td.buf[flushBuf], backgroundBlock.addr, backgroundBlock.capacity);
+                    copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
                     return 0;
                 }
             });
@@ -170,7 +174,7 @@ public class PMDoubleWrite {
                 log.info("shutdown the double write for thread " + i);
                 // 确认刷PM任务完成
                 if (td.backgroundDoubleWriteFuture != null){
-                    while (td.backgroundDoubleWriteFuture.isDone() != true){
+                    while (!td.backgroundDoubleWriteFuture.isDone()){
                         try {
                             Thread.sleep(1);
                         } catch (Exception e){
@@ -182,7 +186,8 @@ public class PMDoubleWrite {
                 // 触发刷盘任务，异步调用block的刷盘函数
                 final PMBlock backgroundBlock = td.block;
                 final ByteBuffer finalBuf = td.buf[td.curBuf];
-                pool.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+//                this.copyMemoryNT(finalBuf, backgroundBlock.addr, backgroundBlock.capacity);
+                this.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
                 td.block = null;
             }
         }
@@ -216,7 +221,6 @@ public class PMDoubleWrite {
         // 小池子
         public ThreadLocal<Long> threadLocalBigBlockStartAddr;
         public ThreadLocal<Integer> threadLocalBigBlockFreeOffset;
-//        public ThreadLocal<LinkedList<Node>> threadLocalFreeList;
 
         PMBlockPool(long capacity) {
             totalCapacity = capacity;
@@ -232,7 +236,6 @@ public class PMDoubleWrite {
             // 小池子
             threadLocalBigBlockFreeOffset = new ThreadLocal<>();
             threadLocalBigBlockStartAddr = new ThreadLocal<>();
-//            threadLocalFreeList = new ThreadLocal<>();
         }
 
         public PMBlock allocate() {
@@ -253,75 +256,39 @@ public class PMDoubleWrite {
 
             return new PMBlock(addr, blockSize);
         }
-
     }
 
-
     public void unsafeCopyToByteArray(long srcOffset, byte[] dstArray, int dstIndex, int byteCount) {
-//        if (dstIndex < 0 || dstIndex + byteCount > dstArray.length) {
-//            throw new IndexOutOfBoundsException(indexOutOfBoundsMessage(dstIndex, byteCount));
-//        }
-//        checkBounds(srcOffset, byteCount);
         long dstAddress = Unsafe.ARRAY_BYTE_BASE_OFFSET + (long) Unsafe.ARRAY_BYTE_INDEX_SCALE * dstIndex;
         UNSAFE.copyMemory(null, poolAddress + srcOffset, dstArray, dstAddress, byteCount);
     }
 
-//    public class Node{
-//        public long begin;
-//        public long end;
-//        public Node(long addr, int length){
-//            begin = addr;
-//            end = begin + length;
-//        }
-//
-//        public void merge(long addr, int length){
-//            begin = Math.min(begin, addr);
-//            end = Math.max(end, addr+length);
-//        }
+//    public static void copyFromDirectBufferToPM(DirectBuffer srcBuf, MemoryPool dstPool, long PMAddr, int length){
+//        // TODO: 实现DirectBuffer 复制到 PM （llpl原来不支持这个，不过可以自己实现）
+////         long addr = srcBuf.address();
+//        // Field pmAddrField = dstPool.getClass().getDeclaredField("poolAddress");
+//        // pmAddrField.setAccessible(true);
+//        // long pmPoolAddr = pmAddrField.get(dstPool);
+////         UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
 //    }
-//
-//    public void updatePoolFreeList(long addr, int length){
-//        LinkedList<Node> freeList = pmBlockPool.threadLocalFreeList.get();
-//        if(freeList == null){
-//            freeList = new LinkedList<>();
-//            pmBlockPool.threadLocalFreeList.set(freeList);
-//            freeList.add(new Node(addr, length));
-//            return ;
-//        }
-//        Iterator<Node> iterator = freeList.listIterator();
-//        int index = 0;
-//        while(iterator.hasNext()){
-//            Node node = iterator.next();
-//            if(node.begin <= addr){
-//                if(node.end >= addr){
-//                    node.merge(addr, length);
-//                    return ;
-//                }
-//            }else{
-//               if(addr + length >= node.begin){
-//                   node.merge(addr, length);
-//               }
-//               else{
-//                   freeList.add(index, new Node(addr, length));
-//               }
-//               return ;
-//            }
-//            index++;
-//        }
-//        freeList.addLast(new Node(addr, length));
-//    }
-//
-//    public String getFreeListString(){
-//        LinkedList<Node> freeList = pmBlockPool.threadLocalFreeList.get();
-//        if(freeList == null){
-//            return "";
-//        }
-//        Iterator<Node> iterator = freeList.listIterator();
-//        StringBuilder sb = new StringBuilder();
-//        while(iterator.hasNext()){
-//            Node node = iterator.next();
-//            sb.append(String.format("[%d, %d) ", node.begin, node.end));
-//        }
-//        return sb.toString();
-//    }
+
+    public void copyMemoryNT(ByteBuffer srcBuf, long dstOffset, int byteCount){
+        try {
+            // TODO: 外部逻辑好像是不管position，直接复制srcBuf的array的内容
+            Class<?> aClass = Class.forName("java.nio.Buffer");
+            Field addrField = aClass.getDeclaredField("address");
+            addrField.setAccessible(true);
+            long addr = (long)addrField.get(srcBuf);
+            nativeCopyMemoryNT.invoke(null, addr, poolAddress+dstOffset, byteCount);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+    public void copyFromByteArrayNT(byte[] srcArray, int srcIndex, long dstOffset, int byteCount) {
+        try {
+            nativeCopyFromByteArrayNT.invoke(null, srcArray, srcIndex, poolAddress + dstOffset, byteCount);
+        }catch (InvocationTargetException | IllegalAccessException e){
+            log.info(e);
+        }
+    }
 }
