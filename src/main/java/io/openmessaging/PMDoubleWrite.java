@@ -288,6 +288,14 @@ public class PMDoubleWrite {
             e.printStackTrace();
         }
     }
+    public void copyPM2Memory(long srcBufAddr, long dstOffset, int byteCount){
+        try {
+            UNSAFE.copyMemory(poolAddress + srcBufAddr, dstOffset, byteCount);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
 
 
 

@@ -465,7 +465,7 @@ public class LSMessageQueue extends MessageQueue {
 
                 ByteBuffer buf = q.dbPool.allocate(dataLength);
                 // pmDoubleWrite.copyPM2MemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
-                pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
+                pmDoubleWrite.copyPM2Memory(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
                 // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, ((DirectBuffer)buf).address(), dataLength );
                 // pmDoubleWrite.copyMemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
                 // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, q.dbPool.addr+ buf.position(), dataLength );
