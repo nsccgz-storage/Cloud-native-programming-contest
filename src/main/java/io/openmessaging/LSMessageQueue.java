@@ -461,10 +461,11 @@ public class LSMessageQueue extends MessageQueue {
 //                log.debug("get from double buffer datLength " + dataLength);
                 long readPMAddr = q.offset2PMAddr.get(curOffset);
                 // 直接返回由 pm addr 构成的 buffer
-                ByteBuffer buf = mqTopic.pmdbbPool.getNewPMDirectByteBuffer(readPMAddr, dataLength);
+                // ByteBuffer buf = mqTopic.pmdbbPool.getNewPMDirectByteBuffer(readPMAddr, dataLength);
 
-                // ByteBuffer buf = q.dbPool.allocate(dataLength);
+                ByteBuffer buf = q.dbPool.allocate(dataLength);
                 // pmDoubleWrite.copyPM2MemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
+                pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
                 // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, ((DirectBuffer)buf).address(), dataLength );
                 // pmDoubleWrite.copyMemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
                 // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, q.dbPool.addr+ buf.position(), dataLength );
@@ -524,12 +525,13 @@ public class LSMessageQueue extends MessageQueue {
 //            log.debug("read position : " + pos);
 
             ByteBuffer buf;
-            if (isCrash){
-                buf = df.readData(pos,dataLength);
-            } else {
-                long bufAddr = df.mmapReadDataAddr(pos,dataLength);
-                buf = mqTopic.mapbbPool.getNewMapDirectByteBuffer(bufAddr, dataLength);
-            }
+            buf = df.readData(pos,dataLength);
+            // if (isCrash){
+            //     buf = df.readData(pos,dataLength);
+            // } else {
+            //     long bufAddr = df.mmapReadDataAddr(pos,dataLength);
+            //     buf = mqTopic.mapbbPool.getNewMapDirectByteBuffer(bufAddr, dataLength);
+            // }
 
             // ByteBuffer buf = df.mmapReadData(pos,dataLength);
 
