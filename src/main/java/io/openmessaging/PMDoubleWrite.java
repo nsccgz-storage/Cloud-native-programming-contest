@@ -18,6 +18,7 @@ import com.intel.pmem.llpl.MemoryPool;
 
 
 import sun.misc.Unsafe;
+import sun.nio.ch.DirectBuffer;
 import java.lang.reflect.Field;
 
 public class PMDoubleWrite {
@@ -36,15 +37,22 @@ public class PMDoubleWrite {
     //TODO: 是否会有cache伪共享问题？，是否要加padding
     public class ThreadData{
         ByteBuffer buf[];
+        long bufAddr[];
         int curBuf;
         PMBlock block;
         boolean isFinished;
         Future<Integer> backgroundDoubleWriteFuture;
         ThreadData(){
             buf = new ByteBuffer[2];
+            bufAddr = new long[2];
             curBuf = 0;
-            //buf[0] = ByteBuffer.allocate(4*1024*1024);  // 4MB
-            //buf[1] = ByteBuffer.allocate(4*1024*1024);
+            // buf[0] = ByteBuffer.allocate(4*1024*1024);  // 4MB
+            // buf[1] = ByteBuffer.allocate(4*1024*1024);
+            for (int i = 0; i < 2; i++){
+                buf[i] = ByteBuffer.allocateDirect(2*1024*1024);
+                bufAddr[i] = ((DirectBuffer)buf[i]).address();
+            }
+
             isFinished = false;
         }
     }
@@ -134,12 +142,12 @@ public class PMDoubleWrite {
             }
             // 触发刷盘任务，异步调用block的刷盘函数
             final PMBlock backgroundBlock = td.block;
-            final int flushBuf = td.curBuf;
+            final long flushBufAddr= td.bufAddr[td.curBuf];
             td.backgroundDoubleWriteFuture = backgroundDoubleWriteThread.submit(new Callable<Integer>(){
                 @Override
                 public Integer call() throws Exception {
-//                    copyMemoryNT(td.buf[flushBuf], backgroundBlock.addr, backgroundBlock.capacity);
-                    copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+                   copyMemoryNT(flushBufAddr, backgroundBlock.addr, backgroundBlock.capacity);
+                    // copyFromByteArrayNT(td.buf[flushBuf].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
                     return 0;
                 }
             });
@@ -185,9 +193,10 @@ public class PMDoubleWrite {
                 }
                 // 触发刷盘任务，异步调用block的刷盘函数
                 final PMBlock backgroundBlock = td.block;
-                final ByteBuffer finalBuf = td.buf[td.curBuf];
-//                this.copyMemoryNT(finalBuf, backgroundBlock.addr, backgroundBlock.capacity);
-                this.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
+                // final ByteBuffer finalBuf = td.buf[td.curBuf];
+                final long flushBufAddr= td.bufAddr[td.curBuf];
+               this.copyMemoryNT(flushBufAddr, backgroundBlock.addr, backgroundBlock.capacity);
+                // this.copyFromByteArrayNT(finalBuf.array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
                 td.block = null;
             }
         }
@@ -225,7 +234,7 @@ public class PMDoubleWrite {
         PMBlockPool(long capacity) {
             totalCapacity = capacity;
 
-            blockSize = 4*1024*1024; // 4MiB
+            blockSize = 2*1024*1024; // 4MiB
             threadLocalBlockNum = 64;
             bigBlockSize = threadLocalBlockNum * blockSize; // 64*4MiB = 256MiB
 
@@ -271,15 +280,19 @@ public class PMDoubleWrite {
 //        // long pmPoolAddr = pmAddrField.get(dstPool);
 ////         UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
 //    }
-
-    public void copyMemoryNT(ByteBuffer srcBuf, long dstOffset, int byteCount){
+    public void copyPM2MemoryNT(long srcBufAddr, long dstOffset, int byteCount){
         try {
-            // TODO: 外部逻辑好像是不管position，直接复制srcBuf的array的内容
-            Class<?> aClass = Class.forName("java.nio.Buffer");
-            Field addrField = aClass.getDeclaredField("address");
-            addrField.setAccessible(true);
-            long addr = (long)addrField.get(srcBuf);
-            nativeCopyMemoryNT.invoke(null, addr, poolAddress+dstOffset, byteCount);
+            nativeCopyMemoryNT.invoke(null, poolAddress + srcBufAddr, dstOffset, byteCount);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+
+
+    public void copyMemoryNT(long srcBufAddr, long dstOffset, int byteCount){
+        try {
+            nativeCopyMemoryNT.invoke(null, srcBufAddr, poolAddress+dstOffset, byteCount);
         }catch (Exception e){
             e.printStackTrace();
         }
@@ -291,4 +304,51 @@ public class PMDoubleWrite {
             log.info(e);
         }
     }
+
+    public class PMDirectByteBufferPool {
+        public final Field byteBufferAddress;
+        public final Field byteBufferCapacity;
+        ByteBuffer[] dbs;
+        int capacity;
+        int cur;
+        ByteBuffer baseByteBuffer;
+    
+    
+        PMDirectByteBufferPool(){
+            try {
+                byteBufferAddress = Buffer.class.getDeclaredField("address");
+                byteBufferAddress.setAccessible(true);
+                byteBufferCapacity = Buffer.class.getDeclaredField("capacity");
+                byteBufferCapacity.setAccessible(true);
+            } catch (Exception e) {
+            throw new RuntimeException(e);
+            }
+
+
+            capacity = 100;
+            cur = 0;
+            dbs = new ByteBuffer[capacity];
+            // baseByteBuffer = ByteBuffer.allocateDirect(1);
+            for (int i = 0; i < capacity; i++){
+                // dbs[i] = baseByteBuffer.duplicate();
+                dbs[i] = ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder());
+            }
+        }
+    
+        ByteBuffer getNewPMDirectByteBuffer(long pmAddr, int dataLength){
+            ByteBuffer buf = dbs[cur];
+            try {
+                byteBufferAddress.setLong(buf, poolAddress + pmAddr);
+                byteBufferCapacity.setInt(buf, dataLength);
+                buf.clear();
+                buf.limit(dataLength);
+                // System.out.println("ok!");
+            } catch (Exception e){
+                e.printStackTrace();
+            }
+            cur = (cur + 1) % capacity;
+            return buf;
+        }
+    }
+
 }

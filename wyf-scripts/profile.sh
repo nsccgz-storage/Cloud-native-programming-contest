@@ -13,6 +13,6 @@ RESULT_PATH=${LOG_DIR}/
 
 cd ${RESULT_PATH}
 
-${PROFILE_PATH}/profiler.sh -e cpu -d 30 -f cpu_profile.html MQBench
+${PROFILE_PATH}/profiler.sh -e cpu -d 10 -f cpu_profile.html MQBench
 
 # python3 -m http.server

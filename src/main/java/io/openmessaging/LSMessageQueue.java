@@ -4,6 +4,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import io.openmessaging.PMwrite.PMBlock;
+import io.openmessaging.PMDoubleWrite.PMDirectByteBufferPool;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,6 +29,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Callable;
+import sun.nio.ch.DirectBuffer;
+
 
 public class LSMessageQueue extends MessageQueue {
     public static final Logger log = Logger.getLogger(LSMessageQueue.class);
@@ -66,7 +69,7 @@ public class LSMessageQueue extends MessageQueue {
                 final PMBlock backgroundBlock = bf.block;
                 if(bf.block != null && bf.curPositions[bf.curBufIndex] != 0){
                     // pmWrite.pool.copyFromByteArrayNT(bf.commByteBuffers[bf.curBufIndex].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
-
+                    
                     pmWrite.copyMemoryNT(bf.commByteBuffers[bf.curBufIndex], backgroundBlock.addr, backgroundBlock.capacity);
                 }
                 bf.block = null;
@@ -111,7 +114,7 @@ public class LSMessageQueue extends MessageQueue {
         public DataFile df;
         public int dataFileId;
         public int threadId;
-        public PMDirectByteBufferPool pdbbpool;
+        public PMDirectByteBufferPool pmdbbPool;
 
         MQTopic(short myTopicId, String name, DataFile dataFile){
             topicId = myTopicId;
@@ -135,7 +138,7 @@ public class LSMessageQueue extends MessageQueue {
 
     public ThreadLocal<MyDRAMbuffer> localDramBuffer;
     public MyDRAMbuffer[] DRAMbufferList;
-    public PMDirectByteBufferPool[] pmDBBPools;
+    public PMDirectByteBufferPool[] pmdbbPools;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         mqConfig = config;
@@ -169,11 +172,6 @@ public class LSMessageQueue extends MessageQueue {
                 isCrash = true;
             }
             if (!isCrash){
-                pmDBBPools = new PMDirectByteBufferPool[50];
-
-                for (int i = 0; i < 50; i++){
-                    pmDBBPools[i] = new PMDirectByteBufferPool();
-                }
                 DRAMbufferList = new MyDRAMbuffer[42];
                 for(int i=0; i<42; i++){
                     DRAMbufferList[i] = new MyDRAMbuffer();
@@ -194,6 +192,10 @@ public class LSMessageQueue extends MessageQueue {
                 String dataFileName = dbDirPath + "/db" + i;
 //                log.info("Initializing datafile: " + dataFileName);
                 dataFiles[i] = new DataFile(dataFileName);
+            }
+            pmdbbPools = new PMDirectByteBufferPool[50];
+            for (int i = 0; i < 50; i++){
+                pmdbbPools[i] = pmDoubleWrite.new PMDirectByteBufferPool();
             }
 
 //            log.info("Initializing metadata file");
@@ -345,7 +347,7 @@ public class LSMessageQueue extends MessageQueue {
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
             mqTopic.threadId = threadId;
             mqTopic.dataFileId = dataFileId;
-            mqTopic.pdbbpool = pmDBBPools[threadId];
+            mqTopic.pmdbbPool = pmdbbPools[threadId];
             topic2object.put(topic, mqTopic);
         }
 
@@ -494,8 +496,19 @@ public class LSMessageQueue extends MessageQueue {
                 
 //               log.debug("read from pm Addr " + readPMAddr);
                 // pmDoubleWrite.unsafeCopyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
-                ByteBuffer buf = mqTopic.pdbbpool.getNewPMDirectByteBuffer(readPMAddr, dataLength);
-                // log.info(buf);
+                
+                // 直接返回由 pm addr 构成的 buffer
+                ByteBuffer buf = mqTopic.pmdbbPool.getNewPMDirectByteBuffer(readPMAddr, dataLength);
+
+                // ByteBuffer buf = q.dbPool.allocate(dataLength);
+                // pmDoubleWrite.copyPM2MemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
+                // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, ((DirectBuffer)buf).address(), dataLength );
+                // pmDoubleWrite.copyMemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
+                // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, q.dbPool.addr+ buf.position(), dataLength );
+                
+//                 ByteBuffer buf = q.bbPool.allocate(dataLength);
+// // //                log.debug("read from pm Addr " + readPMAddr);
+//                 pmDoubleWrite.unsafeCopyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
                 ret.put(i, buf);
             }
             fetchStartIndex += intDoubleWriteNum;
@@ -647,6 +660,7 @@ public class LSMessageQueue extends MessageQueue {
     public class MyDirectBufferPool {
         int capacity;
         ByteBuffer directBuffer;
+        long addr;
         AtomicInteger atomicHead;
         int slotSize;
         int maxLength;
@@ -663,6 +677,7 @@ public class LSMessageQueue extends MessageQueue {
                 return nextHead;
             };
             directBuffer = ByteBuffer.allocateDirect(slotSize*maxLength);
+            addr = ((DirectBuffer)directBuffer).address();
         }
         public  ByteBuffer allocate(int dataLength){
             int thisHead = atomicHead.getAndUpdate(getNext);
