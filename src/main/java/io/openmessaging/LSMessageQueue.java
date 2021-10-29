@@ -37,7 +37,7 @@ public class LSMessageQueue extends MessageQueue {
 
     public class MQConfig {
         Level logLevel = Level.INFO;
-        boolean useStats = false;
+        boolean useStats = true;
         int writeMethod = 12;
         int numOfDataFiles = 4;
         int maxBufNum = 11;
@@ -510,6 +510,8 @@ public class LSMessageQueue extends MessageQueue {
                 ret.put(i, buf);
             }
             fetchStartIndex += intDoubleWriteNum;
+
+            testStat.incReadPMCount(intDoubleWriteNum);
         }
 
         // 分类
@@ -940,7 +942,7 @@ public class LSMessageQueue extends MessageQueue {
                         break;
                     }
                 }
-                if(!flag){ // 自己来
+                if(!flag &&  appendWriters[writerIndex * 8] != null ){ // 自己来
                     appendWriters[writerIndex * 8].isAsyWritePM = true;
                 }
             }
@@ -1158,6 +1160,7 @@ public class LSMessageQueue extends MessageQueue {
             int hitHotCount;
             int missHotCount;
             int dramBufferFullCount;
+            int readPMcount;
 
             String dramBufferUsedInfo = "";
 
@@ -1189,7 +1192,7 @@ public class LSMessageQueue extends MessageQueue {
                 missHotCount = 0;
                 dramBufferFullCount = 0;
                 
-
+                readPMcount = 0;
 
                 fetchCount = 0;
                 readSSDCount = 0;
@@ -1328,7 +1331,11 @@ public class LSMessageQueue extends MessageQueue {
             int id = threadId.get();
             stats[id].hotReadSSDCount+= fetchNum;
         }
+        void incReadPMCount(int pmReadCount){
+            int id = threadId.get();
+            stats[id].readPMcount += pmReadCount;
 
+        }
 
 
 
@@ -1562,7 +1569,9 @@ public class LSMessageQueue extends MessageQueue {
             //StringBuilder hotReadSSDCountReport = new StringBuilder();
             StringBuilder dramReadReport = new StringBuilder();
             StringBuilder totalDramReadReport = new StringBuilder();
-            StringBuffer dramBufferUesdReport = new StringBuffer();
+            StringBuilder dramBufferUesdReport = new StringBuilder();
+            StringBuilder pmReadReport = new StringBuilder();
+
             int hitHotCount = 0, missHotCount = 0, dramBufferFullCount = 0;
             for (int i = 0; i < getNumOfThreads; i++){
                 hotDataHitCountReport.append(String.format("%d,",(stats[i].hitHotDataCount)));
@@ -1576,6 +1585,8 @@ public class LSMessageQueue extends MessageQueue {
                 dramReadReport.append(String.format("Hot hit DRAM: %d, Hot miss DRAM: %d, full DRAM count: %d | ", stats[i].hitHotCount, stats[i].missHotCount, stats[i].dramBufferFullCount ));
 
                 dramBufferUesdReport.append(String.format("%s| ", stats[i].dramBufferUsedInfo));
+
+                pmReadReport.append(String.format("Read PM count: %d | ", stats[i].readPMcount));
 
                 hitHotCount += stats[i].hitHotCount;
                 missHotCount += stats[i].missHotCount;
@@ -1595,7 +1606,7 @@ public class LSMessageQueue extends MessageQueue {
             log.info("[total dram buffer info] :" + totalDramReadReport);
             log.info("[DRAM buffer used info] : " + dramBufferUesdReport);
 
-
+            log.info("[PM read Info] : " + pmReadReport);
 
             log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
 
