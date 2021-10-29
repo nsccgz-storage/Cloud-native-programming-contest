@@ -387,6 +387,13 @@ public class LSMessageQueue extends MessageQueue {
         }else{
             q.offset2DramAddr.add(-1);
         }
+
+        if(w.isAsyWritePM){
+            MyByteBuffer commMyByteBuffer = df.commonWriteBuffer;
+            commMyByteBuffer.writePmem();
+            w.isAsyWritePM = false;
+        }
+
         // TODO: 看看有没有完成，如果没有完成就 1)等待完成 2）自己主动尝试获取锁去完成
         try {
             log.debug("wait to acquire the sema");
@@ -399,7 +406,7 @@ public class LSMessageQueue extends MessageQueue {
                 // 如果已经没有新的线程需要写入了，这个时候这个线程就会无限等待，此时需要有一个超时自救的机制
                 if (w.done != 1){
 //                    log.debug("time out !");
-                    df.syncSeqWriteBatchLock();
+                    df.syncSeqWriteBatchLock(writerIndex);
 //                    log.debug("my position result : " + w.position);
                 }
                 w.sema.acquire();
@@ -418,6 +425,13 @@ public class LSMessageQueue extends MessageQueue {
             q.offset2PMAddr.add(w.pmAddr); 
         }
         // w.pmAddr = -1L; 并不需要这样做
+
+        if(w.isAsyWritePM){
+            MyByteBuffer commMyByteBuffer = df.commonWriteBuffer;
+            commMyByteBuffer.writePmem();
+            w.isAsyWritePM = false;
+        }
+
         return ret;
     }
     @Override
@@ -664,6 +678,7 @@ public class LSMessageQueue extends MessageQueue {
             Semaphore sema;
             AtomicBoolean isDone;
             long pmAddr;
+            boolean isAsyWritePM;
 
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Thread t){
                 topicIndex = myTopicIndex;
@@ -675,6 +690,7 @@ public class LSMessageQueue extends MessageQueue {
                 needWrite = 0;
                 position = 0L;
                 pmAddr = -1L;
+                isAsyWritePM = false;
             }
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Thread t, MQQueue myQ){
                 topicIndex = myTopicIndex;
@@ -687,6 +703,7 @@ public class LSMessageQueue extends MessageQueue {
                 position = 0L;
                 q = myQ;
                 pmAddr = -1L;
+                isAsyWritePM = false;
             }
             Writer(short myTopicIndex, int myQueueId, ByteBuffer myData, Semaphore s){
                 topicIndex = myTopicIndex;
@@ -699,6 +716,7 @@ public class LSMessageQueue extends MessageQueue {
                 isDone = new AtomicBoolean();
                 isDone.set(false);
                 pmAddr = -1L;
+                isAsyWritePM = false;
             }
         }
     
@@ -708,10 +726,12 @@ public class LSMessageQueue extends MessageQueue {
     public class MyByteBuffer{
 
         int curBufIndex;
+        int synWritePMindex;
         ByteBuffer[] commByteBuffers;
         int minBufLen;
         int capacity;
         int curPositions[];
+        AtomicBoolean isFlushUsed = new AtomicBoolean(false);
     
         PMBlock block;
         boolean isFinished;
@@ -719,6 +739,8 @@ public class LSMessageQueue extends MessageQueue {
         int bufferNum;
         public MyByteBuffer(int writerQueueBufferCapacity){
             curBufIndex = 0;
+            synWritePMindex = -1;
+
             bufferNum = 2;
 
             commByteBuffers = new ByteBuffer[bufferNum];
@@ -743,6 +765,7 @@ public class LSMessageQueue extends MessageQueue {
                 if(block == null){
                     isFinished = true;
                     log.info("the pm is full!");
+                    isFlushUsed.set(false);   
                     return false;
                 }
             }
@@ -755,18 +778,19 @@ public class LSMessageQueue extends MessageQueue {
                         e.printStackTrace();
                     }
                 }
-                backgroundDoubleWriteFuture = null;
-                
+                backgroundDoubleWriteFuture = null;   
             }
             final long backgroundAddr = block.addr;
             final int backgroundCapacity = block.capacity;
 
-            final ByteBuffer flushBuf = commByteBuffers[curBufIndex]; 
+            isFlushUsed.set(true);
+            final ByteBuffer flushBuf = commByteBuffers[synWritePMindex]; 
             backgroundDoubleWriteFuture = pmWrite.backgroundDoubleWriteThread.submit(new Callable<Integer>(){
                 @Override
                 public Integer call() throws Exception {
                     pmWrite.pool.copyFromByteArrayNT(flushBuf.array(), 0, backgroundAddr , backgroundCapacity);
                     // log.info("this is no error!!!!!!");
+                    isFlushUsed.set(false);
                     return 0;
                 }
             });
@@ -774,6 +798,8 @@ public class LSMessageQueue extends MessageQueue {
             return true;
         }
         void changeBuf(){
+            while(isFlushUsed.get()); // 保证异步刷 PM 刷完
+            synWritePMindex = curBufIndex;
             curBufIndex = (curBufIndex + 1) % bufferNum;
             curPositions[curBufIndex] = 0;
             commByteBuffers[curBufIndex].clear();
@@ -857,21 +883,21 @@ public class LSMessageQueue extends MessageQueue {
                 if (w.done == 1){
                     return ;
                 }
-                syncSeqWriteBatchInLock();
+                syncSeqWriteBatchInLock(writerIndex);
                 dataFileLock.unlock();
             }
         }
-        public void syncSeqWriteBatchLock(){
+        public void syncSeqWriteBatchLock(int writerIndex){
             try {
                 dataFileLock.lock();
 //                log.debug("I get the lock!");
-                syncSeqWriteBatchInLock();
+                syncSeqWriteBatchInLock(writerIndex);
             } finally {
                 dataFileLock.unlock();
             }
         }
 
-        public void syncSeqWriteBatchInLock(){
+        public void syncSeqWriteBatchInLock(int writerIndex){
             long position = curPosition;
             position += bufMetadataLength;
 
@@ -879,8 +905,22 @@ public class LSMessageQueue extends MessageQueue {
             // 判断缓存区是否满了，满了，就异步刷 PMEM 
             // 
             if(commonWriteBuffer.isFull()){
-                commonWriteBuffer.writePmem();
+                // 保存当前需要线程写的 buf, 其实不改也行
                 commonWriteBuffer.changeBuf();
+                
+                boolean flag = false;
+                for(int i=0; i<maxAppendWritersNum; i++){
+                    if(i == writerIndex) continue;
+                    Writer thisWriter = appendWriters[i * 8];
+                    if(thisWriter != null && thisWriter.done == 0 & thisWriter.needWrite == 0){
+                        thisWriter.isAsyWritePM = true;
+                        flag = true;
+                        break;
+                    }
+                }
+                if(!flag){ // 自己来
+                    appendWriters[writerIndex * 8].isAsyWritePM = true;
+                }
             }
             
             // long blockAddr = block.addr; // 同一个 dataFile
