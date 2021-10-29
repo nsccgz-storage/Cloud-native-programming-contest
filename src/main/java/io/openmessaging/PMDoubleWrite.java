@@ -332,6 +332,11 @@ public class PMDoubleWrite {
             for (int i = 0; i < capacity; i++){
                 // dbs[i] = baseByteBuffer.duplicate();
                 dbs[i] = ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder());
+                try {
+                    byteBufferCapacity.setInt(dbs[i], 17*1024);
+                } catch (Exception e){
+                    e.printStackTrace();
+                }
             }
         }
     
@@ -339,7 +344,6 @@ public class PMDoubleWrite {
             ByteBuffer buf = dbs[cur];
             try {
                 byteBufferAddress.setLong(buf, poolAddress + pmAddr);
-                byteBufferCapacity.setInt(buf, dataLength);
                 buf.clear();
                 buf.limit(dataLength);
                 // System.out.println("ok!");

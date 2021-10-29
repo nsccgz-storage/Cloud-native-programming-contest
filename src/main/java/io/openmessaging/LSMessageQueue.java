@@ -135,13 +135,20 @@ public class LSMessageQueue extends MessageQueue {
             if (metadataFile.exists() && !metadataFile.isDirectory()) {
                 crash = true;
                 isCrash = true;
+                log.info("recover the mq!");
             }
 
 
             topic2object = new ConcurrentHashMap<String, MQTopic>();
 //            log.info("Initializing on PM : " + pmDataFile);
 
-            pmDoubleWrite = new PMDoubleWrite(pmDataFile);
+            if (!isCrash){
+                pmDoubleWrite = new PMDoubleWrite(pmDataFile);
+                pmdbbPools = new PMDirectByteBufferPool[50];
+                for (int i = 0; i < 50; i++){
+                    pmdbbPools[i] = pmDoubleWrite.new PMDirectByteBufferPool();
+                }
+            }
 
             numOfDataFiles = mqConfig.numOfDataFiles;
             dataFiles = new DataFile[numOfDataFiles];
@@ -150,11 +157,6 @@ public class LSMessageQueue extends MessageQueue {
 //                log.info("Initializing datafile: " + dataFileName);
                 dataFiles[i] = new DataFile(dataFileName);
             }
-            pmdbbPools = new PMDirectByteBufferPool[50];
-            for (int i = 0; i < 50; i++){
-                pmdbbPools[i] = pmDoubleWrite.new PMDirectByteBufferPool();
-            }
-
 //            log.info("Initializing metadata file");
             metadataFileChannel = new RandomAccessFile(metadataFile, "rw").getChannel();
             localThreadId = new ThreadLocal<>();
@@ -167,11 +169,12 @@ public class LSMessageQueue extends MessageQueue {
             threadLocalSemaphore = new ThreadLocal<>();
             threadLocalWriterBuffer = new ThreadLocal<>();
 
-            DRAMbufferList = new MyDRAMbuffer[42];
-            for(int i=0; i<42; i++){
-                DRAMbufferList[i] = new MyDRAMbuffer();
+            if (!isCrash){
+                DRAMbufferList = new MyDRAMbuffer[42];
+                for(int i=0; i<42; i++){
+                    DRAMbufferList[i] = new MyDRAMbuffer();
+                }
             }
-
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
             }
@@ -217,9 +220,9 @@ public class LSMessageQueue extends MessageQueue {
                     byte[] strBytes = new byte[strLength];
                     strBuffer.get(strBytes);
                     String topic = new String(strBytes);
+                    // log.info("recover topic : "+topic + "," + topicId);
                     id2topic.put(topicId, topic);
                     topicId += 1;
-//                    log.debug("recover topic : "+topic);
                     strBuffer.clear();
                 }
             }
@@ -230,9 +233,13 @@ public class LSMessageQueue extends MessageQueue {
             for (int i = 0; i < numOfDataFiles; i++){
                 long curPosition = 0L;
                 FileChannel fc = dataFiles[i].dataFileChannel;
+                bufMetadata.clear();
                 while ((fc.read(bufMetadata, curPosition)) != -1){
                     bufMetadata.flip();
                     int bufLength = bufMetadata.getInt();
+                    if (bufLength == 0){
+                        break;
+                    }
                     int bufNum = bufMetadata.getInt();
 //                    log.debug("bufLength : "+bufLength);
 //                    log.debug("bufNum : "+bufNum);
@@ -258,7 +265,7 @@ public class LSMessageQueue extends MessageQueue {
     }
 
     public long replayAppend(int dataFileId,short topicId, String topic, int queueId, long position,int dataLength) {
-//        log.debug("replay append : " + topic + "," + queueId + "," + position);
+    //    log.info("replay append : " + topicId + "," + topic + "," + queueId + "," + position + "," + dataLength);
         MQTopic mqTopic;
         MQQueue q;
 
@@ -413,7 +420,7 @@ public class LSMessageQueue extends MessageQueue {
         if (q == null){
             return ret;
         }
-//        log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum+" maxOffset: "+(q.maxOffset-1));
+    //    log.debug("getRange : "+topic+","+queueId+","+offset+","+fetchNum+" maxOffset: "+(q.maxOffset-1));
         // 更新一下offset和fetchNum，略去那些肯定没有的
         if (offset >= q.maxOffset){
             return ret;
@@ -679,9 +686,34 @@ public class LSMessageQueue extends MessageQueue {
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
 
                 // new opt
-                ByteBuffer tempBuf = ByteBuffer.allocate(4*1024);
-                dataFileChannel.write(tempBuf, 100L*1024L*1024L*1024L);
-                dataFileChannel.force(true);
+                if(!isCrash){
+                    long totalSize = 90L*1024L*1024L*1024L;
+                    log.info("place 0 in file" + dataFileName);
+
+                    // NOTE: 其他部分可以不用写，好像默认是零？ recover可以通过
+                    ByteBuffer tempBuf = ByteBuffer.allocateDirect(4*1024);
+                    dataFileChannel.write(tempBuf, totalSize);
+                    dataFileChannel.force(true);
+
+
+                    // 把所有都写成0
+                    // long totalSize = 4L*1024L*1024L*1024L;
+                    // // write zero to file to pre-allocate the space in file system.
+                    // int ioSize = 1024*1024;
+                    // ByteBuffer tempBuf = ByteBuffer.allocateDirect(1024*1024);
+                    // for (int i = 0; i < 1024*1024; i++){
+                    //     tempBuf.put((byte)0);
+                    // }
+                    // tempBuf.position(0);
+                    // // long totalSize = 100L*1024L*1024L*1024L;
+                    // long curP = totalSize;
+                    // while (curP >= 0){
+                    //     dataFileChannel.write(tempBuf, curP);
+                    //     curP -= ioSize;
+                    //     tempBuf.position(0);
+                    // }
+                    // dataFileChannel.force(true);
+                }
 
                 writerQueueBufferCapacity = 512*1024; // 512 KB * 4 = 1MB
                 commonWriteBuffer = ByteBuffer.allocateDirect(writerQueueBufferCapacity);
