@@ -14,13 +14,14 @@ import com.intel.pmem.llpl.MemoryPool;
 import java.nio.MappedByteBuffer;
 import java.nio.ByteBuffer;
 import java.nio.Buffer;
+import java.nio.ByteOrder;
 
 
 public class PMDirectByteBufferPool {
 
 	public static final Unsafe UNSAFE;
-	public static Field byteBufferAddress;
-	public static Field byteBufferCapacity;
+	public static final Field byteBufferAddress;
+	public static final Field byteBufferCapacity;
 	static {
 	    try {
 		Field field = Unsafe.class.getDeclaredField("theUnsafe");
@@ -47,7 +48,7 @@ public class PMDirectByteBufferPool {
 		baseByteBuffer = ByteBuffer.allocateDirect(1);
 		for (int i = 0; i < capacity; i++){
 			// dbs[i] = baseByteBuffer.duplicate();
-			dbs[i] = ByteBuffer.allocateDirect(0);
+			dbs[i] = ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder());
 		}
 	}
 
@@ -56,7 +57,8 @@ public class PMDirectByteBufferPool {
 		try {
 			buf.clear();
 			byteBufferAddress.setLong(buf, pmAddr);
-			byteBufferCapacity.set(buf, capacity);
+			byteBufferCapacity.setInt(buf, capacity);
+			buf.clear();
 			buf.limit(capacity);
 			// System.out.println("ok!");
 		} catch (Exception e){

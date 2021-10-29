@@ -444,6 +444,7 @@ public class LSMessageQueue extends MessageQueue {
 //                log.debug("read from pm Addr " + readPMAddr);
                 // pmDoubleWrite.unsafeCopyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
                 ByteBuffer buf = mqTopic.pdbbpool.getNewPMDirectByteBuffer(readPMAddr, dataLength);
+                // log.info(buf);
                 ret.put(i, buf);
             }
             fetchStartIndex += intDoubleWriteNum;
