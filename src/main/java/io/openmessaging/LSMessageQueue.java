@@ -145,18 +145,20 @@ public class LSMessageQueue extends MessageQueue {
         mqConfig = new MQConfig();
         init(dbDirPath, pmDirPath);
         log.info("init ok");
-    }
-
-    public void init(String dbDirPath, String pmDirPath) {
-        try {
-             // 超时自动退出
+        if(!isCrash){
+            // 超时自动退出
             new Timer("timer").schedule(new TimerTask() {
                 @Override
                 public void run() {
                     log.info(Thread.currentThread().getName() + " Exit !");
                     System.exit(-1);
                 }
-            }, 610000);
+            }, 590000);
+        }
+    }
+
+    public void init(String dbDirPath, String pmDirPath) {
+        try {
             isCrash = false;
             log.setLevel(mqConfig.logLevel);
             log.info(mqConfig);

@@ -1,4 +1,6 @@
 package io.openmessaging;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -51,6 +53,7 @@ public class PMwrite {
     public PMBlockPool pmBlockPool;
 
     private long poolAddress;
+    Method nativeCopyMemoryNT;
 
     PMwrite(String pmDataFile){
         log.setLevel(Level.INFO);
@@ -74,21 +77,32 @@ public class PMwrite {
             field.setAccessible(true);
             this.poolAddress = (long) field.get(obj);
             this.pool = (MemoryPool) obj;
+
+            nativeCopyMemoryNT = aClass.getDeclaredMethod(
+                    "nativeCopyMemoryNT", long.class, long.class, long.class);
+            nativeCopyMemoryNT.setAccessible(true);
         }catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException |
                 InvocationTargetException | NoSuchFieldException e){
             log.info(e);
         }
     }
     public void unsafeCopyToByteArray(long srcOffset, byte[] dstArray, int dstIndex, int byteCount) {
-        //        if (dstIndex < 0 || dstIndex + byteCount > dstArray.length) {
-        //            throw new IndexOutOfBoundsException(indexOutOfBoundsMessage(dstIndex, byteCount));
-        //        }
-        //        checkBounds(srcOffset, byteCount);
         long dstAddress = Unsafe.ARRAY_BYTE_BASE_OFFSET + (long) Unsafe.ARRAY_BYTE_INDEX_SCALE * dstIndex;
         UNSAFE.copyMemory(null, poolAddress + srcOffset, dstArray, dstAddress, byteCount);
     }
-    
-    
+
+    public void copyMemoryNT(ByteBuffer srcBuf, long dstOffset, int byteCount){
+        try {
+            // TODO: 外部逻辑好像是不管position，直接复制srcBuf的array的内容
+            Class<?> aClass = Class.forName("java.nio.Buffer");
+            Field addrField = aClass.getDeclaredField("address");
+            addrField.setAccessible(true);
+            long addr = (long)addrField.get(srcBuf);
+            nativeCopyMemoryNT.invoke(null, addr, poolAddress+dstOffset, byteCount);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
 
     public class PMBlock {
         public long addr;

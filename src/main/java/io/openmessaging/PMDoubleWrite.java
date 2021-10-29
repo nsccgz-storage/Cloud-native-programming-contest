@@ -104,7 +104,6 @@ public class PMDoubleWrite {
         this.pool.setMemory((byte)0, 0, 60L*1024L*1024L*1024L);
     }
 
-
     public long doubleWrite(int threadId, ByteBuffer data){
         // 双写，返回PM地址
         ThreadData td = threadDatas[threadId]; // 一个线程内的数据结构？
@@ -165,6 +164,7 @@ public class PMDoubleWrite {
         return pmAddr;
 
     }
+
     public void shutdown(){
         // 把目前的buffer全部写到PM到，并且结束双写
         for (int i = 0; i < maxThreadNum; i++){
