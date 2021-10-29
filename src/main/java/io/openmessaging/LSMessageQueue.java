@@ -4,7 +4,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import io.openmessaging.PMwrite.PMBlock;
-import io.openmessaging.PMDoubleWrite.PMDirectByteBufferPool;
+import io.openmessaging.PMwrite.PMDirectByteBufferPool;
 
 import java.io.File;
 import java.io.IOException;
@@ -69,7 +69,6 @@ public class LSMessageQueue extends MessageQueue {
                 final PMBlock backgroundBlock = bf.block;
                 if(bf.block != null && bf.curPositions[bf.curBufIndex] != 0){
                     // pmWrite.pool.copyFromByteArrayNT(bf.commByteBuffers[bf.curBufIndex].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
-                    
                     pmWrite.copyMemoryNT(bf.commByteBuffers[bf.curBufIndex], backgroundBlock.addr, backgroundBlock.capacity);
                 }
                 bf.block = null;
@@ -134,7 +133,6 @@ public class LSMessageQueue extends MessageQueue {
     public ThreadLocal<Semaphore> threadLocalSemaphore;
     public ThreadLocal<ByteBuffer> threadLocalWriterBuffer;
     boolean isCrash;
-    public PMDoubleWrite pmDoubleWrite;
 
     public ThreadLocal<MyDRAMbuffer> localDramBuffer;
     public MyDRAMbuffer[] DRAMbufferList;
@@ -195,7 +193,7 @@ public class LSMessageQueue extends MessageQueue {
             }
             pmdbbPools = new PMDirectByteBufferPool[50];
             for (int i = 0; i < 50; i++){
-                pmdbbPools[i] = pmDoubleWrite.new PMDirectByteBufferPool();
+                pmdbbPools[i] = pmWrite.new PMDirectByteBufferPool();
             }
 
 //            log.info("Initializing metadata file");

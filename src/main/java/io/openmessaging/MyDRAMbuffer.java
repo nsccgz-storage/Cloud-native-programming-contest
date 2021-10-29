@@ -24,7 +24,7 @@ public class MyDRAMbuffer {
     }
     public MyDRAMbuffer(){
 
-        int[] slotNums = new int[]{800, 800, 800, 1000};
+        int[] slotNums = new int[]{800, 800, 1000, 1000};
         int[] slotSizes = new int[]{4, 8, 12, 17};
 
         addr2buffer = new int[5];

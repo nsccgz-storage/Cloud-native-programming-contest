@@ -59,7 +59,6 @@ public class PMDoubleWrite {
     ThreadData[]  threadDatas;
     int maxThreadNum;
     ExecutorService backgroundDoubleWriteThread;
-
     public long totalCapacity;
     public MemoryPool pool;
     public PMBlockPool pmBlockPool;

@@ -22,7 +22,6 @@ import sun.nio.ch.DirectBuffer;
 import java.lang.reflect.Field;
 
 
-
 public class PMwrite {
     public static final Logger log = Logger.getLogger(PMwrite.class);
 	public static final Unsafe UNSAFE;
@@ -162,10 +161,15 @@ public class PMwrite {
             e.printStackTrace();
         }
     }
-
-    public void copyMemoryNT(long srcBufAddr, long dstOffset, int byteCount){
+    
+    public void copyMemoryNT(ByteBuffer srcBuf, long dstOffset, int byteCount){
         try {
-            nativeCopyMemoryNT.invoke(null, srcBufAddr, poolAddress+dstOffset, byteCount);
+            // TODO: 外部逻辑好像是不管position，直接复制srcBuf的array的内容
+            Class<?> aClass = Class.forName("java.nio.Buffer");
+            Field addrField = aClass.getDeclaredField("address");
+            addrField.setAccessible(true);
+            long addr = (long)addrField.get(srcBuf);
+            nativeCopyMemoryNT.invoke(null, addr, poolAddress+dstOffset, byteCount);
         }catch (Exception e){
             e.printStackTrace();
         }
@@ -189,6 +193,7 @@ public class PMwrite {
     
         PMDirectByteBufferPool(){
             try {
+                
                 byteBufferAddress = Buffer.class.getDeclaredField("address");
                 byteBufferAddress.setAccessible(true);
                 byteBufferCapacity = Buffer.class.getDeclaredField("capacity");
