@@ -61,7 +61,14 @@ mvn clean package assembly:single -DskipTests
 
 rm -rf  ${DBDIR}/*
 
-taskset -c 1-4 java -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx160g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMDIR} perf 2>&1 | tee ${LOG_PATH}
+
+taskset -c 1-4 java -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx18g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMDIR} perf  2>&1 | tee ${LOG_PATH}
+
+#taskset -c 1-4 java -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx160g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMDIR}  2>&1 | tee ${LOG_PATH}
+
+
+
+
 #taskset -c 1-4 java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx170g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.MQBench  ${DBDIR} ${PMDIR} | tee ${LOG_PATH}
 
 #taskset -c 1-4 java -Dfile.encoding=UTF-8 -cp "./target/mq-sample.jar:/home/wyf/nfs/software/envs/mqJavaClass/log4j-1.2.17.jar:/home/wyf/nfs/software/envs/mqJavaClass/llpl-1.2.0-release.jar" -Xmx170g  -Xss1g -XX:MaxDirectMemorySize=2g io.openmessaging.PMPrefetchBuffer  ${DBDIR} ${PMDIR}
