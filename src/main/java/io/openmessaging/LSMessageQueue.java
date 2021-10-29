@@ -888,6 +888,7 @@ public class LSMessageQueue extends MessageQueue {
                 // mapByteBuffer.position(mapByteBufferOffset);
                 long mapByteBufferAddr = ((DirectBuffer)mapByteBuffer).address();
                 long dstAddr = ((DirectBuffer)tmp).address();
+                // TODO: 是否可以不复制，直接返回 mmap 的地址所组成的 directbuffer 返回？
                 UnsafeUtil.UNSAFE.copyMemory(mapByteBufferAddr+mapByteBufferOffset+globalMetadataLength , dstAddr+tmp.position(), dataLength);
                 
                 // ByteBuffer tmp2 = ByteBuffer.allocate(dataLength);
