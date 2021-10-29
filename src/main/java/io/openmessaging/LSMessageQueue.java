@@ -377,7 +377,7 @@ public class LSMessageQueue extends MessageQueue {
         try {
 //            log.debug("wait to acquire the sema");
 
-            if (!w.sema.tryAcquire(1, 500*1000, TimeUnit.MICROSECONDS)){
+            if (!w.sema.tryAcquire(1, 1000*1000, TimeUnit.MICROSECONDS)){
                 // 我插入的writer可能要等待下一个能获取锁的写入线程帮我写入
                 // 如果已经没有新的线程需要写入了，这个时候这个线程就会无限等待，此时需要有一个超时自救的机制
                 if (w.done != 1){
