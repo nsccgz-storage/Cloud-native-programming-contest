@@ -1,6 +1,8 @@
-#!/bin/bash
+#e!/bin/bash
 
 PROFILE_PATH=/home/wyf/nfs/software/envs/mqJavaClass/async-profile/async-profiler-2.5-linux-x64
+
+set -x
 
 
 current=`date "+%Y-%m-%d-%H-%M-%S"`
@@ -13,6 +15,18 @@ RESULT_PATH=${LOG_DIR}/
 
 cd ${RESULT_PATH}
 
-${PROFILE_PATH}/profiler.sh -e cpu -d 10 -f cpu_profile.html MQBench
+INTEVEL=10
+ITER=0
+RET=0
 
-python3 -m http.server
+while [[ ${RET} -eq 0 ]]
+do
+
+${PROFILE_PATH}/profiler.sh -e cpu -d ${INTEVEL} -f ${ITER}.html MQBench
+RET=$?
+ITER=`expr ${ITER} + ${INTEVEL}`
+
+done
+
+
+#python3 -m http.server
