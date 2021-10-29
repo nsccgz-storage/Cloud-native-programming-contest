@@ -22,6 +22,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.IntUnaryOperator;
 
+import sun.nio.ch.DirectBuffer;
+
 
 public class LSMessageQueue extends MessageQueue {
     public static final Logger log = Logger.getLogger(LSMessageQueue.class);
@@ -429,11 +431,18 @@ public class LSMessageQueue extends MessageQueue {
 //                log.debug("curOffset : " + curOffset);
                 int dataLength = q.offset2Length.get(curOffset);
 //                log.debug("get from double buffer datLength " + dataLength);
-                // TODO: 需要修复
-                ByteBuffer buf = q.bbPool.allocate(dataLength);
                 long readPMAddr = q.offset2PMAddr.get(curOffset);
-//                log.debug("read from pm Addr " + readPMAddr);
-                pmDoubleWrite.unsafeCopyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
+                // TODO: 需要修复
+                ByteBuffer buf = q.dbPool.allocate(dataLength);
+                // ByteBuffer buf = ByteBuffer.allocateDirect(dataLength);
+                pmDoubleWrite.copyPM2MemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
+                // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, ((DirectBuffer)buf).address(), dataLength );
+                // pmDoubleWrite.copyMemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
+                // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, q.dbPool.addr+ buf.position(), dataLength );
+                
+//                 ByteBuffer buf = q.bbPool.allocate(dataLength);
+// // //                log.debug("read from pm Addr " + readPMAddr);
+//                 pmDoubleWrite.unsafeCopyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
                 ret.put(i, buf);
             }
             fetchStartIndex += intDoubleWriteNum;
@@ -562,6 +571,7 @@ public class LSMessageQueue extends MessageQueue {
     public class MyDirectBufferPool {
         int capacity;
         ByteBuffer directBuffer;
+        long addr;
         AtomicInteger atomicHead;
         int slotSize;
         int maxLength;
@@ -578,6 +588,7 @@ public class LSMessageQueue extends MessageQueue {
                 return nextHead;
             };
             directBuffer = ByteBuffer.allocateDirect(slotSize*maxLength);
+            addr = ((DirectBuffer)directBuffer).address();
         }
         public  ByteBuffer allocate(int dataLength){
             int thisHead = atomicHead.getAndUpdate(getNext);

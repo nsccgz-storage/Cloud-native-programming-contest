@@ -280,6 +280,15 @@ public class PMDoubleWrite {
 //        // long pmPoolAddr = pmAddrField.get(dstPool);
 ////         UNSAFE.copyMemory(srcBase, srcOffset, destBase, destOffset, bytes);
 //    }
+    public void copyPM2MemoryNT(long srcBufAddr, long dstOffset, int byteCount){
+        try {
+            nativeCopyMemoryNT.invoke(null, poolAddress + srcBufAddr, dstOffset, byteCount);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+
 
     public void copyMemoryNT(long srcBufAddr, long dstOffset, int byteCount){
         try {
