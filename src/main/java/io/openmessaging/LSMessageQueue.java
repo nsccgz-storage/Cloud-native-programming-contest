@@ -677,7 +677,12 @@ public class LSMessageQueue extends MessageQueue {
                 curPosition = 0L;
                 // FIXME: resource leak ??
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
+
+                // new opt
+                ByteBuffer tempBuf = ByteBuffer.allocate(4*1024);
+                dataFileChannel.write(tempBuf, 100L*1024L*1024L*1024L);
                 dataFileChannel.force(true);
+
                 writerQueueBufferCapacity = 512*1024; // 512 KB * 4 = 1MB
                 commonWriteBuffer = ByteBuffer.allocateDirect(writerQueueBufferCapacity);
                 commonWriteBuffer.clear();
