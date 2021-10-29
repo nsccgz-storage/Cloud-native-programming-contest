@@ -170,12 +170,16 @@ public class LSMessageQueue extends MessageQueue {
             }
             if (!isCrash){
                 pmDBBPools = new PMDirectByteBufferPool[50];
+
                 for (int i = 0; i < 50; i++){
                     pmDBBPools[i] = new PMDirectByteBufferPool();
                 }
+                DRAMbufferList = new MyDRAMbuffer[42];
                 for(int i=0; i<42; i++){
                     DRAMbufferList[i] = new MyDRAMbuffer();
                 }
+
+                pmWrite = new PMwrite(pmDataFile);
             }
 
             topic2object = new ConcurrentHashMap<String, MQTopic>();
