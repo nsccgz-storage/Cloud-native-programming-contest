@@ -304,4 +304,51 @@ public class PMDoubleWrite {
             log.info(e);
         }
     }
+
+    public class PMDirectByteBufferPool {
+        public final Field byteBufferAddress;
+        public final Field byteBufferCapacity;
+        ByteBuffer[] dbs;
+        int capacity;
+        int cur;
+        ByteBuffer baseByteBuffer;
+    
+    
+        PMDirectByteBufferPool(){
+            try {
+                byteBufferAddress = Buffer.class.getDeclaredField("address");
+                byteBufferAddress.setAccessible(true);
+                byteBufferCapacity = Buffer.class.getDeclaredField("capacity");
+                byteBufferCapacity.setAccessible(true);
+            } catch (Exception e) {
+            throw new RuntimeException(e);
+            }
+
+
+            capacity = 100;
+            cur = 0;
+            dbs = new ByteBuffer[capacity];
+            // baseByteBuffer = ByteBuffer.allocateDirect(1);
+            for (int i = 0; i < capacity; i++){
+                // dbs[i] = baseByteBuffer.duplicate();
+                dbs[i] = ByteBuffer.allocateDirect(0).order(ByteOrder.nativeOrder());
+            }
+        }
+    
+        ByteBuffer getNewPMDirectByteBuffer(long pmAddr, int dataLength){
+            ByteBuffer buf = dbs[cur];
+            try {
+                byteBufferAddress.setLong(buf, poolAddress + pmAddr);
+                byteBufferCapacity.setInt(buf, dataLength);
+                buf.clear();
+                buf.limit(dataLength);
+                // System.out.println("ok!");
+            } catch (Exception e){
+                e.printStackTrace();
+            }
+            cur = (cur + 1) % capacity;
+            return buf;
+        }
+    }
+
 }

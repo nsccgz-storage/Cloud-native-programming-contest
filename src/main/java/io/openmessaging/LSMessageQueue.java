@@ -3,6 +3,8 @@ package io.openmessaging;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
+import io.openmessaging.PMDoubleWrite.PMDirectByteBufferPool;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -79,6 +81,7 @@ public class LSMessageQueue extends MessageQueue {
         public DataFile df;
         public int dataFileId;
         public int threadId;
+        public PMDirectByteBufferPool pmdbbPool;
 
         MQTopic(short myTopicId, String name, DataFile dataFile){
             topicId = myTopicId;
@@ -102,6 +105,7 @@ public class LSMessageQueue extends MessageQueue {
 
     public ThreadLocal<MyDRAMbuffer> localDramBuffer;
     public MyDRAMbuffer[] DRAMbufferList;
+    public PMDirectByteBufferPool[] pmdbbPools;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         mqConfig = config;
@@ -145,6 +149,10 @@ public class LSMessageQueue extends MessageQueue {
                 String dataFileName = dbDirPath + "/db" + i;
 //                log.info("Initializing datafile: " + dataFileName);
                 dataFiles[i] = new DataFile(dataFileName);
+            }
+            pmdbbPools = new PMDirectByteBufferPool[50];
+            for (int i = 0; i < 50; i++){
+                pmdbbPools[i] = pmDoubleWrite.new PMDirectByteBufferPool();
             }
 
 //            log.info("Initializing metadata file");
@@ -299,6 +307,7 @@ public class LSMessageQueue extends MessageQueue {
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
             mqTopic.threadId = threadId;
             mqTopic.dataFileId = dataFileId;
+            mqTopic.pmdbbPool = pmdbbPools[threadId];
             topic2object.put(topic, mqTopic);
         }
 
@@ -432,10 +441,11 @@ public class LSMessageQueue extends MessageQueue {
                 int dataLength = q.offset2Length.get(curOffset);
 //                log.debug("get from double buffer datLength " + dataLength);
                 long readPMAddr = q.offset2PMAddr.get(curOffset);
-                // TODO: 需要修复
-                ByteBuffer buf = q.dbPool.allocate(dataLength);
-                // ByteBuffer buf = ByteBuffer.allocateDirect(dataLength);
-                pmDoubleWrite.copyPM2MemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
+                // 直接返回由 pm addr 构成的 buffer
+                ByteBuffer buf = mqTopic.pmdbbPool.getNewPMDirectByteBuffer(readPMAddr, dataLength);
+
+                // ByteBuffer buf = q.dbPool.allocate(dataLength);
+                // pmDoubleWrite.copyPM2MemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
                 // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, ((DirectBuffer)buf).address(), dataLength );
                 // pmDoubleWrite.copyMemoryNT(readPMAddr, q.dbPool.addr + buf.position(), dataLength );
                 // pmDoubleWrite.UNSAFE.copyMemory(readPMAddr, q.dbPool.addr+ buf.position(), dataLength );
