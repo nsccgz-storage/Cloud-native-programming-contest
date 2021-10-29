@@ -101,7 +101,7 @@ public class PMDoubleWrite {
         }
 
         // iterate pmem space, reducing page fault during write and read
-        this.pool.setMemory((byte)0, 0, 60L*1024L*1024L*1024L);
+        this.pool.setMemoryNT((byte)0, 0, 60L*1024L*1024L*1024L);
     }
 
 

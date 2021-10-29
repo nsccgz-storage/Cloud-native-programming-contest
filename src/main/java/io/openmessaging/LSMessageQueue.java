@@ -111,6 +111,7 @@ public class LSMessageQueue extends MessageQueue {
         public DataFile df;
         public int dataFileId;
         public int threadId;
+        public PMDirectByteBufferPool pdbbpool;
 
         MQTopic(short myTopicId, String name, DataFile dataFile){
             topicId = myTopicId;
@@ -134,6 +135,7 @@ public class LSMessageQueue extends MessageQueue {
 
     public ThreadLocal<MyDRAMbuffer> localDramBuffer;
     public MyDRAMbuffer[] DRAMbufferList;
+    public PMDirectByteBufferPool[] pmDBBPools;
 
     LSMessageQueue(String dbDirPath, String pmDirPath, MQConfig config){
         mqConfig = config;
@@ -166,18 +168,11 @@ public class LSMessageQueue extends MessageQueue {
                 crash = true;
                 isCrash = true;
             }
-            if(!isCrash){
-                new Timer("timer").schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        log.info(Thread.currentThread().getName() + " Exit !");
-                        System.exit(-1);
-                    }
-                }, 910000);
-                DRAMbufferList = new MyDRAMbuffer[42];
-
-                pmWrite = new PMwrite(pmDataFile);
-
+            if (!isCrash){
+                pmDBBPools = new PMDirectByteBufferPool[50];
+                for (int i = 0; i < 50; i++){
+                    pmDBBPools[i] = new PMDirectByteBufferPool();
+                }
                 for(int i=0; i<42; i++){
                     DRAMbufferList[i] = new MyDRAMbuffer();
                 }
@@ -346,6 +341,7 @@ public class LSMessageQueue extends MessageQueue {
             mqTopic = new MQTopic(topicId, topic, dataFiles[dataFileId]);
             mqTopic.threadId = threadId;
             mqTopic.dataFileId = dataFileId;
+            mqTopic.pdbbpool = pmDBBPools[threadId];
             topic2object.put(topic, mqTopic);
         }
 
@@ -369,7 +365,7 @@ public class LSMessageQueue extends MessageQueue {
                testStat.incQueueCount();
            }
         }
-//        log.debug("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
+    //    log.info("append : "+topic+","+queueId+","+data.remaining()+" maxOffset :"+q.maxOffset);
 
        
         int dataLength = writeDramData.remaining();
@@ -489,10 +485,12 @@ public class LSMessageQueue extends MessageQueue {
                 int dataLength = q.offset2Length.get(curOffset);
 //                log.debug("get from double buffer datLength " + dataLength);
                 // TODO: 需要修复
-                ByteBuffer buf = q.bbPool.allocate(dataLength);
                 // ByteBuffer buf = ByteBuffer.allocate(dataLength);
                 long readPMAddr = q.offset2PMAddr.get(curOffset) + 2 * Short.BYTES + Integer.BYTES;
-                pmWrite.unsafeCopyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
+                
+//               log.debug("read from pm Addr " + readPMAddr);
+                // pmDoubleWrite.unsafeCopyToByteArray(readPMAddr, buf.array(), buf.position(), dataLength);
+                ByteBuffer buf = mqTopic.pdbbpool.getNewPMDirectByteBuffer(readPMAddr, dataLength);
                 // log.info(buf);
                 ret.put(i, buf);
             }
