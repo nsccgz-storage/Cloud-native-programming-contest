@@ -48,26 +48,29 @@ public class LSMessageQueue extends MessageQueue {
         // 把目前的buffer全部写到PM到，并且结束双写
         for (int i = 0; i < numOfDataFiles; i++){
             MyByteBuffer bf =  dataFiles[i].commonWriteBuffer;
-            if (bf.block != null){
-                bf.isFinished = true;
-                log.info("shutdown the double write for thread " + i);
-                // 确认刷PM任务完成
-                if (bf.backgroundDoubleWriteFuture != null){
-                    while (bf.backgroundDoubleWriteFuture.isDone() != true){
-                        try {
-                            Thread.sleep(1);
-                        } catch (Exception e){
-                            e.printStackTrace();
+            for(int k=0; k<bf.bufferNum; ++k){
+                if (bf.blocks[k] != null) {
+                    bf.isFinished = true;
+                    log.info("shutdown the double write for thread " + i);
+                    // 确认刷PM任务完成
+                    if (bf.backgroundDoubleWriteFuture != null) {
+                        while (bf.backgroundDoubleWriteFuture.isDone() != true) {
+                            try {
+                                Thread.sleep(1);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
                         }
+                        bf.backgroundDoubleWriteFuture = null;
                     }
-                    bf.backgroundDoubleWriteFuture = null;
+                    // 触发刷盘任务，异步调用block的刷盘函数
+                    final PMBlock backgroundBlock = bf.blocks[k];
+                    if (backgroundBlock != null && bf.curPositions[bf.curBufIndex] != 0) {
+                        pmWrite.pool.copyFromByteArrayNT(bf.commByteBuffers[bf.curBufIndex].array(), 0, backgroundBlock.addr, backgroundBlock.capacity);
+                    }
+                    bf.blocks[k] = null;
                 }
-                // 触发刷盘任务，异步调用block的刷盘函数
-                final PMBlock backgroundBlock = bf.block;
-                if(bf.block != null && bf.curPositions[bf.curBufIndex] != 0){
-                    pmWrite.pool.copyFromByteArrayNT(bf.commByteBuffers[bf.curBufIndex].array(), 0, backgroundBlock.addr , backgroundBlock.capacity);
-                }
-                bf.block = null;
+
             }
         }
     }
@@ -173,7 +176,7 @@ public class LSMessageQueue extends MessageQueue {
                 isCrash = true;
             }
 
-
+            pmWrite = new PMwrite(pmDataFile);
             topic2object = new ConcurrentHashMap<String, MQTopic>();
 //            log.info("Initializing on PM : " + pmDataFile);
 
@@ -202,7 +205,6 @@ public class LSMessageQueue extends MessageQueue {
 
             DRAMbufferList = new MyDRAMbuffer[42];
 
-            pmWrite = new PMwrite(pmDataFile);
 
             for(int i=0; i<42; i++){
                 DRAMbufferList[i] = new MyDRAMbuffer();
@@ -443,6 +445,7 @@ public class LSMessageQueue extends MessageQueue {
 
         int fetchStartIndex = 0;
         // 尝试读双写的内容
+//        log.info(String.format("type: %d, max offset:%d, pmem cache size: %d", q.type, q.maxOffset, q.offset2PMAddr.size()));
         if (offset < q.offset2PMAddr.size()){
             // TODO: 需要处理一种情况：PM没写满就来读，这个怎么办？
             // 我在测试程序里手动执行shutdown，将这些buffer刷下来
@@ -453,9 +456,9 @@ public class LSMessageQueue extends MessageQueue {
             long doubleWriteMaxOffset = q.offset2PMAddr.size()-1;
             long doubleWriteNum = Math.min(fetchMaxOffset, doubleWriteMaxOffset) - offset + 1;
             int intDoubleWriteNum =(int)doubleWriteNum;
-            if(mqConfig.useStats) {
-                testStat.incHitPmemCount(intDoubleWriteNum);
-            }
+//            if(mqConfig.useStats) {
+//                testStat.incHitPmemCount(intDoubleWriteNum);
+//            }
             for (int i = 0; i < intDoubleWriteNum; i++){
                 int curOffset = (int)offset+i;
 //                log.debug("curOffset : " + curOffset);
@@ -706,7 +709,7 @@ public class LSMessageQueue extends MessageQueue {
         int capacity;
         int curPositions[];
 
-        PMBlock block;
+        PMBlock[] blocks;
         boolean isFinished;
         Future<Integer> backgroundDoubleWriteFuture;
         int bufferNum;
@@ -726,18 +729,17 @@ public class LSMessageQueue extends MessageQueue {
                 curPositions[i] = 0;
             }
             // curPositions[2] = 0;
-
+            blocks = new PMBlock[bufferNum];
+            for(int i=0; i<bufferNum; i++){
+                blocks[i] = pmWrite.pmBlockPool.allocate();
+            }
             isFinished = false;
         }
-        boolean writePmem(){
+        boolean writePmem(int curIdx){
             if(isFinished) return false;
-            if(block == null){
-                block = pmWrite.pmBlockPool.allocate();
-                if(block == null){
-                    isFinished = true;
-                    log.info("the pm is full!");
-                    return false;
-                }
+            if(blocks[curIdx] == null){
+//                log.info("the pm is full");
+                return false;
             }
 
             if(backgroundDoubleWriteFuture != null){
@@ -751,8 +753,8 @@ public class LSMessageQueue extends MessageQueue {
                 backgroundDoubleWriteFuture = null;
 
             }
-            final long backgroundAddr = block.addr;
-            final int backgroundCapacity = block.capacity;
+            final long backgroundAddr = blocks[curIdx].addr;
+            final int backgroundCapacity = blocks[curIdx].capacity;
 
             final ByteBuffer flushBuf = commByteBuffers[curBufIndex];
             backgroundDoubleWriteFuture = pmWrite.backgroundDoubleWriteThread.submit(new Callable<Integer>(){
@@ -763,7 +765,7 @@ public class LSMessageQueue extends MessageQueue {
                     return 0;
                 }
             });
-            block = null;
+            blocks[curIdx] = pmWrite.pmBlockPool.allocate();
             return true;
         }
         void changeBuf(){
@@ -872,7 +874,7 @@ public class LSMessageQueue extends MessageQueue {
             // 判断缓存区是否满了，满了，就异步刷 PMEM
             //
             if(commonWriteBuffer.isFull()){
-                commonWriteBuffer.writePmem();
+                commonWriteBuffer.writePmem(commonWriteBuffer.curBufIndex);
                 commonWriteBuffer.changeBuf();
             }
 
@@ -880,7 +882,7 @@ public class LSMessageQueue extends MessageQueue {
 
             ByteBuffer writerBuffer = commonWriteBuffer.duplicate(0); // 0 for seqWrite
             int bufferStartAddr = commonWriteBuffer.getAddr();
-            PMBlock block = commonWriteBuffer.block;
+            PMBlock block = commonWriteBuffer.blocks[commonWriteBuffer.curBufIndex];
 
             writerBuffer.clear();
 
@@ -910,6 +912,12 @@ public class LSMessageQueue extends MessageQueue {
                     bufNum += 1;
 
                     thisWriter.pmAddr =  block == null ? -1L :  block.addr + writerBuffer.position() + bufferStartAddr;
+//                    if(block != null){
+//                        log.info("block is not null");
+//                        if(block.addr + writerBuffer.position() + bufferStartAddr != -1){
+//                            log.info("pm addr != -1");
+//                        }
+//                    }
 
                     writerBuffer.putShort(thisWriter.topicIndex);
                     writerBuffer.putInt(thisWriter.queueId);
@@ -1236,7 +1244,7 @@ public class LSMessageQueue extends MessageQueue {
 
         void incHitPmemCount(int v){
             int id = threadId.get();
-            stats[id].hitPmemCount+=v;
+            stats[id].hitPmemCount += v;
         }
         void incFetchMsgCount(int fetchNum){
             int id = threadId.get();
