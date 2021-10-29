@@ -453,6 +453,9 @@ public class LSMessageQueue extends MessageQueue {
             long doubleWriteMaxOffset = q.offset2PMAddr.size()-1;
             long doubleWriteNum = Math.min(fetchMaxOffset, doubleWriteMaxOffset) - offset + 1;
             int intDoubleWriteNum =(int)doubleWriteNum;
+            if(mqConfig.useStats) {
+                testStat.incHitPmemCount(intDoubleWriteNum);
+            }
             for (int i = 0; i < intDoubleWriteNum; i++){
                 int curOffset = (int)offset+i;
 //                log.debug("curOffset : " + curOffset);
@@ -1087,6 +1090,8 @@ public class LSMessageQueue extends MessageQueue {
             int missHotCount;
             int dramBufferFullCount;
 
+            int hitPmemCount;
+
             String dramBufferUsedInfo = "";
 
             public int[] bucketBound;
@@ -1117,7 +1122,7 @@ public class LSMessageQueue extends MessageQueue {
                 missHotCount = 0;
                 dramBufferFullCount = 0;
                 
-
+                hitPmemCount = 0;
 
                 fetchCount = 0;
                 readSSDCount = 0;
@@ -1152,6 +1157,8 @@ public class LSMessageQueue extends MessageQueue {
                 ret.dramBufferFullCount = this.dramBufferFullCount;
                 ret.hitHotCount = this.hitHotCount;
                 ret.missHotCount = this.missHotCount;
+
+                ret.hitPmemCount = this.hitPmemCount;
                 return ret;
             }
             public void addSample(int len){
@@ -1227,6 +1234,10 @@ public class LSMessageQueue extends MessageQueue {
             stats[id].dramBufferUsedInfo = str;
         }
 
+        void incHitPmemCount(int v){
+            int id = threadId.get();
+            stats[id].hitPmemCount+=v;
+        }
         void incFetchMsgCount(int fetchNum){
             int id = threadId.get();
             stats[id].fetchCount += fetchNum;
@@ -1523,10 +1534,16 @@ public class LSMessageQueue extends MessageQueue {
             log.info("[total dram buffer info] :" + totalDramReadReport);
             log.info("[DRAM buffer used info] : " + dramBufferUesdReport);
 
-
+            int totalHitPmemCount = 0;
+            StringBuilder hitPmemCountReport = new StringBuilder();
+            for(int i = 0;i < getNumOfThreads;i++){
+                hitPmemCountReport.append(String.format("%d,",(stats[i].hitPmemCount)));
+                totalHitPmemCount += stats[i].hitPmemCount;
+            }
+            log.info("[Pmem hit count] : total= "+totalHitPmemCount+"; "+hitPmemCountReport);
 
             log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
-
+            /*
             // report write stat
             for (int i = 0; i < dataFiles.length; i++){
                 if (oldWriteStats[i] != null){
@@ -1564,8 +1581,8 @@ public class LSMessageQueue extends MessageQueue {
                 }
                 oldWriteStats[i] = dataFiles[i].writeStat.clone();
             }
-
-
+            */
+            /*
             StringBuilder queueCountReport = new StringBuilder();
             StringBuilder hotQueueCountReport = new StringBuilder();
             StringBuilder coldQueueCountReport = new StringBuilder();
@@ -1584,7 +1601,7 @@ public class LSMessageQueue extends MessageQueue {
             log.info(hotQueueCountReport);
             log.info(coldQueueCountReport);
             log.info(otherQueueCountReport);
-
+            */
 //            log.info("[pmem free list for this thread] "+pmDoubleWrite.getFreeListString());
 
             // log.info(writeBandwidth+","+elapsedTimeS+","+appendThroughput+","+appendLatency+","+getRangeThroughput+","+getRangeLatency+",XXXXXX,"+curWriteBandwidth+","+thisElapsedTimeS+","+curAppendThroughput+","+curAppendLatency+","+curGetRangeThroughput+","+curGetRangeLatency);
