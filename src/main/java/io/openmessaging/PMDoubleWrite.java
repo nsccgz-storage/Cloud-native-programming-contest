@@ -73,7 +73,7 @@ public class PMDoubleWrite {
         // log.setLevel(Level.DEBUG);
 
         totalCapacity = 60L * 1024 * 1024 * 1024;
-//        pool = MemoryPool.createPool(pmDataFile, totalCapacity);
+        pool = MemoryPool.createPool(pmDataFile, totalCapacity);
         pmBlockPool = new PMBlockPool(totalCapacity);
 
         // threadId < 50
@@ -86,14 +86,15 @@ public class PMDoubleWrite {
 
         try {
 
+
             Class<?> memoryPoolClass = Class.forName("com.intel.pmem.llpl.MemoryPoolImpl");
-            Constructor<?> constructor = memoryPoolClass.getDeclaredConstructor(String.class, long.class);
-            constructor.setAccessible(true);
-            Object obj = constructor.newInstance(pmDataFile, totalCapacity);
+            // Constructor<?> constructor = memoryPoolClass.getDeclaredConstructor(String.class, long.class);
+            // constructor.setAccessible(true);
+            // Object obj = constructor.newInstance(pmDataFile, totalCapacity);
             Field field = memoryPoolClass.getDeclaredField("poolAddress");
             field.setAccessible(true);
-            this.poolAddress = (long) field.get(obj);
-            this.pool = (MemoryPool) obj;
+            this.poolAddress = (long) field.get(pool);
+            // this.pool = (MemoryPool) obj;
 
             nativeCopyFromByteArrayNT = memoryPoolClass.getDeclaredMethod(
                     "nativeCopyFromByteArrayNT",byte[].class, int.class, long.class, int.class);
@@ -103,8 +104,8 @@ public class PMDoubleWrite {
                     "nativeCopyMemoryNT", long.class, long.class, long.class);
             nativeCopyMemoryNT.setAccessible(true);
 
-        }catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException |
-                InvocationTargetException | NoSuchFieldException e){
+        }catch (ClassNotFoundException |  IllegalAccessException | NoSuchMethodException |
+                 NoSuchFieldException e){
             log.info(e);
         }
 
