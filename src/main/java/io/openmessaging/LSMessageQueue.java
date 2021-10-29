@@ -12,7 +12,9 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileChannel.MapMode;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -511,7 +513,8 @@ public class LSMessageQueue extends MessageQueue {
             pos = q.offset2position.get(intCurOffset);
             int dataLength = q.offset2Length.get(intCurOffset);
 //            log.debug("read position : " + pos);
-            ByteBuffer buf = df.readData(pos,dataLength);
+            // ByteBuffer buf = df.readData(pos,dataLength);
+            ByteBuffer buf = df.mmapReadData(pos,dataLength);
             if (buf != null){
                 ret.put(i, buf);
             }
@@ -678,6 +681,7 @@ public class LSMessageQueue extends MessageQueue {
         public Lock dataFileLock;
         public Writer[] appendWriters;
         public int maxAppendWritersNum;
+        public MappedByteBuffer[] mapByteBuffers;
 
         DataFile(String dataFileName){
             try {
@@ -732,6 +736,11 @@ public class LSMessageQueue extends MessageQueue {
                 dataFileLock = new ReentrantLock();
                 appendWriters = new Writer[100];
                 maxAppendWritersNum = 10;
+                int numOfMapFiles = 90;
+                mapByteBuffers = new MappedByteBuffer[numOfMapFiles];
+                for (int i = 0; i < numOfMapFiles; i++){
+                    mapByteBuffers[i] = dataFileChannel.map(MapMode.READ_ONLY, i*1024L*1024L*1024L, 1024*1024*1024);
+                }
             } catch (IOException ie) {
                 ie.printStackTrace();
             }
@@ -860,6 +869,37 @@ public class LSMessageQueue extends MessageQueue {
             }
             return null;
         }
+        
+        public ByteBuffer mmapReadData(long position, int dataLength) {
+            MyDirectBufferPool dbPool = threadLocalDirectBufferPool.get();
+            try {
+                ByteBuffer tmp;
+                if (dbPool != null){
+                    tmp = dbPool.allocate(dataLength);
+                } else {
+                    tmp = ByteBuffer.allocate(dataLength);
+                }
+                tmp.mark();
+                // which mapbytebuffer
+                int mapByteBufferIndex = (int) (position / (1024*1024*1024));
+                int mapByteBufferOffset = (int) (position % (1024*1024*1024));
+                MappedByteBuffer mapByteBuffer = mapByteBuffers[mapByteBufferIndex];
+                // log.info("mmap read ! " + mapByteBufferIndex + "," + mapByteBufferOffset);
+                // mapByteBuffer.position(mapByteBufferOffset);
+                long mapByteBufferAddr = ((DirectBuffer)mapByteBuffer).address();
+                long dstAddr = ((DirectBuffer)tmp).address();
+                UnsafeUtil.UNSAFE.copyMemory(mapByteBufferAddr+mapByteBufferOffset+globalMetadataLength , dstAddr+tmp.position(), dataLength);
+                
+                // ByteBuffer tmp2 = ByteBuffer.allocate(dataLength);
+                // dataFileChannel.read(tmp, position + globalMetadataLength);
+                // tmp.reset();
+                return tmp;
+            } catch (Exception ie) {
+                ie.printStackTrace();
+            }
+            return null;
+        }
+
 
         public class WriteStat{
             public int[] bucketBound;
