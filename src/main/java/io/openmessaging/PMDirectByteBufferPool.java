@@ -5,7 +5,6 @@ import java.nio.ByteBuffer;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
-
 import sun.misc.Unsafe;
 import sun.nio.ch.DirectBuffer;
 import java.lang.reflect.Field;
@@ -27,9 +26,9 @@ public class PMDirectByteBufferPool {
 		Field field = Unsafe.class.getDeclaredField("theUnsafe");
 		field.setAccessible(true);
 		UNSAFE = (Unsafe) field.get(null);
-		Field byteBufferAddress = Buffer.class.getDeclaredField("address");
+		byteBufferAddress = Buffer.class.getDeclaredField("address");
 		byteBufferAddress.setAccessible(true);
-		Field byteBufferCapacity = Buffer.class.getDeclaredField("capacity");
+		byteBufferCapacity = Buffer.class.getDeclaredField("capacity");
 		byteBufferCapacity.setAccessible(true);
 	    } catch (Exception e) {
 		throw new RuntimeException(e);
@@ -38,14 +37,17 @@ public class PMDirectByteBufferPool {
 	ByteBuffer[] dbs;
 	int capacity;
 	int cur;
+	ByteBuffer baseByteBuffer;
 
 
 	PMDirectByteBufferPool(){
-		capacity = 10;
+		capacity = 100;
 		cur = 0;
 		dbs = new ByteBuffer[capacity];
+		baseByteBuffer = ByteBuffer.allocateDirect(1);
 		for (int i = 0; i < capacity; i++){
-			dbs[i] = ByteBuffer.allocateDirect(1);
+			// dbs[i] = baseByteBuffer.duplicate();
+			dbs[i] = ByteBuffer.allocateDirect(0);
 		}
 	}
 
@@ -55,6 +57,8 @@ public class PMDirectByteBufferPool {
 			buf.clear();
 			byteBufferAddress.setLong(buf, pmAddr);
 			byteBufferCapacity.set(buf, capacity);
+			buf.limit(capacity);
+			// System.out.println("ok!");
 		} catch (Exception e){
 			e.printStackTrace();
 		}
