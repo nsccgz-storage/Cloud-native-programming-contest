@@ -501,7 +501,7 @@ public class SSDBench {
         for (int i = 0; i < thread; i++) {
             final int threadId = i;
             executor.execute(() -> {
-                threadRunSeqWrite(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize, ioSize, isDirect);
+                threadRunSeqWriteOpt(stats[threadId], barrier, dbPath, threadId, curTotalBenchSize, ioSize, isDirect);
             });
 
         }
