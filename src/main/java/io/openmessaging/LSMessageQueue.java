@@ -200,8 +200,8 @@ public class LSMessageQueue extends MessageQueue {
                         log.info(Thread.currentThread().getName() + " Exit !");
                         System.exit(-1);
                     }
-                }, 910000);
-                // }, 610000);
+                // }, 910000);
+                }, 600000);
             }
             localDramBuffer = new ThreadLocal<>();
         } catch (IOException ie) {
