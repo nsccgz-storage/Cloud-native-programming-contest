@@ -4,6 +4,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import io.openmessaging.PMwrite.PMBlock;
+import sun.nio.ch.DirectBuffer;
 
 import java.io.File;
 import java.io.IOException;
@@ -66,7 +67,8 @@ public class LSMessageQueue extends MessageQueue {
                     // 触发刷盘任务，异步调用block的刷盘函数
                     final PMBlock backgroundBlock = bf.blocks[k];
                     if (backgroundBlock != null && bf.curPositions[bf.curBufIndex] != 0) {
-                        pmWrite.pool.copyFromByteArrayNT(bf.commByteBuffers[bf.curBufIndex].array(), 0, backgroundBlock.addr, backgroundBlock.capacity);
+                        pmWrite.copyMemoryNT(bf.bufferAddr[bf.curBufIndex], backgroundBlock.addr, backgroundBlock.capacity);
+//                        pmWrite.pool.copyFromByteArrayNT(bf.commByteBuffers[bf.curBufIndex].array(), 0, backgroundBlock.addr, backgroundBlock.capacity);
                     }
                     bf.blocks[k] = null;
                 }
@@ -606,9 +608,10 @@ public class LSMessageQueue extends MessageQueue {
             capacity = maxLength * slotSize;  // 分配 17 * 1024 * 500 个？
             buffer = new byte[capacity];
             getNext = (int curHead) -> {
-                int nextHead = curHead+1;
-                nextHead = nextHead % maxLength;
-                return nextHead;
+                return (curHead + 1) %maxLength;
+//                int nextHead = curHead+1;
+//                nextHead = nextHead % maxLength;
+//                return nextHead;
             };
         }
         public  ByteBuffer allocate(int dataLength){
@@ -705,6 +708,7 @@ public class LSMessageQueue extends MessageQueue {
 
         int curBufIndex;
         ByteBuffer[] commByteBuffers;
+        long[] bufferAddr;
         int minBufLen;
         int capacity;
         int curPositions[];
@@ -718,9 +722,11 @@ public class LSMessageQueue extends MessageQueue {
             bufferNum = 2;
 
             commByteBuffers = new ByteBuffer[bufferNum];
+            bufferAddr = new long[2];
             capacity = 4 * (1 << 20); // 4*1024*1024
             for(int i=0; i<bufferNum; i++){
-                commByteBuffers[i] = ByteBuffer.allocate(capacity);
+                commByteBuffers[i] = ByteBuffer.allocateDirect(capacity);
+                bufferAddr[i] = ((DirectBuffer)commByteBuffers[i]).address();
             }
             minBufLen = 512 * 1024;
             curPositions = new int[bufferNum];
@@ -756,11 +762,12 @@ public class LSMessageQueue extends MessageQueue {
             final long backgroundAddr = blocks[curIdx].addr;
             final int backgroundCapacity = blocks[curIdx].capacity;
 
-            final ByteBuffer flushBuf = commByteBuffers[curBufIndex];
+            final long flushAddr = bufferAddr[curBufIndex];
             backgroundDoubleWriteFuture = pmWrite.backgroundDoubleWriteThread.submit(new Callable<Integer>(){
                 @Override
                 public Integer call() throws Exception {
-                    pmWrite.pool.copyFromByteArrayNT(flushBuf.array(), 0, backgroundAddr , backgroundCapacity);
+                    pmWrite.copyMemoryNT(flushAddr, backgroundAddr, backgroundCapacity);
+//                    pmWrite.pool.copyFromByteArrayNT(flushBuf.array(), 0, backgroundAddr , backgroundCapacity);
                     // log.info("this is no error!!!!!!");
                     return 0;
                 }

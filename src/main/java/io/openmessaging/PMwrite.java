@@ -81,6 +81,9 @@ public class PMwrite {
             nativeCopyMemoryNT = aClass.getDeclaredMethod(
                     "nativeCopyMemoryNT", long.class, long.class, long.class);
             nativeCopyMemoryNT.setAccessible(true);
+
+            // iterate pmem space, reducing page fault during write and read
+            this.pool.setMemoryNT((byte)0, 0, 60L*1024L*1024L*1024L);
         }catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException |
                 InvocationTargetException | NoSuchFieldException e){
             log.info(e);
@@ -91,14 +94,17 @@ public class PMwrite {
         UNSAFE.copyMemory(null, poolAddress + srcOffset, dstArray, dstAddress, byteCount);
     }
 
-    public void copyMemoryNT(ByteBuffer srcBuf, long dstOffset, int byteCount){
+    public void copyPM2MemoryNT(long srcBufAddr, long dstOffset, int byteCount){
         try {
-            // TODO: 外部逻辑好像是不管position，直接复制srcBuf的array的内容
-            Class<?> aClass = Class.forName("java.nio.Buffer");
-            Field addrField = aClass.getDeclaredField("address");
-            addrField.setAccessible(true);
-            long addr = (long)addrField.get(srcBuf);
-            nativeCopyMemoryNT.invoke(null, addr, poolAddress+dstOffset, byteCount);
+            nativeCopyMemoryNT.invoke(null, poolAddress + srcBufAddr, dstOffset, byteCount);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+    }
+
+    public void copyMemoryNT(long srcBufAddr, long dstOffset, int byteCount){
+        try {
+            nativeCopyMemoryNT.invoke(null, srcBufAddr, poolAddress+dstOffset, byteCount);
         }catch (Exception e){
             e.printStackTrace();
         }
