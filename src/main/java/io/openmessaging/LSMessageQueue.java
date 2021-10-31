@@ -35,7 +35,7 @@ public class LSMessageQueue extends MessageQueue {
 
     public class MQConfig {
         Level logLevel = Level.INFO;
-        boolean useStats = false;
+        boolean useStats = true;
         int writeMethod = 12;
         int numOfDataFiles = 4;
         int maxBufNum = 11;
@@ -824,7 +824,15 @@ public class LSMessageQueue extends MessageQueue {
                 curPosition = 0L;
                 // FIXME: resource leak ??
                 dataFileChannel = new RandomAccessFile(dataFile, "rw").getChannel();
-                dataFileChannel.force(true);
+
+                if(!isCrash){
+                    long totalSize = 90L*1024L*1024L*1024L;
+//                    log.info("place 0 in file" + dataFileName);
+                    ByteBuffer tempBuf = ByteBuffer.allocateDirect(4*1024);
+                    dataFileChannel.write(tempBuf, totalSize);
+                    dataFileChannel.force(true);
+                }
+
                 writerQueueBufferCapacity = 4*1024*1024; // 不能大于一个 block 的大小
                 // commonWriteBuffer = ByteBuffer.allocate(writerQueueBufferCapacity);
                 commonWriteBuffer = new MyByteBuffer(writerQueueBufferCapacity);
