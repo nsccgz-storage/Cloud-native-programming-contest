@@ -458,9 +458,9 @@ public class LSMessageQueue extends MessageQueue {
             long doubleWriteMaxOffset = q.offset2PMAddr.size()-1;
             long doubleWriteNum = Math.min(fetchMaxOffset, doubleWriteMaxOffset) - offset + 1;
             int intDoubleWriteNum =(int)doubleWriteNum;
-//            if(mqConfig.useStats) {
-//                testStat.incHitPmemCount(intDoubleWriteNum);
-//            }
+            if(mqConfig.useStats && intDoubleWriteNum > 0) {
+                testStat.incHitPmemCount(intDoubleWriteNum);
+            }
             for (int i = 0; i < intDoubleWriteNum; i++){
                 int curOffset = (int)offset+i;
 //                log.debug("curOffset : " + curOffset);
@@ -728,7 +728,7 @@ public class LSMessageQueue extends MessageQueue {
                 commByteBuffers[i] = ByteBuffer.allocateDirect(capacity);
                 bufferAddr[i] = ((DirectBuffer)commByteBuffers[i]).address();
             }
-            minBufLen = 512 * 1024;
+            minBufLen = mqConfig.maxBufLength;
             curPositions = new int[bufferNum];
 
             for(int i=0; i<bufferNum; i++){
@@ -910,6 +910,12 @@ public class LSMessageQueue extends MessageQueue {
 //                    log.debug("writer the index : " + i);
                     needWrite = true;
                     writeLength = globalMetadataLength + thisWriter.length;
+                    if (bufLength + writeLength >= maxBufLength){
+                        if (mqConfig.useStats){
+                            writeStat.incExceedBufLengthCount();
+                        }
+                        break;
+                    }
                     thisWriter.position = position;
                     thisWriter.needWrite = 1;
 //                    log.debug("save position : " + position);
@@ -940,12 +946,6 @@ public class LSMessageQueue extends MessageQueue {
                     if (bufNum >= maxBufNum){
                         if (mqConfig.useStats){
                             writeStat.incExceedBufNumCount();
-                        }
-                        break;
-                    }
-                    if (bufLength >= maxBufLength){
-                        if (mqConfig.useStats){
-                            writeStat.incExceedBufLengthCount();
                         }
                         break;
                     }
@@ -1399,43 +1399,6 @@ public class LSMessageQueue extends MessageQueue {
             appendLatency /= getNumOfThreads;
             getRangeLatency /= getNumOfThreads;
             // writeBandwidth /= getNumOfThreads; // bandwidth 不用平均，要看总的
-            
-            // 报告总的写入大小分布
-            // int[] totalWriteBucketCount = new int[100];
-            // int[] myBucketBound = stats[0].bucketBound;
-            // for (int i = 0; i < 100; i++){
-            //     totalWriteBucketCount[i] = 0;
-            // }
-            // int numOfBucket = stats[0].bucketCount.length;
-            // for (int i = 0; i < getNumOfThreads; i++){
-            //     for (int j = 0; j < numOfBucket; j++){
-            //         totalWriteBucketCount[j] += stats[i].bucketCount[j];
-            //     }
-            // }
-
-            // String totalWriteBucketReport = "";
-            // totalWriteBucketReport += myBucketBound[0] + " < ";
-            // for (int i = 0; i < numOfBucket; i++){
-            //     totalWriteBucketReport += "[" + totalWriteBucketCount[i] + "]";
-            //     totalWriteBucketReport += " < " + myBucketBound[i+1] + " < ";
-            // }
-            // log.info("[Total Append Data Dist]" + totalWriteBucketReport);
-
-            // if (oldTotalWriteBucketCount != null) {
-            //     int[] curWriteBucketCount = new int[100];
-            //     for (int i = 0; i < numOfBucket; i++) {
-            //         curWriteBucketCount[i] = totalWriteBucketCount[i] - oldTotalWriteBucketCount[i];
-            //     }
-            //     String curWriteBucketReport = "";
-            //     curWriteBucketReport += myBucketBound[0] + " < ";
-            //     for (int i = 0; i < numOfBucket; i++) {
-            //         curWriteBucketReport += "[" + curWriteBucketCount[i] + "]";
-            //         curWriteBucketReport += " < " + myBucketBound[i + 1] + " < ";
-            //     }
-            //     log.info("[Current Append Data Dist]" + curWriteBucketReport);
-            // }
-
-            // oldTotalWriteBucketCount = totalWriteBucketCount;
 
             double curAppendThroughput = 0;
             double curGetRangeThroughput = 0;
@@ -1483,7 +1446,7 @@ public class LSMessageQueue extends MessageQueue {
                 curAppendLatency /= getNumOfThreads;
                 curGetRangeLatency /= getNumOfThreads;
             }
-            
+            /*
             StringBuilder totalAppendStat = new StringBuilder();
             StringBuilder totalGetRangeStat = new StringBuilder();
             StringBuilder appendStat = new StringBuilder();
@@ -1493,17 +1456,17 @@ public class LSMessageQueue extends MessageQueue {
                 getRangeStat.append(String.format("%d,", curGetRangeCount[i]));
                 totalAppendStat.append(String.format("%d,", stats[i].appendCount));
                 totalGetRangeStat.append(String.format("%d,", stats[i].getRangeCount));
-            }
+            }*/
             String csvStat = String.format("%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,XXXX,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
                     writeBandwidth, elapsedTimeS, appendThroughput, appendLatency, getRangeThroughput, getRangeLatency,
                     curWriteBandwidth, thisElapsedTimeS, curAppendThroughput, curAppendLatency, curGetRangeThroughput,
                     curGetRangeLatency);
 
             log.info("csvStat      :"+csvStat);
-            log.info("appendStat   :"+appendStat);
+            /*log.info("appendStat   :"+appendStat);
             log.info("getRangeStat :"+getRangeStat);
             log.info("total appendStat   :"+ totalAppendStat);
-            log.info("total getRangeStat :"+totalGetRangeStat);
+            log.info("total getRangeStat :"+totalGetRangeStat);*/
 
             // report hit hot data ratio
             StringBuilder hotDataHitCountReport = new StringBuilder();
@@ -1558,7 +1521,7 @@ public class LSMessageQueue extends MessageQueue {
             log.info("[Pmem hit count] : total= "+totalHitPmemCount+"; "+hitPmemCountReport);
 
             log.info("Memory Used (GiB) : "+memoryUsage.getUsed()/(double)(1024*1024*1024));
-            /*
+
             // report write stat
             for (int i = 0; i < dataFiles.length; i++){
                 if (oldWriteStats[i] != null){
@@ -1596,7 +1559,7 @@ public class LSMessageQueue extends MessageQueue {
                 }
                 oldWriteStats[i] = dataFiles[i].writeStat.clone();
             }
-            */
+
             /*
             StringBuilder queueCountReport = new StringBuilder();
             StringBuilder hotQueueCountReport = new StringBuilder();
