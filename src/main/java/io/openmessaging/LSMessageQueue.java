@@ -158,7 +158,7 @@ public class LSMessageQueue extends MessageQueue {
                     log.info(Thread.currentThread().getName() + " Exit !");
                     System.exit(-1);
                 }
-            }, 590000);
+            }, 610000);
         }
     }
 
