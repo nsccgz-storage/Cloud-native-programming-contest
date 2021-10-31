@@ -35,7 +35,7 @@ public class LSMessageQueue extends MessageQueue {
 
     public class MQConfig {
         Level logLevel = Level.INFO;
-        boolean useStats = true;
+        boolean useStats = false;
         int writeMethod = 12;
         int numOfDataFiles = 4;
         int maxBufNum = 11;
