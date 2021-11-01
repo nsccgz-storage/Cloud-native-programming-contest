@@ -150,16 +150,16 @@ public class LSMessageQueue extends MessageQueue {
         mqConfig = new MQConfig();
         init(dbDirPath, pmDirPath);
         log.info("init ok");
-        if(!isCrash){
-            // 超时自动退出
-            new Timer("timer").schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    log.info(Thread.currentThread().getName() + " Exit !");
-                    System.exit(-1);
-                }
-            }, 610000);
-        }
+//        if(!isCrash){
+//            // 超时自动退出
+//            new Timer("timer").schedule(new TimerTask() {
+//                @Override
+//                public void run() {
+//                    log.info(Thread.currentThread().getName() + " Exit !");
+//                    System.exit(-1);
+//                }
+//            }, 610000);
+//        }
     }
 
     public void init(String dbDirPath, String pmDirPath) {
@@ -205,12 +205,16 @@ public class LSMessageQueue extends MessageQueue {
             threadLocalSemaphore = new ThreadLocal<>();
             threadLocalWriterBuffer = new ThreadLocal<>();
 
-            DRAMbufferList = new MyDRAMbuffer[42];
-
-
-            for(int i=0; i<42; i++){
-                DRAMbufferList[i] = new MyDRAMbuffer();
+            if (!isCrash){
+                DRAMbufferList = new MyDRAMbuffer[42];
+                for(int i=0; i<42; i++){
+                    DRAMbufferList[i] = new MyDRAMbuffer();
+                }
             }
+//            DRAMbufferList = new MyDRAMbuffer[42];
+//            for(int i=0; i<42; i++){
+//                DRAMbufferList[i] = new MyDRAMbuffer();
+//            }
 
             if (mqConfig.useStats) {
                 testStat = new TestStat(dataFiles);
@@ -256,14 +260,17 @@ public class LSMessageQueue extends MessageQueue {
             }
 
             // topicId -> topic
-            ByteBuffer bufMetadata = ByteBuffer.allocate(8);
-            ByteBuffer msgMetadata = ByteBuffer.allocate(8);
+            ByteBuffer bufMetadata = ByteBuffer.allocateDirect(8);
+            ByteBuffer msgMetadata = ByteBuffer.allocateDirect(8);
             for (int i = 0; i < numOfDataFiles; i++){
                 long curPosition = 0L;
                 FileChannel fc = dataFiles[i].dataFileChannel;
                 while ((fc.read(bufMetadata, curPosition)) != -1){
                     bufMetadata.flip();
                     int bufLength = bufMetadata.getInt();
+                    if (bufLength == 0){
+                        break;
+                    }
                     int bufNum = bufMetadata.getInt();
 //                    log.debug("bufLength : "+bufLength);
 //                    log.debug("bufNum : "+bufNum);
