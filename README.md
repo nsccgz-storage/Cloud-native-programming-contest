@@ -49,7 +49,7 @@
 
 （至于 buffer length 与 buffer num 是怎么来的呢？下面的写聚合部分会介绍到）
 
-这一设计直接使得我们的成绩从`1571210s`迈步到了`1049043s`。这也再次提醒了我们关于数据结构设计的重要性。
+这一设计直接使得我们的成绩从`1571210ms`迈步到了`1049043ms`。这也再次提醒了我们关于数据结构设计的重要性。
 
 ## 优化方案
 
@@ -61,15 +61,111 @@
 
 ![ssdBenchmark](./assets/ssdBenchmark.png)
 
-于是我们借鉴了 LevelDB 的 Memtable 批量写入的思路。
+一开始我们借鉴了 LevelDB 的 Memtable 批量写入的思路。
 
 把每个线程的写SSD任务封装成 Writer，在写入之前 Writer 会加入到队列中。多个线程会在写之前竞争锁，只有第一个获得锁的进程（例如下图的 Thread 0）才能继续进行，其他进程会休眠。然后 Thread 0 会将队列中的每个 Writer 需要写入的数据聚合在同一个 buffer 并写入 SSD（写入时会加入一些元数据，即上述的buffer length 与 buffer number）。写完之后 Thread 0 会修改队列中其他线程的状态，告知它们写入任务已完成，之后唤醒其他线程。 
+
+大致的代码思路如下：
+
+```java
+public DataMeta writeAgg(ByteBuffer data){
+    lock.lock();
+    Writer w = new Writer(data);
+    try {
+        writerQueue.addLast(w);
+        while (!w.done && !w.equals(writerQueue.getFirst())) { 
+            w.cv.await();
+        }
+        if (w.done) {
+            return w.meta;
+        }
+
+        // 执行批量写操作
+        Iterator<Writer> iter = writerQueue.iterator();
+        Writer lastWriter = w;
+        while (iter.hasNext()) {
+            lastWriter = iter.next();
+            /* put Metadata And Data To writer buffer; */
+        }
+
+        // 写期间 unlock 使得其他 writer 可以被加入 writerQueue
+        {
+            lock.unlock();
+            /* use fileChannel to write buffer and then force */
+            lock.lock();
+        }
+
+        while (true) {
+            Writer ready = writerQueue.removeFirst();
+            if (!ready.equals(w)) {
+                ready.done = true; // 标记其他 writer 的状态为 done
+                ready.cv.signal();
+            }
+            if (ready.equals(lastWriter)){
+                break;
+            }
+        }
+
+        // 队伍不为空则唤醒队列中队首的 writer
+        if (!writerQueue.isEmpty()) {
+            writerQueue.getFirst().cv.signal();
+        }
+    } catch (InterruptedException | IOException e) {
+        e.printStackTrace();
+    } finally {
+        lock.unlock();
+    }
+    return w.meta;
+}
+```
+
+示意图如下：
 
 ![writeAgg](./assets/writeAgg.png)
 
 这种写聚合方式的优点在于能够减少写 SSD 的次数，提高性能；同时当写请求很少时，当前待写入的进程能够快速发起写操作而不需要长时间等待其他线程来聚合。
 
-之后我们从火焰图中发现写入阶段中`park()`与`unpark()`占据了不少的比例，因此后面的设计中我们将写入时加锁阻塞的方案修改为无锁的方案，即当线程抢不到锁时它可以先去完成其他任务（例如拷贝热数据），而后再等待抢到锁的线程来完成写聚合任务。
+之后的设计中我们将加锁保护队列的方案修改为`无锁队列`方案，去掉了`lock() 与 unlock()`而采用支持并发的队列`ConcurrentLinkedQueue`来保护队列。
+
+之后我们从火焰图中发现写入阶段中`park()`与`unpark()`占据了不少的比例（线程等待写入时会挂起的开销），最后又修改为争夺锁的方案，具体表现为当线程抢不到锁时它可以先去完成其他任务（例如拷贝热数据），而后再等待抢到锁的线程来完成写聚合任务。
+
+大致代码思路如下：
+
+```java
+public long append2(ByteBuffer data){
+    Writer w = new Writer(data);
+    DataFile df = mqTopic.df; 
+    
+    if(df.lock.tryLock()){ // tryLock() 获取锁失败则返回 false, 不会阻塞线程
+        /* batch write in lock */
+        
+        df.lock.unlock(); 
+    }
+	
+    /* do other work */
+
+    // 检查写入任务是否完成，如果没有完成则： 1) 等待完成 2）自己主动尝试获取锁去完成
+    try {
+        // 注意：在batch write期间会连续执行 writer.sema.release(1)；write.done = 1；
+        // 故下面若 tryAcquire 返回 true 则说明 writer.done == 1
+        if (!w.sema.tryAcquire(1, 500*1000, TimeUnit.MICROSECONDS)){ // 等待一段时间后依旧未完成任务
+            if (w.done != 1){
+				df.lock()
+                
+                /* batch write in lock */
+				
+                df.lock.unlock(); 
+            }
+            w.sema.acquire(); 
+        }
+    } catch (Exception ie){
+        ie.printStackTrace();
+    }
+}
+
+```
+
+LevelDB 类似的队列聚合 Writer 的方案平均带宽大概是 `220MiB/s `，无锁队列方案的平均带宽大概是 `265MiB/s`，最后的争夺锁的方案平均带宽大概是 `275MiB/s`。
 
 ### 分文件
 
@@ -99,7 +195,7 @@
 
 ## 最终结果
 
-后期云上面的机器波动很大，这也给我们的优化带来了一些麻烦。经过了各种优化我们的最终成绩定格在了`582069s`，排名12。
+后期云上面的机器波动很大，这也给我们的优化带来了一些麻烦。经过了各种优化我们的最终成绩定格在了`582069ms`，排名12。
 
 ![](./assets/certificate.jpg)
 
